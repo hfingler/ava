@@ -390,7 +390,7 @@ def record_argument_metadata(arg: Argument, src: str):
                 return ""
 
         def default_case():
-            return (Expr(type.transfer).equals("NW_HANDLE")).if_then_else(
+            return (Expr(type.transfer).one_of(["NW_HANDLE", "NW_OPAQUE"])).if_then_else(
                 Expr(not type.deallocates).if_then_else(
                     assign_record_replay_functions(param_value, type).then(record_call_metadata(param_value, type)),
                     expunge_calls(param_value, type),
@@ -399,9 +399,10 @@ def record_argument_metadata(arg: Argument, src: str):
 
         if type.fields:
             return for_all_elements(values, type, depth=depth, original_type=original_type, **other)
-        return type.is_simple_buffer().if_then_else(
-            simple_buffer_case, Expr(type.transfer).equals("NW_BUFFER").if_then_else(buffer_case, default_case)
-        )
+        return Expr(type.transfer).equals("NW_BUFFER").if_then_else(
+                buffer_case,
+                default_case
+            )
 
     with location(f"at {term.yellow(str(arg.name))}", arg.location):
         conv = convert_result_value(
