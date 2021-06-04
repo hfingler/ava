@@ -1,22 +1,15 @@
 #include <absl/flags/parse.h>
+#include <absl/flags/flag.h>
 
-#include <algorithm>
-#include <future>
-#include <iostream>
-#include <thread>
+#include "SVGPUManager.hpp"
 
-#include "flags.h"
-#include "manager_service.hpp"
-#include "manager_service.proto.h"
-
-using ava_manager::ManagerServiceServerBase;
-
-class DemoManager : public ManagerServiceServerBase {
- public:
-  DemoManager(uint32_t port, uint32_t worker_port_base, std::string worker_path, std::vector<std::string> &worker_argv,
-              std::vector<std::string> &worker_env)
-      : ManagerServiceServerBase(port, worker_port_base, worker_path, worker_argv, worker_env) {}
-};
+// arguments to this manager
+ABSL_FLAG(uint32_t, manager_port, 3333, "(OPTIONAL) Specify manager port number");
+ABSL_FLAG(uint32_t, worker_port_base, 4000, "(OPTIONAL) Specify base port number of API servers");
+ABSL_FLAG(std::vector<std::string>, worker_argv, {}, "(OPTIONAL) Specify process arguments passed to API servers");
+ABSL_FLAG(std::string, worker_path, "", "(REQUIRED) Specify API server binary path");
+ABSL_FLAG(std::vector<std::string>, worker_env, {},
+          "(OPTIONAL) Specify environment variables, e.g. HOME=/home/ubuntu, passed to API servers");
 
 int main(int argc, const char *argv[]) {
   absl::ParseCommandLine(argc, const_cast<char **>(argv));
@@ -24,7 +17,7 @@ int main(int argc, const char *argv[]) {
   ava_manager::setupSignalHandlers();
   auto worker_argv = absl::GetFlag(FLAGS_worker_argv);
   auto worker_env = absl::GetFlag(FLAGS_worker_env);
-  DemoManager manager(absl::GetFlag(FLAGS_manager_port), absl::GetFlag(FLAGS_worker_port_base),
+  SVGPUManager manager(absl::GetFlag(FLAGS_manager_port), absl::GetFlag(FLAGS_worker_port_base),
                       absl::GetFlag(FLAGS_worker_path), worker_argv, worker_env);
   manager.RunServer();
   return 0;
