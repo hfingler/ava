@@ -24,6 +24,8 @@ class ManagerServiceServerBase {
   ManagerServiceServerBase(uint32_t manager_port, uint32_t worker_port_base, std::string worker_path,
                            std::vector<std::string> &worker_argv, std::vector<std::string> &worker_env);
 
+  ~ManagerServiceServerBase(){}
+
   void RunServer() {
     std::cerr << "Manager Service listening on ::" << manager_port_ << std::endl;
     io_service_.run();

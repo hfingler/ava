@@ -4,6 +4,7 @@ project(svgpu-manager C CXX)
 
 add_executable(svgpu-manager
   manager.cpp
+  SVGPUManager.cpp
   ${manager_service_proto_srcs}
   ${manager_service_ava_srcs}
 )
