@@ -51,6 +51,7 @@ option(AVA_MANAGER_GALVANIC OFF "Build Galvanic manager")
 option(AVA_MANAGER_KATANA OFF "Build Katana manager")
 option(AVA_MANAGER_LEGACY OFF "Build legacy (r1.0) manager")
 option(AVA_MANAGER_DEMO OFF "Build demo manager")
+option(AVA_MANAGER_SVGPU OFF "Build serverless GPU manager")
 
 message(STATUS "Build demo specification:                   ${AVA_GEN_DEMO_SPEC}")
 message(STATUS "Build CUDA driver specification:            ${AVA_GEN_CUDADRV_SPEC}")
@@ -72,6 +73,7 @@ message(STATUS "Build Galvanic manager:                     ${AVA_MANAGER_GALVAN
 message(STATUS "Build Katana manager:                       ${AVA_MANAGER_KATANA}")
 message(STATUS "Build legacy (r1.0) manager:                ${AVA_MANAGER_LEGACY}")
 message(STATUS "Build demo manager:                         ${AVA_MANAGER_DEMO}")
+message(STATUS "Build serverless GPU manager:               ${AVA_MANAGER_SVGPU}")
 
 set(AVA_DEP_INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/third_party" CACHE PATH "Installation path of AvA dependencies")
 

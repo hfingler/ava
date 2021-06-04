@@ -63,3 +63,7 @@ endif()
 if(AVA_MANAGER_DEMO)
   add_subdirectory(demo)
 endif()
+
+if(AVA_MANAGER_SVGPU)
+  add_subdirectory(serverless_gpu)
+endif()
