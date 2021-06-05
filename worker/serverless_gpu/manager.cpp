@@ -10,6 +10,7 @@ ABSL_FLAG(std::vector<std::string>, worker_argv, {}, "(OPTIONAL) Specify process
 ABSL_FLAG(std::string, worker_path, "", "(REQUIRED) Specify API server binary path");
 ABSL_FLAG(std::vector<std::string>, worker_env, {},
           "(OPTIONAL) Specify environment variables, e.g. HOME=/home/ubuntu, passed to API servers");
+ABSL_FLAG(uint16_t, ngpus, 1, "(OPTIONAL) Number of GPUs the manager should use");
 
 int main(int argc, const char *argv[]) {
   absl::ParseCommandLine(argc, const_cast<char **>(argv));
@@ -18,7 +19,8 @@ int main(int argc, const char *argv[]) {
   auto worker_argv = absl::GetFlag(FLAGS_worker_argv);
   auto worker_env = absl::GetFlag(FLAGS_worker_env);
   SVGPUManager manager(absl::GetFlag(FLAGS_manager_port), absl::GetFlag(FLAGS_worker_port_base),
-                      absl::GetFlag(FLAGS_worker_path), worker_argv, worker_env);
+                      absl::GetFlag(FLAGS_worker_path), worker_argv, worker_env,
+                      absl::GetFlag(FLAGS_ngpus));
   manager.RunServer();
   return 0;
 }
