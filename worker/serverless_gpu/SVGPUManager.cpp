@@ -11,11 +11,14 @@ ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::Worker
   // Let first N GPUs visible
   if (request.gpu_count() > 0) {
     std::string visible_devices = "CUDA_VISIBLE_DEVICES=";
-    for (uint32_t i = 0; i < request.gpu_count() - 1; ++i) {
-      uint16_t cgpu = this->scheduler->getGPU();
-      visible_devices += std::to_string(cgpu) + ",";
+    for (uint32_t i = 0; i < request.gpu_count() ; ++i) {
+      uint16_t cgpu = scheduler->getGPU();
+      visible_devices += std::to_string(cgpu);
+      if (i != request.gpu_count()-1) {
+        visible_devices += ",";
+      }
     }
-    visible_devices += std::to_string(request.gpu_count() - 1);
+    
     environments.push_back(visible_devices);
   }
   // Let API server use TCP channel
