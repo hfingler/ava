@@ -5,13 +5,13 @@
 
 class RoundRobin : public BaseScheduler {
   public:
-  uint16_t current_gpu;
+  uint16_t current_gpu, gpu_offset;
 
-  RoundRobin(uint16_t ngpus) 
-    : BaseScheduler(ngpus), current_gpu(0) {};
+  RoundRobin(uint16_t ngpus, uint16_t gpu_offset) 
+    : BaseScheduler(ngpus), gpu_offset(gpu_offset), current_gpu(0) {};
 
   int getGPU() {
-    int gpu = current_gpu % ngpus;
+    int gpu = gpu_offset + (current_gpu % ngpus);
     printf("***************Returning gpu %d\n", gpu);
     current_gpu++;
     return gpu;
