@@ -1211,6 +1211,314 @@ cuGetErrorName(CUresult error, const char** pStr)
     }
 }
 
+//
+//start of APIs for Numba
+//
+
+CUresult 
+cuDeviceComputeCapability(int *major, int *minor, CUdevice device)
+{
+    //untested
+    ava_argument(major) {
+        ava_out; ava_buffer(1);
+    }
+    ava_argument(minor) {
+        ava_out; ava_buffer(1);
+    }
+}
+
+CUresult CUDAAPI
+cuDevicePrimaryCtxReset(CUdevice dev)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuModuleLoadDataEx(CUmodule *module, const void *image,
+        unsigned int numOptions,
+        CUjit_option *options,
+        void **optionValues)
+{
+    //stubbed
+    ava_unsupported;
+    //untested
+    //ava_argument(module) {
+    //    ava_out; ava_buffer(1);
+    //}
+    //ava_argument(image) {
+    //    ava_in; ava_buffer(__helper_fatbin_size(image));
+    //}
+    //ava_argument(options) {
+    //    ava_in; ava_buffer(numOptions);
+    //}
+    //ava_argument(optionValues) {
+    //    ava_in; ava_buffer(numOptions);
+    //    ava_element {
+    //        opaque;
+    //    }
+    //}
+}
+
+CUresult CUDAAPI
+cuModuleUnload(CUmodule hmod)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuModuleGetGlobal(CUdeviceptr* dptr, size_t* bytes, CUmodule
+        hmod, const char* name)
+{
+    //stubbed
+    ava_unsupported;
+    
+    //untested
+    //ava_argument(bytes) {
+    //    ava_out; ava_buffer(1);
+    //}
+    //ava_argument(dptr) {
+    //    ava_out; ava_buffer(bytes);
+    //}
+}
+
+CUresult CUDAAPI
+cuMemAllocManaged(CUdeviceptr *dptr, size_t bytesize, unsigned int flags)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuMemcpyDtoD(CUdeviceptr dstDevice, const void *srcDevice, size_t ByteCount)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuMemcpyDtoDAsync(CUdeviceptr dstDevice, const void *srcDevice,
+        size_t ByteCount, CUstream hStream)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuStreamSynchronize(CUstream hStream)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuLaunchCooperativeKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY,
+        unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY,
+        unsigned int blockDimZ, unsigned int sharedMemBytes, CUstream hStream, void **kernelParams)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuMemHostRegister(void *p, size_t bytesize, unsigned int Flags)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuMemHostUnregister(void *p)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI 
+cuMemHostGetDevicePointer(CUdeviceptr *pdptr, void *p, unsigned int  Flags)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuPointerGetAttribute (void *data, CUpointer_attribute attribute, CUdeviceptr ptr)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuMemGetAddressRange(CUdeviceptr *pbase, size_t *psize, CUdeviceptr dptr)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuMemHostGetFlags(unsigned int *pFlags, void *p)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuCtxSynchronize(void)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuLinkCreate(unsigned int numOptions, CUjit_option *options,
+        void **optionValues, CUlinkState *stateOut)
+{
+    //stubbed
+    //ava_unsupported;
+
+    ava_argument(options) {
+        ava_in; ava_buffer(numOptions);
+    }
+    ava_argument(optionValues) {
+        ava_in; ava_buffer(numOptions);
+        ava_element {
+            ava_buffer(1);
+        }
+    }
+    ava_argument(stateOut) {
+        ava_out; ava_buffer(1);
+    }
+}
+
+CUresult CUDAAPI
+cuLinkAddData(CUlinkState state, CUjitInputType type, void *data,
+                  size_t size, const char *name, unsigned
+                  int numOptions, CUjit_option *options,
+                  void **optionValues)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuLinkAddFile(CUlinkState state, CUjitInputType type,
+        const char *path, unsigned int numOptions,
+        CUjit_option *options, void **optionValues)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuLinkComplete(CUlinkState state, void **cubinOut, size_t *sizeOut)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuLinkDestroy(CUlinkState state)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+void CUDAAPI
+cuProfilerStart(void)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+void CUDAAPI
+cuProfilerStop (void)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI 
+cuOccupancyMaxActiveBlocksPerMultiprocessor(
+        int *numBlocks,
+        CUfunction func,
+        int blockSize,
+        size_t dynamicSMemSize)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI 
+cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
+        int *numBlocks,
+        CUfunction func,
+        int blockSize,
+        size_t dynamicSMemSize,
+        unsigned int flags)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI 
+cuOccupancyMaxPotentialBlockSize(
+        int *minGridSize, int *blockSize,
+        CUfunction func,
+        CUoccupancyB2DSize blockSizeToDynamicSMemSize,
+        size_t dynamicSMemSize, int blockSizeLimit)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI 
+cuOccupancyMaxPotentialBlockSizeWithFlags(
+        int *minGridSize, int *blockSize,
+        CUfunction func,
+        CUoccupancyB2DSize blockSizeToDynamicSMemSize,
+        size_t dynamicSMemSize, int blockSizeLimit,
+        unsigned int flags)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuIpcGetMemHandle(CUipcMemHandle* pHandle, CUdeviceptr dptr)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuIpcOpenMemHandle(CUdeviceptr* pdptr, CUipcMemHandle handle, unsigned int Flags)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuIpcCloseMemHandle(CUdeviceptr dptr)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult CUDAAPI
+cuCtxEnablePeerAccess (CUcontext peerContext, unsigned int Flags)
+{
+    //stubbed
+    ava_unsupported;
+}
+
+CUresult 
+cuDeviceCanAccessPeer(int* canAccessPeer,CUdevice dev, CUdevice peerDev)
+{
+    //stubbed
+    ava_unsupported;
+}
+
 /* CUDABLAS API */
 CUBLASAPI cublasStatus_t CUBLASWINAPI
 cublasCreate(cublasHandle_t *handle)
