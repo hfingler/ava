@@ -50,7 +50,8 @@ ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::Worker
   child_monitor->detach();
   worker_monitor_map_.insert({port, child_monitor});
 
-  reply.worker_address().push_back("0.0.0.0:" + std::to_string(port));
+  std::string worker_addr = worker_ip + ":" + std::to_string(port);
+  reply.worker_address().push_back(worker_addr);
 
   return reply;
 }
