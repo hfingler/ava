@@ -7,9 +7,14 @@
 
 #include <atomic>
 #include <cstdint>
+#include <memory>
 
+#include "common/common_context.h"
 #include "common/declaration.h"
 #include "common/shadow_thread_pool.hpp"
+#ifdef AVA_WORKER
+#include "worker/worker_context.h"
+#endif
 
 struct ava_endpoint __ava_endpoint;
 
@@ -272,12 +277,14 @@ static void _ava_extract_explicit(gpointer obj, gpointer AVA_UNUSED(value), stru
   command_channel_send_command(state->output_chan, (struct command_base *)cmd);
 }
 
+#ifdef AVA_WORKER
 void ava_extract_objects(struct command_channel *output_chan, struct command_channel_log *log_chan,
                          GPtrArray *to_extract) {
+  auto common_context = ava::CommonContext::instance();
   GHashTable *const dependencies = g_hash_table_new(nw_hash_mix64variant13, g_direct_equal);
   GPtrArray *const offset_pairs = g_ptr_array_new_full(to_extract->len, NULL);
-  struct ava_extraction_state_t state = {dependencies, offset_pairs, nw_global_handle_pool, nw_global_metadata_map,
-                                         output_chan};
+  struct ava_extraction_state_t state = {dependencies, offset_pairs, common_context->nw_global_handle_pool,
+                                         common_context->nw_global_metadata_map, output_chan};
 
   // Add all globally recorded commands. NULL is the sentinel value for global.
   _ava_extract_traverse(NULL, &state);
@@ -301,6 +308,7 @@ void ava_extract_objects(struct command_channel *output_chan, struct command_cha
   // Extract explicit state from all objects into destination
   g_hash_table_foreach(dependencies, (GHFunc)_ava_extract_explicit, &state);
 }
+#endif
 
 // TODO: replace _ava_transfer_command
 //  AMP: See comment on ava_extract_objects_in_pair
@@ -330,15 +338,17 @@ static void _ava_transfer_command_in_pair(struct command_channel *output_chan, s
   command_channel_free_command((struct command_channel *)log_chan, ret_cmd);
 }
 
+#ifdef AVA_WORKER
 // TODO: merge it into ava_extract_objects
 //  AMP: I think we should be able to replace the original function with this
 //  one. The paired replay commands should work in all cases.
 void ava_extract_objects_in_pair(struct command_channel *output_chan, struct command_channel_log *log_chan,
                                  GPtrArray *to_extract) {
+  auto common_context = ava::CommonContext::instance();
   GHashTable *const dependencies = g_hash_table_new(nw_hash_mix64variant13, g_direct_equal);
   GPtrArray *const offset_pairs = g_ptr_array_new_full(to_extract->len, NULL);
-  struct ava_extraction_state_t state = {dependencies, offset_pairs, nw_global_handle_pool, nw_global_metadata_map,
-                                         output_chan};
+  struct ava_extraction_state_t state = {dependencies, offset_pairs, common_context->nw_global_handle_pool,
+                                         common_context->nw_global_metadata_map, output_chan};
 
   // Add all globally recorded commands. NULL is the sentinel value for global.
   _ava_extract_traverse(NULL, &state);
@@ -365,24 +375,17 @@ void ava_extract_objects_in_pair(struct command_channel *output_chan, struct com
 
 void ava_handle_replace_explicit_state(struct command_channel *chan, struct nw_handle_pool *handle_pool,
                                        struct ava_replay_command_t *cmd) {
+  auto common_context = ava::CommonContext::instance();
   assert(cmd->base.command_id == COMMAND_HANDLER_REPLACE_EXPLICIT_STATE);
   void *obj = nw_handle_pool_deref(handle_pool, cmd->id);
-  struct ava_metadata_base *metadata = (struct ava_metadata_base *)g_hash_table_lookup(nw_global_metadata_map, obj);
+  struct ava_metadata_base *metadata =
+      (struct ava_metadata_base *)g_hash_table_lookup(common_context->nw_global_metadata_map, obj);
   void *data = command_channel_get_buffer(chan, (struct command_base *)cmd, cmd->data);
   assert(metadata->replace);
   metadata->replace(obj, data, cmd->data_length);
 }
 
-struct nw_handle_pool *nw_global_handle_pool;
-struct shadow_thread_pool_t *nw_shadow_thread_pool;
-GHashTable *nw_global_metadata_map;
-pthread_mutex_t nw_global_metadata_map_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-void __attribute__((constructor(0))) init_endpoint_lib(void) {
-  nw_global_handle_pool = nw_handle_pool_new();
-  nw_global_metadata_map = metadata_map_new();
-  nw_shadow_thread_pool = shadow_thread_pool_new();
-}
+#endif
 
 struct ava_buffer_with_deallocator {
   void (*deallocator)(void *);
@@ -426,6 +429,7 @@ struct ava_coupled_record_t *ava_coupled_record_new() {
 }
 
 static struct ava_metadata_base *ava_internal_metadata_unlocked(struct ava_endpoint *endpoint, const void *ptr) {
+  auto metadata_map = ava::CommonContext::instance()->nw_global_metadata_map;
   void *metadata = g_hash_table_lookup(metadata_map, ptr);
   if (metadata == NULL) {
     metadata = calloc(1, endpoint->metadata_size);
@@ -435,6 +439,7 @@ static struct ava_metadata_base *ava_internal_metadata_unlocked(struct ava_endpo
 }
 
 struct ava_metadata_base *ava_internal_metadata(struct ava_endpoint *endpoint, const void *ptr) {
+  auto metadata_map_mutex = ava::CommonContext::instance()->nw_global_metadata_map_mutex;
   pthread_mutex_lock(&metadata_map_mutex);
   struct ava_metadata_base *ret = ava_internal_metadata_unlocked(endpoint, ptr);
   pthread_mutex_unlock(&metadata_map_mutex);
@@ -442,6 +447,8 @@ struct ava_metadata_base *ava_internal_metadata(struct ava_endpoint *endpoint, c
 }
 
 struct ava_metadata_base *ava_internal_metadata_no_create(struct ava_endpoint *AVA_UNUSED(endpoint), const void *ptr) {
+  auto metadata_map = ava::CommonContext::instance()->nw_global_metadata_map;
+  auto metadata_map_mutex = ava::CommonContext::instance()->nw_global_metadata_map_mutex;
   pthread_mutex_lock(&metadata_map_mutex);
   struct ava_metadata_base *ret = (struct ava_metadata_base *)g_hash_table_lookup(metadata_map, ptr);
   pthread_mutex_unlock(&metadata_map_mutex);
@@ -517,6 +524,7 @@ void *ava_static_alloc(struct ava_endpoint *endpoint, int call_id, size_t size) 
 }
 
 void ava_add_recorded_call(struct ava_endpoint *endpoint, void *handle, struct ava_offset_pair_t *pair) {
+  auto metadata_map_mutex = ava::CommonContext::instance()->nw_global_metadata_map_mutex;
   pthread_mutex_lock(&metadata_map_mutex);
   struct ava_metadata_base *__internal_metadata = ava_internal_metadata_unlocked(endpoint, handle);
   if (__internal_metadata->recorded_calls == NULL) {
@@ -527,6 +535,7 @@ void ava_add_recorded_call(struct ava_endpoint *endpoint, void *handle, struct a
 }
 
 void ava_expunge_recorded_calls(struct ava_endpoint *endpoint, struct command_channel_log *log, void *handle) {
+  auto metadata_map_mutex = ava::CommonContext::instance()->nw_global_metadata_map_mutex;
   pthread_mutex_lock(&metadata_map_mutex);
   struct ava_metadata_base *__internal_metadata = ava_internal_metadata_unlocked(endpoint, handle);
   if (__internal_metadata->recorded_calls != NULL) {
@@ -541,6 +550,7 @@ void ava_expunge_recorded_calls(struct ava_endpoint *endpoint, struct command_ch
 }
 
 void ava_add_dependency(struct ava_endpoint *endpoint, void *a, void *b) {
+  auto metadata_map_mutex = ava::CommonContext::instance()->nw_global_metadata_map_mutex;
   pthread_mutex_lock(&metadata_map_mutex);
   struct ava_metadata_base *__internal_metadata = ava_internal_metadata_unlocked(endpoint, a);
   if (__internal_metadata->dependencies == NULL) {
@@ -823,7 +833,7 @@ void *ava_shadow_buffer_attach_buffer_without_data(struct ava_endpoint *endpoint
 }
 
 void *ava_shadow_buffer_get_buffer(struct ava_endpoint *endpoint, struct command_channel *chan,
-                                   struct command_base *cmd, void *offset, enum ava_lifetime_t lifetime,
+                                   const struct command_base *cmd, void *offset, enum ava_lifetime_t lifetime,
                                    void *lifetime_coupled, size_t *size_out, ava_allocator alloc,
                                    ava_deallocator dealloc) {
   assert(lifetime != AVA_CALL);

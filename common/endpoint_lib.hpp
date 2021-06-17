@@ -22,9 +22,16 @@ using namespace std;
 
 #include "common/cmd_channel.hpp"
 #include "common/cmd_handler.hpp"
+#include "common/common_context.h"
 #include "common/declaration.h"
 #include "common/murmur3.h"
 #include "common/shadow_thread_pool.hpp"
+
+#ifdef AVA_GUESTLIB
+#include "guestlib/guest_context.h"
+#elif defined(AVA_WORKER)
+#include "worker/worker_context.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -153,11 +160,6 @@ static inline struct ava_offset_pair_t *ava_new_offset_pair(size_t a, size_t b) 
 /// Create a new metadata map.
 GHashTable *metadata_map_new();
 
-extern struct nw_handle_pool *nw_global_handle_pool;
-extern struct shadow_thread_pool_t *nw_shadow_thread_pool;
-extern GHashTable *nw_global_metadata_map;
-extern pthread_mutex_t nw_global_metadata_map_mutex;
-
 struct ava_replay_command_t;
 
 /**
@@ -215,9 +217,6 @@ struct ava_callback_user_data {
 };
 
 //! The endpoint representation itself
-
-#define metadata_map nw_global_metadata_map
-#define metadata_map_mutex nw_global_metadata_map_mutex
 
 struct ava_shadow_buffer_pool {
   pthread_mutex_t mutex;
@@ -460,7 +459,7 @@ void *ava_shadow_buffer_attach_buffer_without_data(struct ava_endpoint *endpoint
                                                    ava_deallocator dealloc, struct ava_buffer_header_t *header);
 
 __attribute__((pure)) void *ava_shadow_buffer_get_buffer(struct ava_endpoint *endpoint, struct command_channel *chan,
-                                                         struct command_base *cmd, void *offset,
+                                                         const struct command_base *cmd, void *offset,
                                                          enum ava_lifetime_t lifetime, void *lifetime_coupled,
                                                          size_t *size_out, ava_allocator alloc,
                                                          ava_deallocator dealloc);

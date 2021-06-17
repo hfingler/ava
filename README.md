@@ -26,6 +26,7 @@ Documentations
 --------------
 
 * [Build and Setup](docs/build_and_setup.md)
+* [Generate Code](docs/generate_code.md)
 * [Guestlib Configurations](config/README.md)
 * [Virtualize (Your Own) New APIs](docs/virtualize_new_api.md)
 * [Introduction to LAPIS](cava/lapis.md)
@@ -36,7 +37,7 @@ Install
 ### System requirements
 
 AvA was fully tested on Ubuntu 18.04 (Linux 4.15) with GCC 7.5.0, Python 3.6.9,
-Boost 1.65.x, cmake 3.19.1 and Protobuf 3.0-3.9.
+Boost 1.71.x, cmake 3.19.1 and Protobuf 3.0-3.9.
 The system also works in Ubuntu 16.04 with additional care of Python 3.6
 and Clang-7 installation for CAvA scripts, but we do not maintain the support anymore.
 We plan to migrate AvA to Ubuntu 20.04.

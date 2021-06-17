@@ -6,7 +6,27 @@ install(DIRECTORY DESTINATION ${CMAKE_INSTALL_PREFIX})
 
 # Common libraries
 find_package(Threads REQUIRED)
-find_package(Boost 1.65 REQUIRED COMPONENTS system)
+
+# boost
+set(BOOST_TARGET "boost_1_71_0")
+set(BOOST_VERSION "1.71.0")
+set(BOOST_URL
+  https://boostorg.jfrog.io/artifactory/main/release/${BOOST_VERSION}/source/${BOOST_TARGET}.tar.gz)
+add_library(boost INTERFACE)
+add_dependencies(boost ${BOOST_TARGET})
+ExternalProject_Add(
+  ${BOOST_TARGET}
+  CONFIGURE_COMMAND ""
+  BUILD_COMMAND ""
+  INSTALL_COMMAND ""
+  URL ${BOOST_URL}
+  URL_HASH SHA256=96b34f7468f26a141f6020efb813f1a2f3dfb9797ecf76a7d7cbd843cc95f5bd
+  SOURCE_DIR ${CMAKE_SOURCE_DIR}/third_party/${BOOST_TARGET}
+  DOWNLOAD_DIR ${CMAKE_SOURCE_DIR}/third_party/
+  BUILD_IN_SOURCE 1
+)
+target_include_directories(boost INTERFACE
+  ${CMAKE_SOURCE_DIR}/third_party/${BOOST_TARGET}/)
 
 ###### Configure compiler ######
 
@@ -21,7 +41,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_compile_options(-Wall -Wextra -pedantic -Wno-write-strings -g)
 
 set(manager_service_libraries Threads::Threads
-                              "${Boost_LIBRARIES}")
+                              boost)
 set(absl_flags_libraries
   absl::flags
   absl::flags_commandlineflag

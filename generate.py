@@ -1,4 +1,6 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
+
+from typing import List
 
 import argparse
 import hashlib
@@ -57,6 +59,7 @@ def download_llvm_lib():
 CAVA_DIR = os.path.dirname(os.path.realpath(sys.argv[0])) + "/cava"
 CUDA_10_1_CFLAGS = "-I/usr/local/cuda-10.1/include".split(" ")
 GLIB2_CFLAGS = pkgconfig.cflags("glib-2.0").split(" ")
+FMT_CFLAGS = ["-I" + os.path.dirname(os.path.realpath(sys.argv[0])) + "/third_party/fmt/include"]
 
 
 def check_cflags(force_build: bool = False):
@@ -84,15 +87,15 @@ def check_cflags(force_build: bool = False):
 
 SPEC_LIST = {
     "cudadrv": ("samples/cudadrv/cuda_driver.c", [] + CUDA_10_1_CFLAGS),
-    "cudart": ("samples/cudart/cudart.cpp", ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS),
+    "cudart": ("samples/cudart/cudart.cpp", ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS),
     "demo": ("samples/demo/demo.c", ["-Iheaders"]),
     "gti": ("samples/gti/gti.c", []),
     "ncsdk": ("samples/ncsdk/mvnc.c", []),
-    "onnx_dump": ("samples/onnxruntime/onnx_dump.cpp", ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS),
-    "onnx_opt": ("samples/onnxruntime/onnx_opt.cpp", ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS),
+    "onnx_dump": ("samples/onnxruntime/onnx_dump.cpp", ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS),
+    "onnx_opt": ("samples/onnxruntime/onnx_opt.cpp", ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS),
     "opencl": ("samples/opencl/opencl.c", []),
-    "pt_dump": ("samples/pytorch/pt_dump.cpp", ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS),
-    "pt_opt": ("samples/pytorch/pt_opt.cpp", ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS),
+    "pt_dump": ("samples/pytorch/pt_dump.cpp", ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS),
+    "pt_opt": ("samples/pytorch/pt_opt.cpp", ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS),
     "qat": (
         "samples/quickassist/qat.c",
         [
@@ -102,18 +105,22 @@ SPEC_LIST = {
     ),
     "test": ("samples/test/libtrivial.c", ["-I../test"]),
     "tf_c": ("samples/tensorflow_c/tf_c.c", []),
-    "tf_dump": ("samples/tensorflow/tf_dump.cpp", ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS),
-    "tf_opt": ("samples/tensorflow/tf_opt.cpp", ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS),
+    "tf_dump": ("samples/tensorflow/tf_dump.cpp", ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS),
+    "tf_opt": ("samples/tensorflow/tf_opt.cpp", ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS),
 }
 
 
-def generate_code(spec_name: str):
+def generate_code(spec_name: str, enabled_optimizations: List[str] = None):
     if spec_name not in SPEC_LIST:
         logger.warning(f"Unsupported {spec_name} specification")
         return
 
     spec_file, spec_parameter = SPEC_LIST[spec_name]
-    _ = subprocess.run(["./nwcc", spec_file] + spec_parameter, cwd=CAVA_DIR, check=True)
+    opt_parameter = []
+    if enabled_optimizations and len(enabled_optimizations) > 0:
+        opt_parameter = ["--optimization"] + enabled_optimizations
+
+    _ = subprocess.run(["./nwcc", spec_file] + opt_parameter + spec_parameter, cwd=CAVA_DIR, check=True)
     logger.info(f"Code generation for {spec_name} specification is done")
 
 
@@ -123,6 +130,15 @@ if __name__ == "__main__":
         "-s", "--specs", nargs="+", default=[], choices=SPEC_LIST.keys(), help="Specification shortnames"
     )
     parser.add_argument("-f", "--force", action="store_true", help="Build specifications regardless any warnings")
+    parser.add_argument(
+        "-O",
+        "--opt",
+        type=str,
+        action="append",
+        dest="optimizations",
+        choices=["batching"],
+        help="Enable optimizations",
+    )
     args = parser.parse_args()
 
     download_llvm_lib()
@@ -130,4 +146,4 @@ if __name__ == "__main__":
     check_cflags(args.force)
 
     for spec in args.specs:
-        generate_code(spec)
+        generate_code(spec, args.optimizations)

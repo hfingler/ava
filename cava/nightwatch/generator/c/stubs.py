@@ -1,16 +1,17 @@
+from typing import List, Union
+
 from nightwatch import location, term
 from nightwatch.c_dsl import Expr, ExprOrStr
 from nightwatch.generator import generate_requires
 from nightwatch.generator.c.buffer_handling import compute_total_size
 from nightwatch.generator.c.caller import compute_argument_value, attach_for_argument
 from nightwatch.generator.c.instrumentation import timing_code_guest, report_alloc_resources, report_consume_resources
-from nightwatch.generator.c.util import *
-from nightwatch.generator.common import *
-from nightwatch.model import *
-from typing import Union
+from nightwatch.generator.c.util import AllocList
+from nightwatch.generator.common import nl, pack_struct
+from nightwatch.model import Function, lines
 
 
-def function_implementation(f: Function) -> Union[str, Expr]:
+def function_implementation(f: Function, enabled_opts: List[str] = None) -> Union[str, Expr]:
     """
     Generate a stub function which sends the appropriate CALL command over the
     channel.
@@ -19,7 +20,7 @@ def function_implementation(f: Function) -> Union[str, Expr]:
     """
     with location(f"at {term.yellow(str(f.name))}", f.location):
         if f.return_value.type.buffer:
-            forge_success = f"#error Async returned buffers are not implemented."
+            forge_success = "#error Async returned buffers are not implemented."
         elif f.return_value.type.is_void:
             forge_success = "return;"
         elif f.return_value.type.success is not None:
@@ -28,7 +29,7 @@ def function_implementation(f: Function) -> Union[str, Expr]:
             forge_success = """abort_with_reason("Cannot forge success without a success value for the type.");"""
 
         if f.return_value.type.is_void:
-            return_statement = f"""
+            return_statement = """
                 free(__call_record);
                 return;
             """.strip()
@@ -44,20 +45,26 @@ def function_implementation(f: Function) -> Union[str, Expr]:
 
         alloc_list = AllocList(f)
 
-        send_code = f"""
-            command_channel_send_command(__chan, (struct command_base*)__cmd);
-        """.strip()
-
-        if f.api.send_code:
-            import_code = f.api.send_code.encode("ascii", "ignore").decode("unicode_escape")[1:-1]
-            ldict = locals()
-            exec(import_code, globals(), ldict)
-            send_code = ldict["send_code"]
+        if enabled_opts:
+            # Enable batching optimization: the APIs are batched into a `__do_batch_emit` call.
+            if "batching" in enabled_opts:
+                send_code = f"""
+                    batch_insert_command(nw_global_cmd_batch, (struct command_base*)__cmd, __chan, {int(is_async.is_true())});
+                    """.strip()
+                if f.name == "__do_batch_emit":
+                    send_code = """
+                    command_channel_send_command(__chan, (struct command_base*)__cmd);
+                    """.strip()
+        else:
+            send_code = """
+                command_channel_send_command(__chan, (struct command_base*)__cmd);
+            """.strip()
 
         return_code = is_async.if_then_else(
             forge_success,
             f"""
-                shadow_thread_handle_command_until(nw_shadow_thread_pool, __call_record->__call_complete);
+                shadow_thread_handle_command_until(
+                  common_context->nw_shadow_thread_pool, __call_record->__call_complete);
                 {return_statement}
             """.strip(),
         )
@@ -69,6 +76,7 @@ def function_implementation(f: Function) -> Union[str, Expr]:
 
             const int ava_is_in = 1, ava_is_out = 0;
             intptr_t __call_id = ava_get_call_id(&__ava_endpoint);
+            auto common_context = ava::CommonContext::instance();
 
             #ifdef AVA_BENCHMARKING_MIGRATE
             if (__ava_endpoint.migration_call_id >= 0 && __call_id ==
@@ -88,11 +96,11 @@ def function_implementation(f: Function) -> Union[str, Expr]:
                 __chan, sizeof(struct {f.call_spelling}), __total_buffer_size);
             __cmd->base.api_id = {f.api.number_spelling};
             __cmd->base.command_id = {f.call_id_spelling};
-            __cmd->base.thread_id = shadow_thread_id(nw_shadow_thread_pool);
+            __cmd->base.thread_id = shadow_thread_id(common_context->nw_shadow_thread_pool);
             __cmd->base.original_thread_id = __cmd->base.thread_id;
 
             __cmd->__call_id = __call_id;
-    
+
             {nl.join(a.declaration + ";" for a in f.logue_declarations)}
             {{
                 {"".join(attach_for_argument(a, "__cmd") for a in f.implicit_arguments)}
@@ -158,7 +166,10 @@ def function_wrapper(f: Function) -> str:
             callback_unpack = ""
         elif not f.callback_decl:
             # Normal call
-            call_code = f"""{f.name}({", ".join(a.name for a in f.real_arguments)})"""
+            call_code = (
+                f"""({f.return_value.type.nonconst.spelling})"""
+                f"""({f.name}({", ".join(a.name for a in f.real_arguments)}))"""
+            )
             callback_unpack = ""
         else:
             # Indirect call (callback)
@@ -184,12 +195,12 @@ def function_wrapper(f: Function) -> str:
             {declare_ret}
             {capture_ret}{call_code};
             {lines(f.epilogue)}
-    
+
             /* Report resources */
             {lines(report_alloc_resources(arg) for arg in f.arguments)}
             {report_alloc_resources(f.return_value)}
             {report_consume_resources(f)}
-    
+
             {return_statement}
             }}
         }}
@@ -205,7 +216,10 @@ def call_function_wrapper(f: Function) -> ExprOrStr:
     if f.return_value.type.is_void:
         capture_ret = ""
     else:
-        capture_ret = f"{f.return_value.type.nonconst.attach_to(f.return_value.name)}; {f.return_value.name} = "
+        capture_ret = (
+            f"{f.return_value.type.nonconst.attach_to(f.return_value.name)}; "
+            f"{f.return_value.name} = ({f.return_value.type.nonconst.spelling})"
+        )
     return f"""
-        {capture_ret}__wrapper_{f.name}({", ".join(a.name for a in f.arguments)});
+        {capture_ret}__wrapper_{f.name}({", ".join(f"({a.type.spelling}){a.name}" for a in f.arguments)});
     """.strip()

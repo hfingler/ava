@@ -1,11 +1,11 @@
+from typing import Iterable
+
 from nightwatch.generator.c.callee import call_command_implementation
 from nightwatch.generator.c.caller import return_command_implementation
 from nightwatch.generator.c.printer import print_command_function
 from nightwatch.generator.c.replay import replay_command_function
 from nightwatch.generator.c.stubs import function_wrapper
-from .util import *
-from nightwatch.model import API, Function
-from typing import Iterable
+from nightwatch.model import API, Function, lines
 
 
 # TODO: Abstract the case structure of most functions into a class or something.
@@ -33,7 +33,7 @@ def handle_command_function(api: API, calls: Iterable[Function], returns: Iterab
         int ava_is_in, ava_is_out;
         switch (__cmd->command_id) {{
         {lines(return_command_implementation(f) for f in returns)}
-        {lines(call_command_implementation(f) for f in calls)}
+        {lines(call_command_implementation(f, api.enabled_optimizations) for f in calls)}
         default:
             abort_with_reason("Received unsupported command");
         }} // switch
@@ -70,9 +70,9 @@ void __print_command_{api.identifier.lower()}(FILE* file, const struct command_c
                                     const struct command_base* __cmd);
 
 #define ava_metadata(p) (&((struct {api.metadata_struct_spelling}*)ava_internal_metadata(&__ava_endpoint, p))->application)
-#define ava_zerocopy_alloc(s) ava_endpoint_zerocopy_alloc(&__ava_endpoint, s)
-#define ava_zerocopy_free(p) ava_endpoint_zerocopy_free(&__ava_endpoint, p)
-#define ava_zerocopy_get_physical_address(p) ava_endpoint_zerocopy_get_physical_address(&__ava_endpoint, p)
+// #define ava_zerocopy_alloc(s) ava_endpoint_zerocopy_alloc(&__ava_endpoint, s)
+// #define ava_zerocopy_free(p) ava_endpoint_zerocopy_free(&__ava_endpoint, p)
+// #define ava_zerocopy_get_physical_address(p) ava_endpoint_zerocopy_get_physical_address(&__ava_endpoint, p)
 
 
 #include "{api.c_utilities_header_spelling}"

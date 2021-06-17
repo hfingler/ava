@@ -1,14 +1,15 @@
+from typing import Tuple
+
 from nightwatch.generator.c.stubs import function_implementation
-from .command_handler import *
-from nightwatch.model import API
-from typing import Any, List, Tuple
+from nightwatch.generator.c.command_handler import handle_command_function, handle_command_header
+from nightwatch.model import API, lines
 
 
 def handle_call(api: API) -> str:
     return handle_command_function(api, list(api.real_functions) + list(api.callback_functions), api.callback_functions)
 
 
-def source(api: API, errors: List[Any]) -> Tuple[str, str]:
+def source(api: API) -> Tuple[str, str]:
     prelude = f"""
 #define __AVA__ 1
 #define ava_is_worker 1
@@ -20,7 +21,7 @@ def source(api: API, errors: List[Any]) -> Tuple[str, str]:
 
 {handle_command_header(api)}
 
-void __attribute__((constructor(1))) init_{api.identifier.lower()}_worker(void) {{
+void init_worker(void) {{
     __handle_command_{api.identifier.lower()}_init();
     {api.worker_init_epilogue};
 }}

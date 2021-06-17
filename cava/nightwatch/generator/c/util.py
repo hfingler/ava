@@ -1,12 +1,12 @@
+from typing import Optional, List
 from functools import reduce
-from typing import Optional
-
-from toposort import CircularDependencyError
+from toposort import toposort_flatten, CircularDependencyError
 
 from nightwatch import location, term
 from nightwatch.c_dsl import Expr
+from nightwatch.extension import extension
 from nightwatch.generator import generate_expects
-from ..common import *
+from nightwatch.model import Type, Function, StaticArray, lines
 
 
 @extension(Type)
@@ -50,20 +50,24 @@ class _TypeExtensions:
 _letters = "abcdefghikmnoprstuwxyz"
 
 
-def _remove_provided_arguments(type):
-    d = type.__dict__.copy()
+def _remove_provided_arguments(type_):
+    d = type_.__dict__.copy()
     d.pop("spelling", None)
     return d
 
 
-def _char_type_like(type):
-    return Type("char", **_remove_provided_arguments(type))
+def _char_type_like(type_):
+    return Type("char", **_remove_provided_arguments(type_))
 
 
-def compute_buffer_size(type: Type, original_type: Optional[Type] = None):
-    size_expr = Expr(type.buffer)
-    if original_type and original_type.pointee.spelling != type.pointee.spelling:
-        size_adjustment = f" * sizeof({original_type.pointee.spelling}) / sizeof({type.pointee.spelling})"
+def compute_buffer_size(type_: Type, original_type: Optional[Type] = None):
+    size_expr = Expr(type_.buffer)
+    if original_type and original_type.pointee.spelling != type_.pointee.spelling:
+        pointee_size = f"sizeof({type_.pointee.spelling})"
+        # for void* buffer, assume that each element is 1 byte
+        if type_.pointee.is_void:
+            pointee_size = "1"
+        size_adjustment = f" * sizeof({original_type.pointee.spelling}) / {pointee_size}"
     else:
         size_adjustment = ""
     return Expr(f"(size_t){size_expr.group()}{size_adjustment}").group()
@@ -71,7 +75,9 @@ def compute_buffer_size(type: Type, original_type: Optional[Type] = None):
 
 def for_all_elements(
     values: tuple,
-    type: Type,
+    # pylint: disable=unused-argument
+    cast_type: Type,
+    type_: Type,
     *,
     depth: int,
     kernel,
@@ -82,20 +88,21 @@ def for_all_elements(
     **extra,
 ):
     """
-    kernel(values, type, **other)
+    kernel(values, cast_type, type, **other)
     """
     size = f"__{name}_size_{depth}"
     index = f"__{name}_index_{depth}"
 
-    with location(f"in type {term.yellow(type.spelling)}"):
-        if hasattr(type, "pointee") and type.pointee:
+    with location(f"in type {term.yellow(type_.spelling)}"):
+        if hasattr(type_, "pointee") and type_.pointee:
             loop = ""
-            size_expr = Expr(precomputed_size or compute_buffer_size(type, original_type))
+            size_expr = Expr(precomputed_size or compute_buffer_size(type_, original_type))
             eval_size = f"const size_t {size} = {size_expr};"
             inner_values = tuple(f"__{name}_{_letters[i]}_{depth}" for i in range(len(values)))
-            type_pointee = _char_type_like(type.pointee) if type.pointee.is_void else type.pointee
+            type_pointee = _char_type_like(type_.pointee) if type_.pointee.is_void else type_.pointee
             nested = kernel(
                 tuple("*" + v for v in inner_values),
+                type_pointee.nonconst,
                 type_pointee,
                 depth=depth + 1,
                 name=name,
@@ -106,8 +113,8 @@ def for_all_elements(
             if nested:
                 set_inner_values = lines(
                     f"""
-                     {type_pointee.nonconst.attach_to(iv, additional_inner_type_elements="*")}; 
-                     {iv} = {type_pointee.nonconst.cast_type(type.ascribe_type(v), "*")} + {index};
+                     {type_pointee.nonconst.attach_to(iv, additional_inner_type_elements="*")};
+                     {iv} = {type_pointee.nonconst.cast_type(type_.ascribe_type(v), "*")} + {index};
                      """
                     for v, iv in zip(values, inner_values)
                 )
@@ -129,18 +136,19 @@ def for_all_elements(
 
             if nested:
                 return eval_size + loop
-            else:
-                return ""
-        elif type.fields:
+            return ""
+
+        if type_.fields:
             prefix = f"""
-                {type.nonconst.attach_to("ava_self", additional_inner_type_elements="*")};
-                ava_self = {type.nonconst.cast_type(type.ascribe_type(f"&{values[self_index]}", "*"), "*")};
+                {type_.nonconst.attach_to("ava_self", additional_inner_type_elements="*")};
+                ava_self = {type_.nonconst.cast_type(type_.ascribe_type(f"&{values[self_index]}", "*"), "*")};
             """
             field_infos = []
-            for field_name, field in type.fields.items():
+            for field_name, field in type_.fields.items():
                 inner_values = tuple(f"__{name}_{_letters[i]}_{depth}_{field_name}" for i in range(len(values)))
                 nested = kernel(
                     tuple("*" + v for v in inner_values),
+                    field.nonconst,
                     field,
                     depth=depth + 1,
                     name=name,
@@ -153,7 +161,7 @@ def for_all_elements(
                     set_inner_values = lines(
                         f"""
                         {field.nonconst.attach_to(iv, additional_inner_type_elements="*")};
-                        {iv} = {field.nonconst.cast_type(field.ascribe_type(f"&({v}).{field_name}", "*"), "*")}; 
+                        {iv} = {field.nonconst.cast_type(field.ascribe_type(f"&({v}).{field_name}", "*"), "*")};
                         """.strip()
                         for v, iv in zip(values, inner_values)
                     )
@@ -162,10 +170,9 @@ def for_all_elements(
             code = "\n".join(inner_code for _, _, inner_code in _sort_fields(field_infos))
             if code.strip():
                 return "{" + prefix + code + "}"
-            else:
-                return ""
-        else:
-            raise ValueError("Type must be a buffer of some kind.")
+            return ""
+
+        raise ValueError("Type must be a buffer of some kind.")
 
 
 def _sort_fields(field_infos: List[tuple]):
@@ -184,7 +191,7 @@ def _sort_fields(field_infos: List[tuple]):
         return field_infos
 
 
-class AllocList(object):
+class AllocList:
     def __init__(self, f: Function):
         self.name = f"__ava_alloc_list_{f.name}"
         # The estimate is currently zero since this totally avoids allocating the ptr array in cases where it isn't

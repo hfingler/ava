@@ -44,6 +44,14 @@ jobs:
         key: ${{matrix.os}}-cudnn-${{hashFiles('.github/workflows/install_cuda10.1_cudnn7.6.sh')}}
         path: ~/cuda_packages
 
+    - name: Cache boost 1_71 binary
+      uses: actions/cache@v2
+      with:
+        key: ${{matrix.os}}-boost-${{hashFiles('CMakeLists.txt')}}
+        path: |
+          third_party/boost_1_71_0.tar.gz
+          third_party/boost_1_71_0
+
     ###
     # Install platform-level dependencies (OS-specific)
     ###
@@ -70,7 +78,7 @@ jobs:
     - name: Download ava-llvm and generate codes
       if: startsWith(matrix.os, 'ubuntu-')
       run: |
-        python3 generate.py -f -s cudadrv cudart
+        python3 generate.py -f -s cudadrv cudart tf_dump tf_opt onnx_dump onnx_opt
 
     ###
     # Standard CMake build process
@@ -80,7 +88,11 @@ jobs:
         cmake -S . -B $HOME/build \
           -DCMAKE_BUILD_TYPE=${{matrix.build_type}} \
           -DAVA_GEN_CUDADRV_SPEC=ON \
-          -DAVA_GEN_CUDART_SPEC=ON
+          -DAVA_GEN_CUDART_SPEC=ON \
+          -DAVA_GEN_TENSORFLOW_DUMP_SPEC=ON \
+          -DAVA_GEN_TENSORFLOW_OPT_SPEC=ON \
+          -DAVA_GEN_ONNXRT_DUMP_SPEC=ON \
+          -DAVA_GEN_ONNXRT_OPT_SPEC=ON
 
     - name: Build
       run: |
