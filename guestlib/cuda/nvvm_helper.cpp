@@ -2,6 +2,11 @@
 #include <fmt/core.h>
 #include <nvvm.h>
 
+<<<<<<< HEAD
+=======
+#include "common/logging.h"
+
+>>>>>>> 4d74fb9688b52187d2304278517e0810290a3bf3
 absl::flat_hash_map<nvvmProgram, size_t> compiled_result_size_map = {};
 absl::flat_hash_map<nvvmProgram, size_t> program_log_size_map = {};
 
@@ -18,8 +23,12 @@ size_t get_compiled_result_size_map(nvvmProgram prog) {
   if (result != compiled_result_size_map.end()) {
     return result->second;
   } else {
+<<<<<<< HEAD
     fmt::print(stderr, "need to call nvvmGetCompiledResultSize first\n");
     abort();
+=======
+    AVA_FATAL << "Expect nvvmGetCompiledResultSize to be called first";
+>>>>>>> 4d74fb9688b52187d2304278517e0810290a3bf3
   }
 }
 
@@ -28,7 +37,11 @@ size_t get_program_log_size_map(nvvmProgram prog) {
   if (result != program_log_size_map.end()) {
     return result->second;
   } else {
+<<<<<<< HEAD
     fmt::print(stderr, "need to call nvvmGetProgramLogSize first\n");
     abort();
+=======
+    AVA_FATAL << "Expected nvvmGetProgramLogSize to be called first";
+>>>>>>> 4d74fb9688b52187d2304278517e0810290a3bf3
   }
 }
