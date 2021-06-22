@@ -3,9 +3,9 @@ ava_name("CUDA Runtime for ONNX");
 ava_version("10.1.0");
 ava_identifier(ONNX_DUMP);
 ava_number(10);
-ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers);
-ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver);
-ava_guestlib_srcs(../common/extensions/cudart_10.1_utilities.cpp);
+ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -I/usr/local/cuda-10.1/nvvm/include);
+ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver -L/usr/local/cuda-10.1/nvvm/lib64 -lnvvm);
+ava_guestlib_srcs(../common/extensions/cudart_10.1_utilities.cpp cuda/nvvm_helper.cpp);
 ava_worker_srcs(../common/extensions/cudart_10.1_utilities.cpp);
 ava_export_qualifier();
 ava_soname(libcuda.so libcuda.so.1 libcudart.so.10 libcudart.so.10.1 libcublas.so.10 libcublasLt.so.10 libcudnn.so.7 libcufft.so.10 libcurand.so.10 libcusolver.so.10 libcusparse.so.10);
@@ -52,6 +52,7 @@ ava_begin_utility;
 #include "common/linkage.h"
 #include "common/logging.h"
 #include "common/extensions/cudart_10.1_utilities.hpp"
+#include "guestlib/cuda/nvvm_helper.h"
 
 #if !defined(__dv)
 #define __dv(v)
@@ -702,12 +703,37 @@ __host__ cudaError_t CUDARTAPI cudaDeviceReset(void);
 
 __host__ cudaError_t CUDARTAPI cudaSetDevice(int device);
 
+__host__ cudaError_t CUDARTAPI cudaGetSymbolAddress(void **devPtr, const void *symbol) {
+  ava_argument(devPtr) {
+    ava_out;
+    ava_buffer(1);
+    ava_element {
+      ava_allocates;
+      ava_opaque;
+    }
+  }
+  ava_argument(symbol) { ava_opaque; }
+}
+
+__host__ cudaError_t CUDARTAPI cudaGetSymbolSize(size_t *size, const void *symbol) {
+  ava_argument(size) {
+    ava_out;
+    ava_buffer(1);
+  }
+  ava_argument(symbol) { ava_opaque; }
+}
+
 __host__ cudaError_t CUDARTAPI cudaMemcpyToSymbol(const void *symbol, const void *src, size_t count, size_t offset,
                                                   enum cudaMemcpyKind kind) {
   ava_argument(symbol) { ava_opaque; }
   ava_argument(src) {
-    ava_in;
-    ava_buffer(count);
+    if (kind == cudaMemcpyHostToDevice) {
+      ava_in;
+      ava_buffer(count);
+    } else {
+      // kind == cudaMemcpyDeviceToDevice
+      ava_opaque;
+    }
   }
 }
 
@@ -1230,32 +1256,135 @@ CUresult cuGetErrorName(CUresult error, const char **pStr) {
   }
 }
 
-CUresult CUDAAPI cuOccupancyMaxActiveBlocksPerMultiprocessor(int *numBlocks, CUfunction func, int blockSize,
-                                                             size_t dynamicSMemSize) {
-  ava_argument(numBlocks) {
+CUresult cuDeviceComputeCapability(int *major, int *minor, CUdevice device) {
+  // untested
+  ava_argument(major) {
     ava_out;
     ava_buffer(1);
   }
+  ava_argument(minor) {
+    ava_out;
+    ava_buffer(1);
+  }
+}
 
+CUresult CUDAAPI cuDevicePrimaryCtxReset(CUdevice dev) { ava_unsupported; }
+
+CUresult CUDAAPI cuOccupancyMaxActiveBlocksPerMultiprocessor(int *numBlocks, CUfunction func, int blockSize,
+                                                             size_t dynamicSMemSize) {
   ava_unsupported;
 }
 
 CUresult CUDAAPI cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(int *numBlocks, CUfunction func, int blockSize,
                                                                       size_t dynamicSMemSize, unsigned int flags) {
-  ava_argument(numBlocks) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuModuleLoadDataEx(CUmodule *module, const void *image, unsigned int numOptions, CUjit_option *options,
+                                    void **optionValues) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuModuleUnload(CUmodule hmod) { ava_unsupported; }
+
+CUresult CUDAAPI cuModuleGetGlobal(CUdeviceptr *dptr, size_t *bytes, CUmodule hmod, const char *name) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuMemAllocManaged(CUdeviceptr *dptr, size_t bytesize, unsigned int flags) { ava_unsupported; }
+
+CUresult CUDAAPI cuMemcpyDtoD(CUdeviceptr dstDevice, const void *srcDevice, size_t ByteCount) { ava_unsupported; }
+
+CUresult CUDAAPI cuMemcpyDtoDAsync(CUdeviceptr dstDevice, const void *srcDevice, size_t ByteCount, CUstream hStream) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuStreamSynchronize(CUstream hStream) { ava_unsupported; }
+
+CUresult CUDAAPI cuLaunchCooperativeKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY,
+                                           unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY,
+                                           unsigned int blockDimZ, unsigned int sharedMemBytes, CUstream hStream,
+                                           void **kernelParams) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuMemHostRegister(void *p, size_t bytesize, unsigned int Flags) { ava_unsupported; }
+
+CUresult CUDAAPI cuMemHostUnregister(void *p) { ava_unsupported; }
+
+CUresult CUDAAPI cuMemHostGetDevicePointer(CUdeviceptr *pdptr, void *p, unsigned int Flags) { ava_unsupported; }
+
+CUresult CUDAAPI cuPointerGetAttribute(void *data, CUpointer_attribute attribute, CUdeviceptr ptr) { ava_unsupported; }
+
+CUresult CUDAAPI cuMemGetAddressRange(CUdeviceptr *pbase, size_t *psize, CUdeviceptr dptr) { ava_unsupported; }
+
+CUresult CUDAAPI cuMemHostGetFlags(unsigned int *pFlags, void *p) { ava_unsupported; }
+
+CUresult CUDAAPI cuCtxSynchronize(void) { ava_unsupported; }
+
+CUresult CUDAAPI cuLinkCreate(unsigned int numOptions, CUjit_option *options, void **optionValues,
+                              CUlinkState *stateOut) {
+  ava_argument(options) {
+    ava_in;
+    ava_buffer(numOptions);
+  }
+  ava_argument(optionValues) {
+    ava_in;
+    ava_buffer(numOptions);
+    ava_element { ava_buffer(1); }
+  }
+  ava_argument(stateOut) {
     ava_out;
     ava_buffer(1);
   }
+}
 
+CUresult CUDAAPI cuLinkAddData(CUlinkState state, CUjitInputType type, void *data, size_t size, const char *name,
+                               unsigned int numOptions, CUjit_option *options, void **optionValues) {
   ava_unsupported;
 }
+
+CUresult CUDAAPI cuLinkAddFile(CUlinkState state, CUjitInputType type, const char *path, unsigned int numOptions,
+                               CUjit_option *options, void **optionValues) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuLinkComplete(CUlinkState state, void **cubinOut, size_t *sizeOut) { ava_unsupported; }
+
+CUresult CUDAAPI cuLinkDestroy(CUlinkState state) { ava_unsupported; }
+
+void CUDAAPI cuProfilerStart(void) { ava_unsupported; }
+
+void CUDAAPI cuProfilerStop(void) { ava_unsupported; }
+
+CUresult CUDAAPI cuOccupancyMaxPotentialBlockSize(int *minGridSize, int *blockSize, CUfunction func,
+                                                  CUoccupancyB2DSize blockSizeToDynamicSMemSize, size_t dynamicSMemSize,
+                                                  int blockSizeLimit) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuOccupancyMaxPotentialBlockSizeWithFlags(int *minGridSize, int *blockSize, CUfunction func,
+                                                           CUoccupancyB2DSize blockSizeToDynamicSMemSize,
+                                                           size_t dynamicSMemSize, int blockSizeLimit,
+                                                           unsigned int flags) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuIpcGetMemHandle(CUipcMemHandle *pHandle, CUdeviceptr dptr) { ava_unsupported; }
+
+CUresult CUDAAPI cuIpcOpenMemHandle(CUdeviceptr *pdptr, CUipcMemHandle handle, unsigned int Flags) { ava_unsupported; }
+
+CUresult CUDAAPI cuIpcCloseMemHandle(CUdeviceptr dptr) { ava_unsupported; }
+
+CUresult CUDAAPI cuCtxEnablePeerAccess(CUcontext peerContext, unsigned int Flags) { ava_unsupported; }
+
+CUresult cuDeviceCanAccessPeer(int *canAccessPeer, CUdevice dev, CUdevice peerDev) { ava_unsupported; }
 
 /* CUDABLAS API */
 CUBLASAPI cublasStatus_t CUBLASWINAPI cublasCreate(cublasHandle_t *handle) {
   ava_argument(handle) {
     ava_out;
     ava_buffer(1);
-    ava_element { ava_handle; }
   }
 }
 
@@ -10606,7 +10735,13 @@ __host__ cudaError_t CUDARTAPI cudaSetDeviceFlags(unsigned int flags) { ava_unsu
 
 __host__ cudaError_t CUDARTAPI cudaGetDeviceFlags(unsigned int *flags) { ava_unsupported; }
 
-__host__ cudaError_t CUDARTAPI cudaStreamCreate(cudaStream_t *pStream) { ava_unsupported; }
+__host__ cudaError_t CUDARTAPI cudaStreamCreate(cudaStream_t *pStream) {
+  ava_argument(pStream) {
+    ava_out;
+    ava_buffer(1);
+    ava_element ava_handle;
+  }
+}
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamCreateWithFlags(cudaStream_t *pStream, unsigned int flags) {
   ava_argument(pStream) {
@@ -10618,15 +10753,27 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamCreateWithFlags(cuda
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamCreateWithPriority(cudaStream_t *pStream,
                                                                                unsigned int flags, int priority) {
-  ava_unsupported;
+  ava_argument(pStream) {
+    ava_out;
+    ava_buffer(1);
+    ava_element ava_handle;
+  }
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamGetPriority(cudaStream_t hStream, int *priority) {
-  ava_unsupported;
+  ava_argument(hStream) { ava_handle; }
+  ava_argument(priority) {
+    ava_out;
+    ava_buffer(1);
+  }
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamGetFlags(cudaStream_t hStream, unsigned int *flags) {
-  ava_unsupported;
+  ava_argument(hStream) { ava_handle; }
+  ava_argument(flags) {
+    ava_out;
+    ava_buffer(1);
+  }
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamDestroy(cudaStream_t stream) {
@@ -10635,7 +10782,8 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamDestroy(cudaStream_t
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamWaitEvent(cudaStream_t stream, cudaEvent_t event,
                                                                       unsigned int flags) {
-  ava_unsupported;
+  ava_argument(stream) { ava_handle; }
+  ava_argument(event) { ava_handle; }
 }
 
 __host__ cudaError_t CUDARTAPI cudaStreamSynchronize(cudaStream_t stream) { ava_argument(stream) ava_handle; }
@@ -10980,10 +11128,6 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMemset3DAsync(struct cudaP
   ava_unsupported;
 }
 
-__host__ cudaError_t CUDARTAPI cudaGetSymbolAddress(void **devPtr, const void *symbol) { ava_unsupported; }
-
-__host__ cudaError_t CUDARTAPI cudaGetSymbolSize(size_t *size, const void *symbol) { ava_unsupported; }
-
 __host__ cudaError_t CUDARTAPI cudaMemPrefetchAsync(const void *devPtr, size_t count, int dstDevice,
                                                     cudaStream_t stream __dv(0)) {
   ava_unsupported;
@@ -11135,7 +11279,12 @@ __host__ cudaError_t CUDARTAPI cudaGetSurfaceObjectResourceDesc(struct cudaResou
 
 __host__ cudaError_t CUDARTAPI cudaDriverGetVersion(int *driverVersion) { ava_unsupported; }
 
-__host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaRuntimeGetVersion(int *runtimeVersion) { ava_unsupported; }
+__host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaRuntimeGetVersion(int *runtimeVersion) {
+  ava_argument(runtimeVersion) {
+    ava_out;
+    ava_buffer(1);
+  }
+}
 
 __host__ cudaError_t CUDARTAPI cudaGraphCreate(cudaGraph_t *pGraph, unsigned int flags) { ava_unsupported; }
 
@@ -11308,5 +11457,144 @@ const char *CUDNNWINAPI cudnnGetErrorString(cudnnStatus_t status) {
     ava_out;
     ava_buffer(strlen(ret) + 1);
     ava_lifetime_static;
+  }
+}
+
+/* NVVM */
+nvvmResult nvvmVersion(int *major, int *minor) {
+  ava_argument(major) {
+    ava_out;
+    ava_buffer(1);
+  }
+  ava_argument(minor) {
+    ava_out;
+    ava_buffer(1);
+  }
+}
+
+nvvmResult nvvmIRVersion(int *majorIR, int *minorIR, int *majorDbg, int *minorDbg) {
+  ava_argument(majorIR) {
+    ava_out;
+    ava_buffer(1);
+  }
+  ava_argument(minorIR) {
+    ava_out;
+    ava_buffer(1);
+  }
+  ava_argument(majorDbg) {
+    ava_out;
+    ava_buffer(1);
+  }
+  ava_argument(minorDbg) {
+    ava_out;
+    ava_buffer(1);
+  }
+}
+
+nvvmResult nvvmCreateProgram(nvvmProgram *prog) {
+  ava_argument(prog) {
+    ava_out;
+    ava_buffer(1);
+  }
+}
+
+nvvmResult nvvmDestroyProgram(nvvmProgram *prog) {
+  ava_argument(prog) {
+    ava_in;
+    ava_buffer(1);
+  }
+}
+
+nvvmResult nvvmAddModuleToProgram(nvvmProgram prog, const char *buffer, size_t size, const char *name) {
+  ava_argument(buffer) {
+    ava_in;
+    ava_buffer(size);
+  }
+  ava_argument(name) {
+    ava_in;
+    ava_buffer(strlen(name) + 1);
+  }
+}
+
+nvvmResult nvvmLazyAddModuleToProgram(nvvmProgram prog, const char *buffer, size_t size, const char *name) {
+  ava_argument(buffer) {
+    ava_in;
+    ava_buffer(size);
+  }
+  ava_argument(name) {
+    ava_in;
+    ava_buffer(strlen(name) + 1);
+  }
+}
+
+nvvmResult nvvmCompileProgram(nvvmProgram prog, int numOptions, const char **options) {
+  ava_argument(options) {
+    ava_in;
+    ava_buffer(numOptions);
+    ava_element { ava_buffer(strlen(options[ava_index]) + 1); }
+  }
+}
+
+nvvmResult nvvmVerifyProgram(nvvmProgram prog, int numOptions, const char **options) {
+  ava_argument(options) {
+    ava_in;
+    ava_buffer(numOptions);
+    ava_element { ava_buffer(strlen(options[ava_index]) + 1); }
+  }
+}
+
+ava_utility void __helper_save_compiled_result_size(nvvmProgram prog, size_t *bufferSizeRet, nvvmResult ret) {
+  if (ava_is_guest) {
+    if (ret == NVVM_SUCCESS) {
+      insert_compiled_result_size_map(prog, bufferSizeRet);
+      ava_debug("save compiled result for %lx: %u", prog, *bufferSizeRet);
+    }
+  }
+}
+
+nvvmResult nvvmGetCompiledResultSize(nvvmProgram prog, size_t *bufferSizeRet) {
+  ava_argument(bufferSizeRet) {
+    ava_out;
+    ava_buffer(1);
+  }
+  auto ret = static_cast<nvvmResult>(reinterpret_cast<uintptr_t>(ava_execute()));
+  __helper_save_compiled_result_size(prog, bufferSizeRet, ret);
+}
+
+nvvmResult nvvmGetCompiledResult(nvvmProgram prog, char *buffer) {
+  ava_implicit_argument size_t size = get_compiled_result_size_map(prog);
+  ava_argument(buffer) {
+    ava_out;
+    ava_buffer(size);
+#warning implicit arguments' dependency detection is broken.
+    ava_depends_on(size);
+  }
+}
+
+ava_utility void __helper_save_program_log_size(nvvmProgram prog, size_t *bufferSizeRet, nvvmResult ret) {
+  if (ava_is_guest) {
+    if (ret == NVVM_SUCCESS) {
+      insert_program_log_size_map(prog, bufferSizeRet);
+      ava_debug("save program log size for %lx: %u", prog, *bufferSizeRet);
+    }
+  }
+}
+
+nvvmResult nvvmGetProgramLogSize(nvvmProgram prog, size_t *bufferSizeRet) {
+  ava_argument(bufferSizeRet) {
+    ava_out;
+    ava_buffer(1);
+  }
+  auto ret = static_cast<nvvmResult>(reinterpret_cast<uintptr_t>(ava_execute()));
+  __helper_save_program_log_size(prog, bufferSizeRet, ret);
+}
+
+nvvmResult nvvmGetProgramLog(nvvmProgram prog, char *buffer) {
+  ava_implicit_argument size_t size = get_program_log_size_map(prog);
+  ava_argument(buffer) {
+    ava_out;
+    ava_buffer(size);
+#warning implicit arguments' dependency detection is broken.
+    ava_depends_on(size);
   }
 }
