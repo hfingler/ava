@@ -21,6 +21,7 @@ using gpuserver::SpawnGPUWorkerReply;
 using gpuserver::GPU;
 using resmngr::ResMngrService;
 using resmngr::RegisterGPUNodeRequest;
+using resmngr::RegisterGPUNodeResponse;
 
 class SVGPUManager : public ManagerServiceServerBase, public GPU::Service {
   public:
@@ -45,20 +46,13 @@ class SVGPUManager : public ManagerServiceServerBase, public GPU::Service {
     public:
       ResMngrClient(std::shared_ptr<Channel> channel)
       : stub_(ResMngrService::NewStub(channel)) {}
-    
+      
       //TODO: get gpus as arguments and set
-      void RegisterSelf() {
-        RegisterGPUNodeRequest req;
-        RegisterGPUNodeRequest::GPU* g = req.add_gpus();
-        g->set_id(0);
-        g->set_memory(1000);
-      }
-  
+      void RegisterSelf();
+
     private:
       std::unique_ptr<ResMngrService::Stub> stub_;
   };
-
-
 };
 
 

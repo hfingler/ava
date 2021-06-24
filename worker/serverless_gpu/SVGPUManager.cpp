@@ -22,7 +22,6 @@ void SVGPUManager::RegisterSelf(std::string rm_addr) {
   resmngr_client.RegisterSelf()
 }
 
-
 void SVGPUManager::LaunchService() {
   std::string server_address("0.0.0.0:");
   if(const char* port = std::getenv("AVAMNGR_PORT")) {
@@ -40,6 +39,25 @@ void SVGPUManager::LaunchService() {
   std::cout << "Server listening on " << server_address << std::endl;
   server->Wait();
 }
+
+//TODO: get gpus as arguments and set
+void ResMngrClient::RegisterSelf() {
+  RegisterGPUNodeRequest req;
+  RegisterGPUNodeRequest::GPU* g = req.add_gpus();
+  g->set_id(0);
+  g->set_memory(1000);
+
+  ClientContext context;
+  RegisterGPUNodeResponse reply;
+  Status status = stub_->RegisterGPUNode(&context, request, &reply);
+  
+  if (!status.ok()) {
+    std::cerr << "Error registering self with resmngr:" << status.error_code() << 
+        ": " << status.error_message() << std::endl;
+    std::exit(1);
+  }
+}
+
 
 /*************************************
  * 
