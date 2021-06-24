@@ -12,6 +12,7 @@ ABSL_FLAG(std::vector<std::string>, worker_env, {},
           "(OPTIONAL) Specify environment variables, e.g. HOME=/home/ubuntu, passed to API servers");
 ABSL_FLAG(uint16_t, ngpus, 1, "(OPTIONAL) Number of GPUs the manager should use");
 ABSL_FLAG(uint16_t, gpuoffset, 0, "(OPTIONAL)GPU id offset");
+ABSL_FLAG(std::string, resmngr_addr, "", "(OPTIONAL) Address of the Alouatta resource manager. If enabled will run on grpc mode.");
 
 int main(int argc, const char *argv[]) {
   absl::ParseCommandLine(argc, const_cast<char **>(argv));
@@ -24,6 +25,18 @@ int main(int argc, const char *argv[]) {
                       worker_argv, worker_env,
                       absl::GetFlag(FLAGS_ngpus),
                       absl::GetFlag(FLAGS_gpuoffset));
-  manager->RunServer();
+
+  std::string rm_addr = absl::GetFlag(FLAGS_resmngr_addr);
+
+  //normal ava mode
+  if (rm_addr == "") {
+    manager->RunServer();
+  }
+  //gRPC mode
+  else {
+    manager->RegisterSelf(rm_addr);
+    manager->LaunchService();
+  }
+  
   return 0;
 }
