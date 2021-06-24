@@ -25,6 +25,20 @@ using resmngr::RegisterGPUNodeResponse;
 
 class SVGPUManager : public ManagerServiceServerBase, public GPU::Service {
   public:
+
+  class ResMngrClient {
+    public:
+      ResMngrClient(std::shared_ptr<Channel> channel)
+      : stub_(ResMngrService::NewStub(channel)) {}
+      
+      //TODO: get gpus as arguments and set
+      void RegisterSelf();
+
+    private:
+      std::unique_ptr<ResMngrService::Stub> stub_;
+  };
+
+
   //fields
   BaseScheduler* scheduler;
   ResMngrClient* resmngr_client;
@@ -42,17 +56,7 @@ class SVGPUManager : public ManagerServiceServerBase, public GPU::Service {
   Status SpawnGPUWorker(ServerContext* context, const SpawnGPUWorkerRequest* request, SpawnGPUWorkerReply* response) override;
   ava_proto::WorkerAssignReply HandleRequest(const ava_proto::WorkerAssignRequest &request) override;
 
-  class ResMngrClient {
-    public:
-      ResMngrClient(std::shared_ptr<Channel> channel)
-      : stub_(ResMngrService::NewStub(channel)) {}
-      
-      //TODO: get gpus as arguments and set
-      void RegisterSelf();
-
-    private:
-      std::unique_ptr<ResMngrService::Stub> stub_;
-  };
+  
 };
 
 

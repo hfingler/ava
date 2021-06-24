@@ -19,7 +19,7 @@ void SVGPUManager::RegisterSelf(std::string rm_addr) {
     grpc::CreateChannel(rm_addr, grpc::InsecureChannelCredentials()));
 
   //TODO: get local GPU resources and pass as argument
-  resmngr_client.RegisterSelf()
+  resmngr_client->RegisterSelf();
 }
 
 void SVGPUManager::LaunchService() {
@@ -41,9 +41,9 @@ void SVGPUManager::LaunchService() {
 }
 
 //TODO: get gpus as arguments and set
-void ResMngrClient::RegisterSelf() {
-  RegisterGPUNodeRequest req;
-  RegisterGPUNodeRequest::GPU* g = req.add_gpus();
+void SVGPUManager::ResMngrClient::RegisterSelf() {
+  RegisterGPUNodeRequest request;
+  RegisterGPUNodeRequest::GPU* g = request.add_gpus();
   g->set_id(0);
   g->set_memory(1000);
 
