@@ -9,8 +9,17 @@
  *************************************/ 
 
 Status SVGPUManager::SpawnGPUWorker(ServerContext* context, const SpawnGPUWorkerRequest* request, SpawnGPUWorkerReply* response) {
-  //TODO:
-  response->add_ports(0);
+  
+  //TODO: actually do the thing
+  for (auto &pair : request->workers()) {
+    uint32_t id = pair.first;
+    uint32_t n = pair.second;
+
+    std::cout << "id " << id << " n " << n << std::endl;
+  }
+
+  (*response->mutable_ports())[0] = 0;
+
   return Status::OK;
 }
 
