@@ -1,3 +1,6 @@
+#include <chrono>
+#include <thread>
+
 #include <absl/flags/parse.h>
 #include <absl/flags/flag.h>
 
@@ -19,23 +22,43 @@ int main(int argc, const char *argv[]) {
   ava_manager::setupSignalHandlers();
   auto worker_argv = absl::GetFlag(FLAGS_worker_argv);
   auto worker_env = absl::GetFlag(FLAGS_worker_env);
-  SVGPUManager* manager = new SVGPUManager(absl::GetFlag(FLAGS_manager_port), 
+
+  uint32_t port;
+  //let's give env priority
+  if(const char* env_port = std::getenv("AVAGPU_PORT")) {
+    port = static_cast<uint32_t>(std::stoul(env_port));
+  } else {
+    port = absl::GetFlag(FLAGS_manager_port);
+  }
+
+  std::cerr << "Using port " << port << " for AvA" << std::endl;
+  SVGPUManager* manager = new SVGPUManager(port, 
                       absl::GetFlag(FLAGS_worker_port_base),
                       absl::GetFlag(FLAGS_worker_path), 
                       worker_argv, worker_env,
                       absl::GetFlag(FLAGS_ngpus),
                       absl::GetFlag(FLAGS_gpuoffset));
 
-  std::string rm_addr = absl::GetFlag(FLAGS_resmngr_addr);
-
+  char* rm_addr = std::getenv("RESMNGR_ADDR");
+  
   //normal ava mode
-  if (rm_addr == "") {
+  if (!rm_addr) {
+    std::cerr << "Running manager on normal manager mode" << std::endl;
     manager->RunServer();
   }
   //gRPC mode
   else {
-    manager->RegisterSelf(rm_addr);
+    std::string full_addr(rm_addr);
+    full_addr += ":";
+    full_addr += std::getenv("RESMNGR_PORT");
+
+    std::cerr << "Running manager on serverless mode, rm at " << full_addr << std::endl;
     manager->LaunchService();
+    //wait a bit
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    manager->RegisterSelf(full_addr);
+    //block forever
+    manager->grpc_server->Wait();
   }
   
   return 0;

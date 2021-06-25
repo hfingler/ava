@@ -38,10 +38,10 @@ class SVGPUManager : public ManagerServiceServerBase, public GPU::Service {
       std::unique_ptr<ResMngrService::Stub> stub_;
   };
 
-
   //fields
   BaseScheduler* scheduler;
   ResMngrClient* resmngr_client;
+  std::unique_ptr<Server> grpc_server;
 
   //methods
   SVGPUManager(uint32_t port, uint32_t worker_port_base, std::string worker_path, std::vector<std::string> &worker_argv,
@@ -56,8 +56,6 @@ class SVGPUManager : public ManagerServiceServerBase, public GPU::Service {
   Status SpawnGPUWorker(ServerContext* context, const SpawnGPUWorkerRequest* request, SpawnGPUWorkerReply* response) override;
   ava_proto::WorkerAssignReply HandleRequest(const ava_proto::WorkerAssignRequest &request) override;
   uint32_t LaunchWorker(uint32_t gpu_id);
-
-  
 };
 
 

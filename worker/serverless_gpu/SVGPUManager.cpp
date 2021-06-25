@@ -36,7 +36,8 @@ void SVGPUManager::RegisterSelf(std::string rm_addr) {
 }
 
 void SVGPUManager::LaunchService() {
-  std::string server_address("0.0.0.0:");
+  //std::string server_address("128.83.122.71:");
+  std::string server_address("[::]:");
   if(const char* port = std::getenv("AVAMNGR_PORT")) {
     server_address += port;
   } else {
@@ -46,11 +47,11 @@ void SVGPUManager::LaunchService() {
 
   ServerBuilder builder;
   builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
+  builder.AddChannelArgument(GRPC_ARG_ALLOW_REUSEPORT, 1);
   builder.RegisterService(this);
 
-  std::unique_ptr<Server> server(builder.BuildAndStart());  
+  grpc_server = builder.BuildAndStart();  
   std::cout << "Server listening on " << server_address << std::endl;
-  server->Wait();
 }
 
 //TODO: get gpus as arguments and set
