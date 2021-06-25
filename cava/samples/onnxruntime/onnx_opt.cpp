@@ -7,7 +7,7 @@ ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -
 // To enable stat collecting, use the below line and uncomment the ava_stats definition
 // ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN -D__AVA_ENABLE_STAT);
 ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver);
-ava_guestlib_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/guest_cmd_batching_queue.cpp extensions/extension_api.cpp);
+ava_guestlib_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/guest_cmd_batching_queue.cpp extensions/extension_api.cpp extensions/gpu_address_tracking.cpp);
 ava_worker_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/cmd_batching.cpp);
 ava_common_utility_srcs(extensions/cudart_10.1_utilities.cpp);
 ava_export_qualifier();
@@ -44,6 +44,7 @@ ava_begin_utility;
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 #include <driver_types.h>
+#include <texture_types.h>
 #include <fatbinary.h>
 #include <cublas_v2.h>
 #include <cudnn.h>
@@ -52,6 +53,7 @@ ava_begin_utility;
 #include <cusparse.h>
 #include <cusolver_common.h>
 #include <cusolverDn.h>
+#include <cuda_profiler_api.h>
 
 #include "cudart_nw_internal.h"
 #include "common/extensions/tf_optimization.h"
@@ -64,6 +66,7 @@ ava_begin_utility;
 #include "common/support/io.h"
 #include "guestlib/extensions/extension_api.h"
 #include "guestlib/extensions/guest_cmd_batching_queue.h"
+#include "guestlib/extensions/gpu_address_tracking.h"
 
 #if !defined(__dv)
 #define __dv(v)
@@ -101,12 +104,6 @@ extern GQueue *idle_cu_event_pool;
 
 extern cudaError_t cuda_last_error;
 
-struct gpu_address_range {
-  uintptr_t start;
-  uintptr_t end;
-};
-
-extern GTree *gpu_address_set;
 ava_end_utility;
 
 ava_type(cudaError_t) { ava_success(cudaSuccess); }
@@ -273,6 +270,10 @@ CUresult __pool_cuEventDestroy(CUevent *hEvent, size_t count) {
     ava_element ava_handle;
   }
 }
+
+size_t CUDNNWINAPI cudnnGetVersion(void);
+
+size_t CUDNNWINAPI cudnnGetCudartVersion(void);
 
 cudnnStatus_t CUDNNWINAPI cudnnCreate(cudnnHandle_t *handle) {
   ava_disable_native_call;
@@ -932,6 +933,12 @@ EXPORTED cudaError_t CUDARTAPI __cudaPopCallConfiguration(dim3 *gridDim, dim3 *b
 }
 ava_end_replacement;
 
+void CUDARTAPI __cudaRegisterTexture(void **fatCubinHandle,
+                                     const void *hostVar,  // struct textureReference *hostVar
+                                     const void **deviceAddress, const char *deviceName, int dim, int norm, int ext) {
+  ava_unsupported;
+}
+
 __host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, dim3 blockDim, void **args,
                                                 size_t sharedMem, cudaStream_t stream) {
   /* May lead to TensorFlow internal race condition but safe for ONNX. */
@@ -1008,6 +1015,10 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMalloc(void **devPtr, size
     ava_buffer(1);
     ava_element ava_opaque;
   }
+  void *ret = reinterpret_cast<void *>(ava_execute());
+  if (ava_is_guest) {
+    __helper_save_gpu_address_range(reinterpret_cast<uint64_t>(*devPtr), size, static_cast<void *>(&ret));
+  }
 }
 
 __host__ cudaError_t CUDARTAPI cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind) {
@@ -1033,6 +1044,10 @@ __host__ cudaError_t CUDARTAPI cudaMemcpy(void *dst, const void *src, size_t cou
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFree(void *devPtr) {
   ava_async;
   ava_argument(devPtr) ava_opaque;
+  ava_execute();
+  if (ava_is_guest) {
+    __helper_remove_gpu_address_range(reinterpret_cast<uint64_t>(devPtr));
+  }
 }
 
 /* Rich set of APIs */
@@ -1085,19 +1100,24 @@ __host__ cudaError_t CUDARTAPI cudaMemcpyToSymbol(const void *symbol, const void
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMemcpyAsync(void *dst, const void *src, size_t count,
                                                                   enum cudaMemcpyKind kind, cudaStream_t stream) {
-  /* TensorFlow always copies data between device memories */
   ava_async;
 
-  /* TensorFlow always copies data between device memories
-  ava_argument(dst) ava_opaque;
-  ava_argument(src) ava_opaque;
-  */
+  ava_argument(dst) {
+    if (kind == cudaMemcpyHostToDevice) {
+      ava_opaque;
+    } else if (kind == cudaMemcpyDeviceToHost) {
+      ava_out;
+      ava_buffer(count);
+    }
+  }
 
-  /* ONNX always copies data from host to device */
-  ava_argument(dst) ava_opaque;
   ava_argument(src) {
-    ava_in;
-    ava_buffer(count);
+    if (kind == cudaMemcpyHostToDevice) {
+      ava_in;
+      ava_buffer(count);
+    } else if (kind == cudaMemcpyDeviceToHost) {
+      ava_opaque;
+    }
   }
 
   ava_argument(stream) ava_handle;
@@ -1111,29 +1131,19 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMemcpyAsync(void *dst, con
 
 __host__ cudaError_t CUDARTAPI cudaMemset(void *devPtr, int value, size_t count) { ava_argument(devPtr) ava_opaque; }
 
-/*
-__host__ cudaError_t CUDARTAPI
-cudaPointerGetAttributes(struct cudaPointerAttributes *attributes, const void *ptr)
-{
-    ava_argument(attributes) {
-        ava_out; ava_buffer(1);
-    }
-    ava_argument(ptr) {
-        //ava_type_cast(CUdeviceptr);
-        //ava_handle;
-        ava_opaque;
-    }
-
-    //__helper_print_pointer_attributes(attributes, ptr);
-}
-*/
-
-ava_utility gint gpu_address_search_func(gconstpointer a, gconstpointer b) {
-  struct gpu_address_range *r = (struct gpu_address_range *)g_tree_lookup(gpu_address_set, a);
-  if (r->start > (uintptr_t)b) return -1;
-  if (r->end <= (uintptr_t)b) return 1;
-  return 0;
-}
+// __host__ cudaError_t CUDARTAPI cudaPointerGetAttributes(struct cudaPointerAttributes *attributes, const void *ptr) {
+//   ava_argument(attributes) {
+//     ava_out;
+//     ava_buffer(1);
+//   }
+//   ava_argument(ptr) {
+//     // ava_type_cast(CUdeviceptr);
+//     // ava_handle;
+//     ava_opaque;
+//   }
+//
+//   //__helper_print_pointer_attributes(attributes, ptr);
+// }
 
 ava_begin_replacement;
 EXPORTED __host__ cudaError_t CUDARTAPI cudaPointerGetAttributes(struct cudaPointerAttributes *attributes,
@@ -1145,8 +1155,7 @@ EXPORTED __host__ cudaError_t CUDARTAPI cudaPointerGetAttributes(struct cudaPoin
   if (!attributes) return cudaErrorInvalidDevice;
 
   /* Search in gpu_address_set */
-  gpointer res = g_tree_search(gpu_address_set, gpu_address_search_func, (gconstpointer)ptr);
-  if (res) {
+  if (is_gpu_address(reinterpret_cast<uint64_t>(ptr))) {
     attributes->type = cudaMemoryTypeDevice;  // maybe cudaMemoryTypeManaged?
     attributes->memoryType = cudaMemoryTypeDevice;
 #ifdef __AVA_ENABLE_STAT
@@ -1473,19 +1482,6 @@ CUresult CUDAAPI cuStreamQuery(CUstream hStream) { ava_argument(hStream) ava_han
 
 CUresult CUDAAPI cuStreamDestroy(CUstream hStream) { ava_argument(hStream) ava_handle; }
 
-ava_utility void __helper_save_gpu_address_range(CUdeviceptr *dptr, size_t bytesize, void *ret) {
-  if (ava_is_guest) {
-    CUresult *cu_ret = static_cast<CUresult *>(ret);
-    if (cu_ret != nullptr && *cu_ret == CUDA_SUCCESS) {
-      struct gpu_address_range *range = (struct gpu_address_range *)g_malloc(sizeof(struct gpu_address_range));
-      range->start = (uintptr_t)*dptr;
-      range->end = (uintptr_t)*dptr + bytesize;
-      g_tree_insert(gpu_address_set, (gpointer)range->start, (gpointer)range);
-      ava_debug("Save GPU address range [%lx, %lx)", range->start, range->end);
-    }
-  }
-}
-
 CUresult CUDAAPI cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
   ava_argument(dptr) {
     ava_out;
@@ -1497,7 +1493,9 @@ CUresult CUDAAPI cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
   }
 
   void *ret = reinterpret_cast<void *>(ava_execute());
-  __helper_save_gpu_address_range(dptr, bytesize, static_cast<void *>(&ret));
+  if (ava_is_guest) {
+    __helper_save_gpu_address_range((uint64_t)(*dptr), bytesize, static_cast<void *>(&ret));
+  }
 }
 
 /*
@@ -1860,9 +1858,27 @@ cublasStatus_t CUBLASWINAPI cublasGetVector(int n, int elemSize, const void *x, 
   ava_unsupported;
 }
 
-CUBLASAPI cublasStatus_t CUBLASWINAPI cublasGetMathMode(cublasHandle_t handle, cublasMath_t *mode) { ava_unsupported; }
+cublasStatus_t CUBLASWINAPI cublasSetVectorAsync(int n, int elemSize, const void *hostPtr, int incx, void *devicePtr,
+                                                 int incy, cudaStream_t stream) {
+  ava_unsupported;
+}
 
-CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSetMathMode(cublasHandle_t handle, cublasMath_t mode) { ava_unsupported; }
+cublasStatus_t CUBLASWINAPI cublasGetVectorAsync(int n, int elemSize, const void *devicePtr, int incx, void *hostPtr,
+                                                 int incy, cudaStream_t stream) {
+  ava_unsupported;
+}
+
+CUBLASAPI cublasStatus_t CUBLASWINAPI cublasGetMathMode(cublasHandle_t handle, cublasMath_t *mode) {
+  ava_argument(handle) ava_handle;
+  ava_argument(mode) {
+    ava_out;
+    ava_buffer(1);
+  }
+}
+
+CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSetMathMode(cublasHandle_t handle, cublasMath_t mode) {
+  ava_argument(handle) ava_handle;
+}
 
 cublasStatus_t CUBLASWINAPI cublasSetMatrix(int rows, int cols, int elemSize, const void *A, int lda, void *B,
                                             int ldb) {
@@ -3414,7 +3430,39 @@ CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemmStridedBatched(
     const float *A, int lda, long long int strideA,                    /* purposely signed */
     const float *B, int ldb, long long int strideB, const float *beta, /* host or device pointer */
     float *C, int ldc, long long int strideC, int batchCount) {
-  ava_unsupported;
+  ava_implicit_argument bool alpha_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(alpha));
+  ava_implicit_argument bool beta_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(beta));
+  ava_argument(handle) ava_handle;
+  ava_argument(A) ava_opaque;
+  ava_argument(B) ava_opaque;
+  ava_argument(C) ava_opaque;
+
+  // zzhu: not sure whether following is correct
+  if (alpha_is_gpu) {
+    ava_argument(alpha) {
+      ava_opaque;
+      ava_depends_on(alpha_is_gpu);
+    }
+  } else {
+    ava_argument(alpha) {
+      ava_in;
+      ava_buffer(1);
+      ava_depends_on(alpha_is_gpu);
+    }
+  }
+
+  if (beta_is_gpu) {
+    ava_argument(beta) {
+      ava_opaque;
+      ava_depends_on(beta_is_gpu);
+    }
+  } else {
+    ava_argument(beta) {
+      ava_in;
+      ava_buffer(1);
+      ava_depends_on(beta_is_gpu);
+    }
+  }
 }
 
 CUBLASAPI cublasStatus_t CUBLASWINAPI cublasDgemmStridedBatched(
@@ -4667,7 +4715,11 @@ cudnnStatus_t CUDNNWINAPI cudnnOpTensor(cudnnHandle_t handle, const cudnnOpTenso
 }
 
 cudnnStatus_t CUDNNWINAPI cudnnCreateReduceTensorDescriptor(cudnnReduceTensorDescriptor_t *reduceTensorDesc) {
-  ava_unsupported;
+  ava_argument(reduceTensorDesc) {
+    ava_out;
+    ava_buffer(1);
+    ava_element ava_handle;
+  }
 }
 
 cudnnStatus_t CUDNNWINAPI cudnnSetReduceTensorDescriptor(cudnnReduceTensorDescriptor_t reduceTensorDesc,
@@ -4676,7 +4728,7 @@ cudnnStatus_t CUDNNWINAPI cudnnSetReduceTensorDescriptor(cudnnReduceTensorDescri
                                                          cudnnNanPropagation_t reduceTensorNanOpt,
                                                          cudnnReduceTensorIndices_t reduceTensorIndices,
                                                          cudnnIndicesType_t reduceTensorIndicesType) {
-  ava_unsupported;
+  ava_argument(reduceTensorDesc) ava_handle;
 }
 
 cudnnStatus_t CUDNNWINAPI cudnnGetReduceTensorDescriptor(const cudnnReduceTensorDescriptor_t reduceTensorDesc,
@@ -4685,11 +4737,31 @@ cudnnStatus_t CUDNNWINAPI cudnnGetReduceTensorDescriptor(const cudnnReduceTensor
                                                          cudnnNanPropagation_t *reduceTensorNanOpt,
                                                          cudnnReduceTensorIndices_t *reduceTensorIndices,
                                                          cudnnIndicesType_t *reduceTensorIndicesType) {
-  ava_unsupported;
+  ava_argument(reduceTensorDesc) ava_handle;
+  ava_argument(reduceTensorOp) {
+    ava_out;
+    ava_buffer(1);
+  }
+  ava_argument(reduceTensorCompType) {
+    ava_out;
+    ava_buffer(1);
+  }
+  ava_argument(reduceTensorNanOpt) {
+    ava_out;
+    ava_buffer(1);
+  }
+  ava_argument(reduceTensorIndices) {
+    ava_out;
+    ava_buffer(1);
+  }
+  ava_argument(reduceTensorIndicesType) {
+    ava_out;
+    ava_buffer(1);
+  }
 }
 
 cudnnStatus_t CUDNNWINAPI cudnnDestroyReduceTensorDescriptor(cudnnReduceTensorDescriptor_t reduceTensorDesc) {
-  ava_unsupported;
+  ava_argument(reduceTensorDesc) ava_handle;
 }
 
 /* Helper function to return the minimum size of the index space to be passed to the reduction given the input and
@@ -4698,7 +4770,14 @@ cudnnStatus_t CUDNNWINAPI cudnnGetReductionIndicesSize(cudnnHandle_t handle,
                                                        const cudnnReduceTensorDescriptor_t reduceTensorDesc,
                                                        const cudnnTensorDescriptor_t aDesc,
                                                        const cudnnTensorDescriptor_t cDesc, size_t *sizeInBytes) {
-  ava_unsupported;
+  ava_argument(handle) ava_handle;
+  ava_argument(reduceTensorDesc) ava_handle;
+  ava_argument(aDesc) ava_handle;
+  ava_argument(cDesc) ava_handle;
+  ava_argument(sizeInBytes) {
+    ava_out;
+    ava_buffer(1);
+  }
 }
 
 /* Helper function to return the minimum size of the workspace to be passed to the reduction given the input and output
@@ -4707,7 +4786,14 @@ cudnnStatus_t CUDNNWINAPI cudnnGetReductionWorkspaceSize(cudnnHandle_t handle,
                                                          const cudnnReduceTensorDescriptor_t reduceTensorDesc,
                                                          const cudnnTensorDescriptor_t aDesc,
                                                          const cudnnTensorDescriptor_t cDesc, size_t *sizeInBytes) {
-  ava_unsupported;
+  ava_argument(handle) ava_handle;
+  ava_argument(reduceTensorDesc) ava_handle;
+  ava_argument(aDesc) ava_handle;
+  ava_argument(cDesc) ava_handle;
+  ava_argument(sizeInBytes) {
+    ava_out;
+    ava_buffer(1);
+  }
 }
 
 /* Tensor operation : C = reduce op( alpha * A ) + beta * C */
@@ -4718,19 +4804,42 @@ cudnnStatus_t CUDNNWINAPI cudnnReduceTensor(cudnnHandle_t handle, const cudnnRed
                                             size_t workspaceSizeInBytes, const void *alpha,
                                             const cudnnTensorDescriptor_t aDesc, const void *A, const void *beta,
                                             const cudnnTensorDescriptor_t cDesc, void *C) {
-  ava_unsupported;
+  ava_argument(handle) ava_handle;
+  ava_argument(reduceTensorDesc) ava_handle;
+  ava_argument(alpha) {
+    ava_type_cast(const double *);
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(aDesc) ava_handle;
+  ava_argument(A) ava_opaque;
+  ava_argument(beta) {
+    ava_type_cast(const double *);
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(cDesc) ava_handle;
+  ava_argument(C) ava_opaque;
+  ava_argument(workspace) ava_opaque;
+  ava_argument(indices) ava_opaque;
 }
 
 /* Set all values of a tensor to a given value : y[i] = value[0] */
 cudnnStatus_t CUDNNWINAPI cudnnSetTensor(cudnnHandle_t handle, const cudnnTensorDescriptor_t yDesc, void *y,
                                          const void *valuePtr) {
-  ava_unsupported;
+  ava_argument(handle) ava_handle;
+  ava_argument(yDesc) ava_handle;
+  ava_argument(y) ava_opaque;
+  ava_argument(valuePtr) ava_opaque;
 }
 
 /* Scale all values of a tensor by a given factor : y[i] = alpha * y[i] */
 cudnnStatus_t CUDNNWINAPI cudnnScaleTensor(cudnnHandle_t handle, const cudnnTensorDescriptor_t yDesc, void *y,
                                            const void *alpha) {
-  ava_unsupported;
+  ava_argument(handle) ava_handle;
+  ava_argument(yDesc) ava_handle;
+  ava_argument(y) ava_opaque;
+  ava_argument(alpha) ava_opaque;
 }
 
 cudnnStatus_t CUDNNWINAPI cudnnSetFilter4dDescriptor(cudnnFilterDescriptor_t filterDesc,
@@ -4926,7 +5035,19 @@ cudnnStatus_t CUDNNWINAPI cudnnGetConvolutionBackwardFilterAlgorithm_v7(
     cudnnHandle_t handle, const cudnnTensorDescriptor_t srcDesc, const cudnnTensorDescriptor_t diffDesc,
     const cudnnConvolutionDescriptor_t convDesc, const cudnnFilterDescriptor_t gradDesc, const int requestedAlgoCount,
     int *returnedAlgoCount, cudnnConvolutionBwdFilterAlgoPerf_t *perfResults) {
-  ava_unsupported;
+  ava_argument(handle) ava_handle;
+  ava_argument(srcDesc) ava_handle;
+  ava_argument(diffDesc) ava_handle;
+  ava_argument(convDesc) ava_handle;
+  ava_argument(gradDesc) ava_handle;
+  ava_argument(returnedAlgoCount) {
+    ava_out;
+    ava_buffer(1);
+  }
+  ava_argument(perfResults) {
+    ava_out;
+    cu_in_out_buffer(requestedAlgoCount, returnedAlgoCount);
+  }
 }
 
 /*
@@ -5010,7 +5131,19 @@ cudnnStatus_t CUDNNWINAPI cudnnGetConvolutionBackwardDataAlgorithm_v7(
     cudnnHandle_t handle, const cudnnFilterDescriptor_t filterDesc, const cudnnTensorDescriptor_t diffDesc,
     const cudnnConvolutionDescriptor_t convDesc, const cudnnTensorDescriptor_t gradDesc, const int requestedAlgoCount,
     int *returnedAlgoCount, cudnnConvolutionBwdDataAlgoPerf_t *perfResults) {
-  ava_unsupported;
+  ava_argument(handle) ava_handle;
+  ava_argument(filterDesc) ava_handle;
+  ava_argument(diffDesc) ava_handle;
+  ava_argument(convDesc) ava_handle;
+  ava_argument(gradDesc) ava_handle;
+  ava_argument(returnedAlgoCount) {
+    ava_out;
+    ava_buffer(1);
+  }
+  ava_argument(perfResults) {
+    ava_out;
+    cu_in_out_buffer(requestedAlgoCount, returnedAlgoCount);
+  }
 }
 
 /* Helper function to return the minimum size of the workspace to be passed to the convolution given an algo*/
@@ -11216,30 +11349,21 @@ __host__ cudaError_t CUDARTAPI cudaDeviceGetByPCIBusId(int *device, const char *
 
 __host__ cudaError_t CUDARTAPI cudaDeviceGetPCIBusId(char *pciBusId, int len, int device) { ava_unsupported; }
 
-// __host__ cudaError_t CUDARTAPI cudaIpcGetEventHandle(cudaIpcEventHandle_t *handle, cudaEvent_t event)
-// {
-//     ava_unsupported;
-// }
-//
-// __host__ cudaError_t CUDARTAPI cudaIpcOpenEventHandle(cudaEvent_t *event, cudaIpcEventHandle_t handle)
-// {
-//     ava_unsupported;
-// }
-//
-// __host__ cudaError_t CUDARTAPI cudaIpcGetMemHandle(cudaIpcMemHandle_t *handle, void *devPtr)
-// {
-//     ava_unsupported;
-// }
+__host__ cudaError_t CUDARTAPI cudaIpcGetEventHandle(cudaIpcEventHandle_t *handle, cudaEvent_t event) {
+  ava_unsupported;
+}
 
-// __host__ cudaError_t CUDARTAPI cudaIpcOpenMemHandle(void **devPtr, cudaIpcMemHandle_t handle, unsigned int flags)
-// {
-//     ava_unsupported;
-// }
-//
-// __host__ cudaError_t CUDARTAPI cudaIpcCloseMemHandle(void *devPtr)
-// {
-//     ava_unsupported;
-// }
+__host__ cudaError_t CUDARTAPI cudaIpcOpenEventHandle(cudaEvent_t *event, cudaIpcEventHandle_t handle) {
+  ava_unsupported;
+}
+
+__host__ cudaError_t CUDARTAPI cudaIpcGetMemHandle(cudaIpcMemHandle_t *handle, void *devPtr) { ava_unsupported; }
+
+__host__ cudaError_t CUDARTAPI cudaIpcOpenMemHandle(void **devPtr, cudaIpcMemHandle_t handle, unsigned int flags) {
+  ava_unsupported;
+}
+
+__host__ cudaError_t CUDARTAPI cudaIpcCloseMemHandle(void *devPtr) { ava_unsupported; }
 
 ava_begin_replacement;
 EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaPeekAtLastError(void) { return cuda_last_error; }
@@ -11609,7 +11733,9 @@ __host__ cudaError_t CUDARTAPI cudaMemset3D(struct cudaPitchedPtr pitchedDevPtr,
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMemsetAsync(void *devPtr, int value, size_t count,
                                                                   cudaStream_t stream __dv(0)) {
-  ava_unsupported;
+  ava_async;
+  ava_argument(devPtr) ava_opaque;
+  ava_argument(stream) ava_handle;
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMemset2DAsync(void *devPtr, size_t pitch, int value, size_t width,
@@ -11944,6 +12070,34 @@ CUBLASAPI cublasStatus_t CUBLASWINAPI cublasHgemmStridedBatched(
   ava_unsupported;
 }
 
+cusparseStatus_t CUSPARSEAPI cusparseDcsrmm2(cusparseHandle_t handle, cusparseOperation_t transA,
+                                             cusparseOperation_t transB, int m, int n, int k, int nnz,
+                                             const double *alpha, const cusparseMatDescr_t descrA,
+                                             const double *csrSortedValA, const int *csrSortedRowPtrA,
+                                             const int *csrSortedColIndA, const double *B, int ldb, const double *beta,
+                                             double *C, int ldc) {
+  ava_unsupported;
+}
+
+cufftResult CUFFTAPI cufftXtExec(cufftHandle plan, void *input, void *output, int direction) { ava_unsupported; }
+
+cufftResult CUFFTAPI cufftXtMakePlanMany(cufftHandle plan, int rank, long long int *n, long long int *inembed,
+                                         long long int istride, long long int idist, cudaDataType inputtype,
+                                         long long int *onembed, long long int ostride, long long int odist,
+                                         cudaDataType outputtype, long long int batch, size_t *workSize,
+                                         cudaDataType executiontype) {
+  ava_unsupported;
+}
+
+cusparseStatus_t CUSPARSEAPI cusparseScsrmm2(cusparseHandle_t handle, cusparseOperation_t transA,
+                                             cusparseOperation_t transB, int m, int n, int k, int nnz,
+                                             const float *alpha, const cusparseMatDescr_t descrA,
+                                             const float *csrSortedValA, const int *csrSortedRowPtrA,
+                                             const int *csrSortedColIndA, const float *B, int ldb, const float *beta,
+                                             float *C, int ldc) {
+  ava_unsupported;
+}
+
 const char *CUDNNWINAPI cudnnGetErrorString(cudnnStatus_t status) {
   const char *ret = reinterpret_cast<const char *>(ava_execute());
   ava_return_value {
@@ -11952,6 +12106,49 @@ const char *CUDNNWINAPI cudnnGetErrorString(cudnnStatus_t status) {
     ava_lifetime_static;
   }
 }
+
+__host__ cudaError_t CUDARTAPI cudaProfilerInitialize(const char *configFile, const char *outputFile,
+                                                      cudaOutputMode_t outputMode) {
+  ava_unsupported;
+}
+
+__host__ cudaError_t CUDARTAPI cudaProfilerStart(void);
+
+__host__ cudaError_t CUDARTAPI cudaProfilerStop(void);
+
+__host__ cudaError_t CUDARTAPI cudaThreadSynchronize(void);
+
+__host__ cudaError_t CUDARTAPI cudaGetExportTable(const void **ppExportTable, const cudaUUID_t *pExportTableId) {
+  ava_unsupported;
+}
+
+ava_begin_replacement;
+void ava_preload_cubin_guestlib() {
+#ifdef AVA_PRELOAD_CUBIN
+  /* Preload CUDA fat binaries */
+  /* Read cubin number */
+  int fd, ret;
+  int fatbin_num;
+  fd = open("/cuda_dumps/fatbin-info.ava", O_RDONLY, 0666);
+  if (fd == -1) {
+    fprintf(stderr, "open /cuda_dumps/fatbin-info.ava [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__,
+            __LINE__);
+    exit(EXIT_FAILURE);
+  }
+  ret = read(fd, (void *)&fatbin_num, sizeof(int));
+  if (ret == -1) {
+    fprintf(stderr, "read [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
+    exit(EXIT_FAILURE);
+  }
+  AVA_DEBUG << "Fatbinary number = " << fatbin_num;
+  int i;
+  ava_metadata(NULL)->num_fatbins = 0;
+  for (i = 0; i < fatbin_num; i++) {
+    __helper_load_function_arg_info_guest();
+  }
+#endif
+}
+ava_end_replacement;
 
 ava_utility void __helper_worker_init_epilogue() {
 #ifdef AVA_PRELOAD_CUBIN
