@@ -55,6 +55,7 @@ class SVGPUManager : public ManagerServiceServerBase, public GPU::Service {
   void LaunchService();
   Status SpawnGPUWorker(ServerContext* context, const SpawnGPUWorkerRequest* request, SpawnGPUWorkerReply* response) override;
   ava_proto::WorkerAssignReply HandleRequest(const ava_proto::WorkerAssignRequest &request) override;
+  uint32_t LaunchWorker(uint32_t gpu_id);
 
   
 };

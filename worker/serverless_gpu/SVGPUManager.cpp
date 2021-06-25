@@ -9,16 +9,20 @@
  *************************************/ 
 
 Status SVGPUManager::SpawnGPUWorker(ServerContext* context, const SpawnGPUWorkerRequest* request, SpawnGPUWorkerReply* response) {
-  
-  //TODO: actually do the thing
   for (auto &pair : request->workers()) {
-    uint32_t id = pair.first;
+    uint32_t gpuid = pair.first;
     uint32_t n = pair.second;
 
-    std::cout << "id " << id << " n " << n << std::endl;
-  }
+    //TODO: make sure gpuid is sane
 
-  (*response->mutable_ports())[0] = 0;
+    for (int i = 0 ; i < n ; i++) {
+      uint32_t port = LaunchWorker(gpuid);
+      
+      auto w = response->add_workers();
+      w->set_id(gpuid);
+      w->set_port(port);
+    }
+  }
 
   return Status::OK;
 }
@@ -77,22 +81,25 @@ void SVGPUManager::ResMngrClient::RegisterSelf() {
 ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::WorkerAssignRequest &request) {
   ava_proto::WorkerAssignReply reply;
 
+  if (request.gpu_count() > 1) {
+    std::cerr << "ERR: someone requested more than 1 GPU, no bueno" << std::endl;
+    return reply;
+  }
+
+  uint16_t cgpu = scheduler->getGPU();
+  uint32_t port = LaunchWorker(cgpu);
+  reply.worker_address().push_back("0.0.0.0:" + std::to_string(port));
+
+  return reply;
+}
+
+uint32_t SVGPUManager::LaunchWorker(uint32_t gpu_id) {
   // Start from input environment variables
   std::vector<std::string> environments(worker_env_);
 
-  // Let first N GPUs visible
-  if (request.gpu_count() > 0) {
-    std::string visible_devices = "CUDA_VISIBLE_DEVICES=";
-    for (uint32_t i = 0; i < request.gpu_count() ; ++i) {
-      uint16_t cgpu = scheduler->getGPU();
-      visible_devices += std::to_string(cgpu);
-      if (i != request.gpu_count()-1) {
-        visible_devices += ",";
-      }
-    }
-    
-    environments.push_back(visible_devices);
-  }
+  std::string visible_devices = "CUDA_VISIBLE_DEVICES=" + std::to_string(gpu_id);
+  environments.push_back(visible_devices);
+  
   // Let API server use TCP channel
   environments.push_back("AVA_CHANNEL=TCP");
 
@@ -122,7 +129,5 @@ ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::Worker
   child_monitor->detach();
   worker_monitor_map_.insert({port, child_monitor});
 
-  reply.worker_address().push_back("0.0.0.0:" + std::to_string(port));
-
-  return reply;
+  return port;
 }
