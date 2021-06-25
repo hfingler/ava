@@ -5,7 +5,8 @@
 
 class RoundRobin : public BaseScheduler {
   public:
-  uint16_t current_gpu, gpu_offset;
+  uint16_t gpu_offset;
+  uint16_t current_gpu;
 
   RoundRobin(uint16_t ngpus, uint16_t gpu_offset) 
     : BaseScheduler(ngpus), gpu_offset(gpu_offset), current_gpu(0) {};

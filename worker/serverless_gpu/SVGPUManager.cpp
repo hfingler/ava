@@ -2,6 +2,69 @@
 #include <boost/algorithm/string/join.hpp>
 #include <sys/wait.h>
 
+/*************************************
+ * 
+ *    gRPC methods
+ * 
+ *************************************/ 
+
+Status SVGPUManager::SpawnGPUWorker(ServerContext* context, const SpawnGPUWorkerRequest* request, SpawnGPUWorkerReply* response) {
+  //TODO:
+  response->add_ports(0);
+  return Status::OK;
+}
+
+void SVGPUManager::RegisterSelf(std::string rm_addr) {
+  resmngr_client = new ResMngrClient(
+    grpc::CreateChannel(rm_addr, grpc::InsecureChannelCredentials()));
+
+  //TODO: get local GPU resources and pass as argument
+  resmngr_client->RegisterSelf();
+}
+
+void SVGPUManager::LaunchService() {
+  std::string server_address("0.0.0.0:");
+  if(const char* port = std::getenv("AVAMNGR_PORT")) {
+    server_address += port;
+  } else {
+    std::cerr << "AVAMNGR_PORT not defined (you probably didnt run using task)" << std::endl;
+    std::exit(1);
+  }
+
+  ServerBuilder builder;
+  builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
+  builder.RegisterService(this);
+
+  std::unique_ptr<Server> server(builder.BuildAndStart());  
+  std::cout << "Server listening on " << server_address << std::endl;
+  server->Wait();
+}
+
+//TODO: get gpus as arguments and set
+void SVGPUManager::ResMngrClient::RegisterSelf() {
+  RegisterGPUNodeRequest request;
+  RegisterGPUNodeRequest::GPU* g = request.add_gpus();
+  g->set_id(0);
+  g->set_memory(1000);
+
+  ClientContext context;
+  RegisterGPUNodeResponse reply;
+  Status status = stub_->RegisterGPUNode(&context, request, &reply);
+  
+  if (!status.ok()) {
+    std::cerr << "Error registering self with resmngr:" << status.error_code() << 
+        ": " << status.error_message() << std::endl;
+    std::exit(1);
+  }
+}
+
+
+/*************************************
+ * 
+ *    AvA HandleRequest override
+ * 
+ *************************************/ 
+
 ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::WorkerAssignRequest &request) {
   ava_proto::WorkerAssignReply reply;
 
