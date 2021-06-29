@@ -45,15 +45,18 @@ ava_begin_utility;
 #include <cudnn.h>
 #include <curand.h>
 #include <cufft.h>
+#include <cufftXt.h>
 #include <cusparse.h>
 #include <cusolver_common.h>
 #include <cusolverDn.h>
+#include <cuda_profiler_api.h>
 
 #include "cudart_nw_internal.h"
 #include "common/linkage.h"
 #include "common/logging.h"
 #include "common/extensions/cudart_10.1_utilities.hpp"
 #include "guestlib/cuda/nvvm_helper.h"
+#include "common/support/io.h"
 #include "guestlib/extensions/gpu_address_tracking.h"
 
 #if !defined(__dv)
@@ -68,6 +71,9 @@ typedef union Algorithm {
   cudnnRNNAlgo_t RNNAlgo;
   cudnnCTCLossAlgo_t CTCLossAlgo;
 };
+
+#define FAILURE_PRINT(sys_call) \
+  ava_fatal("" #sys_call " [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__)
 ava_end_utility;
 
 ava_type(cudaError_t) { ava_success(cudaSuccess); }
@@ -142,7 +148,8 @@ char CUDARTAPI __cudaInitModule(void **fatCubinHandle) {
 ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs, int *num_funcs) {
   struct fatbin_wrapper *wp = static_cast<struct fatbin_wrapper *>(fatCubin);
   struct fatBinaryHeader *fbh = reinterpret_cast<struct fatBinaryHeader *>(wp->ptr);
-  int fd, ret;
+  int fd, retval;
+  bool ret;
 
   /* Increase fatbin counter */
   static int fatbin_num = 0;
@@ -151,43 +158,36 @@ ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs,
     char *file_name = "/tmp/fatbin-info.ava";
     fd = open(file_name, O_RDWR | O_CREAT, 0666);
     if (fd == -1) {
-      fprintf(stderr, "open %s [errno=%d, errstr=%s] at %s:%d", file_name, errno, strerror(errno), __FILE__, __LINE__);
-      exit(EXIT_FAILURE);
+      ava_fatal("open %s [errno=%d, errstr=%s] at %s:%d", file_name, errno, strerror(errno), __FILE__, __LINE__);
     }
     AVA_DEBUG << "Fatbinary counter = " << fatbin_num;
-    ret = write(fd, (const void *)&fatbin_num, sizeof(int));
-    if (ret == -1) {
-      fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-      exit(EXIT_FAILURE);
+    ret = ava::support::WriteData(fd, (const char *)&fatbin_num, sizeof(int));
+    if (!ret) {
+      FAILURE_PRINT("write");
     }
-    ret = lseek(fd, 0, SEEK_END);
-    if (ret == -1) {
-      fprintf(stderr, "lseek [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-      exit(EXIT_FAILURE);
+    retval = lseek(fd, 0, SEEK_END);
+    if (retval == -1) {
+      FAILURE_PRINT("lseek");
     }
-    ret = write(fd, (const void *)wp, sizeof(struct fatbin_wrapper));
-    if (ret == -1) {
-      fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-      exit(EXIT_FAILURE);
+    ret = ava::support::WriteData(fd, (const char *)wp, sizeof(struct fatbin_wrapper));
+    if (!ret) {
+      FAILURE_PRINT("write");
     }
     close(fd);
   }
 
   /* Dump fat binary to a file */
-  char fatbin_filename[32];
   if (ava_is_worker) {
-    sprintf(fatbin_filename, "/tmp/fatbin-%d.ava", ava_metadata(NULL)->num_fatbins);
-    fd = open(fatbin_filename, O_WRONLY | O_TRUNC | O_CREAT, 0666);
+    auto fatbin_filename = fmt::format("/tmp/fatbin-{}.ava", ava_metadata(NULL)->num_fatbins);
+    fd = open(fatbin_filename.c_str(), O_WRONLY | O_TRUNC | O_CREAT, 0666);
     if (fd == -1) {
-      fprintf(stderr, "open %s [errno=%d, errstr=%s] at %s:%d", fatbin_filename, errno, strerror(errno), __FILE__,
-              __LINE__);
-      exit(EXIT_FAILURE);
+      ava_fatal("open %s [errno=%d, errstr=%s] at %s:%d", fatbin_filename.c_str(), errno, strerror(errno), __FILE__,
+                __LINE__);
     }
     AVA_DEBUG << "Dump fatbinary to " << fatbin_filename;
-    ret = write(fd, (const void *)wp->ptr, fbh->headerSize + fbh->fatSize);
-    if (ret == -1) {
-      fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-      exit(EXIT_FAILURE);
+    ret = ava::support::WriteData(fd, (const char *)wp->ptr, fbh->headerSize + fbh->fatSize);
+    if (!ret) {
+      FAILURE_PRINT("write");
     }
     close(fd);
   }
@@ -210,32 +210,29 @@ ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs,
   if (ava_is_worker) {
     if (ava_metadata(NULL)->fd_functions != 0) {
       size = 0;
-      ret = write(ava_metadata(NULL)->fd_functions, (const void *)&size, sizeof(size_t));
-      if (ret == -1) {
-        fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-        exit(EXIT_FAILURE);
+      ret = ava::support::WriteData(ava_metadata(NULL)->fd_functions, (const char *)&size, sizeof(size_t));
+      if (!ret) {
+        FAILURE_PRINT("write");
       }
     }
   }
 
   /*  Open the command pipe for reading */
-  char pip_command[80];
-  sprintf(pip_command, "/usr/local/cuda-10.1/bin/cuobjdump -elf /tmp/fatbin-%d.ava", ava_metadata(NULL)->num_fatbins);
-  fp_pipe = popen(pip_command, "r");
+  auto pip_command =
+      fmt::format("/usr/local/cuda-10.1/bin/cuobjdump -elf /tmp/fatbin-{}.ava", ava_metadata(NULL)->num_fatbins);
+  fp_pipe = popen(pip_command.c_str(), "r");
   assert(fp_pipe);
 
   /* Open function argument dump file */
   int function_arg_fd;
-  char function_arg_filename[32];
   if (ava_is_worker) {
-    sprintf(function_arg_filename, "/tmp/function_arg-%d.ava", ava_metadata(NULL)->num_fatbins);
-    function_arg_fd = open(function_arg_filename, O_WRONLY | O_TRUNC | O_CREAT, 0666);
+    auto function_arg_filename = fmt::format("/tmp/function_arg-{}.ava", ava_metadata(NULL)->num_fatbins);
+    function_arg_fd = open(function_arg_filename.c_str(), O_WRONLY | O_TRUNC | O_CREAT, 0666);
     if (function_arg_fd == -1) {
-      fprintf(stderr, "open %s [errno=%d, errstr=%s] at %s:%d", function_arg_filename, errno, strerror(errno), __FILE__,
-              __LINE__);
-      exit(EXIT_FAILURE);
+      ava_fatal("open %s [errno=%d, errstr=%s] at %s:%d", function_arg_filename.c_str(), errno, strerror(errno),
+                __FILE__, __LINE__);
     }
-    AVA_DEBUG << "Dump function argument info to " << function_arg_filename;
+    AVA_LOG_F(DEBUG, "Dump function argument info to {}", function_arg_filename);
   }
 
   while (fgets(line, sizeof(line), fp_pipe) != NULL) {
@@ -272,8 +269,7 @@ ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs,
               if (feof(fp_pipe)) {
                 fprintf(stderr, "End of file");
               } else if (ferror(fp_pipe)) {
-                fprintf(stderr, "fgets [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-                exit(EXIT_FAILURE);
+                FAILURE_PRINT("fgets");
               }
             }
             fgets_ret = fgets(line, sizeof(line), fp_pipe);
@@ -281,8 +277,7 @@ ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs,
               if (feof(fp_pipe)) {
                 fprintf(stderr, "End of file");
               } else if (ferror(fp_pipe)) {
-                fprintf(stderr, "fgets [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-                exit(EXIT_FAILURE);
+                FAILURE_PRINT("fgets");
               }
             }
 
@@ -307,20 +302,17 @@ ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs,
       /* Dump the function argument sizes to file */
       if (ava_is_worker) {
         size = strlen(name) + 1;
-        ret = write(function_arg_fd, (void *)&size, sizeof(size_t));
-        if (ret == -1) {
-          fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-          exit(EXIT_FAILURE);
+        ret = ava::support::WriteData(function_arg_fd, (const char *)&size, sizeof(size_t));
+        if (!ret) {
+          FAILURE_PRINT("write");
         }
-        ret = write(function_arg_fd, (void *)name, size);
-        if (ret == -1) {
-          fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-          exit(EXIT_FAILURE);
+        ret = ava::support::WriteData(function_arg_fd, (const char *)name, size);
+        if (!ret) {
+          FAILURE_PRINT("write");
         }
-        ret = write(function_arg_fd, (void *)func, sizeof(struct fatbin_function));
-        if (ret == -1) {
-          fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-          exit(EXIT_FAILURE);
+        ret = ava::support::WriteData(function_arg_fd, (const char *)func, sizeof(struct fatbin_function));
+        if (!ret) {
+          FAILURE_PRINT("write");
         }
       }
 
@@ -333,7 +325,9 @@ ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs,
     }
   }
 
-  if (ava_is_worker) close(function_arg_fd);
+  if (ava_is_worker) {
+    close(function_arg_fd);
+  }
 
   pclose(fp_pipe);
   ++(ava_metadata(NULL)->num_fatbins);
@@ -404,102 +398,89 @@ ava_utility void __helper_dump_cuda_function(char *deviceFun, const char *device
   if (fd == 0) {
     fd = open("/tmp/fatfunction.ava", O_WRONLY | O_TRUNC | O_CREAT, 0666);
     if (fd == -1) {
-      fprintf(stderr, "open /tmp/fatfunction.ava [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__,
-              __LINE__);
-      exit(EXIT_FAILURE);
+      ava_fatal("open /tmp/fatfunction.ava [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
     }
     ava_metadata(NULL)->fd_functions = fd;
   }
 
   size_t size;
   int exists;
-  ssize_t ret;
+  bool ret;
   size = strlen(deviceFun) + 1;
-  ret = write(fd, (const void *)&size, sizeof(size_t));
-  if (ret == -1) {
-    fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-    exit(EXIT_FAILURE);
+  ret = ava::support::WriteData(fd, (const char *)&size, sizeof(size_t));
+  if (!ret) {
+    FAILURE_PRINT("write");
   }
-  ret = write(fd, (const void *)deviceFun, size);
-  if (ret == -1) {
-    fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-    exit(EXIT_FAILURE);
+  ret = ava::support::WriteData(fd, (const char *)deviceFun, size);
+  if (!ret) {
+    FAILURE_PRINT("write");
   }
   size = strlen(deviceName) + 1;
-  ret = write(fd, (const void *)&size, sizeof(size_t));
-  if (ret == -1) {
-    fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-    exit(EXIT_FAILURE);
+  ret = ava::support::WriteData(fd, (const char *)&size, sizeof(size_t));
+  if (!ret) {
+    FAILURE_PRINT("write");
   }
-  ret = write(fd, (const void *)deviceName, size);
-  if (ret == -1) {
-    fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-    exit(EXIT_FAILURE);
+  ret = ava::support::WriteData(fd, (const char *)deviceName, size);
+  if (!ret) {
+    FAILURE_PRINT("write");
   }
-  ret = write(fd, (const void *)&thread_limit, sizeof(int));
-  if (ret == -1) {
-    fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-    exit(EXIT_FAILURE);
+  ret = ava::support::WriteData(fd, (const char *)&thread_limit, sizeof(int));
+  if (!ret) {
+    FAILURE_PRINT("write");
   }
   exists = (tid != NULL);
-  ret = write(fd, (const void *)&exists, sizeof(int));
-  if (ret == -1) {
-    fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-    exit(EXIT_FAILURE);
+  ret = ava::support::WriteData(fd, (const char *)&exists, sizeof(int));
+  if (!ret) {
+    FAILURE_PRINT("write");
   }
   if (exists) {
-    ret = write(fd, (const void *)tid, sizeof(uint3));
+    ret = ava::support::WriteData(fd, (const char *)tid, sizeof(uint3));
     if (ret == -1) {
-      fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-      exit(EXIT_FAILURE);
+      FAILURE_PRINT("write");
     }
   }
   exists = (bid != NULL);
-  ret = write(fd, (const void *)&exists, sizeof(int));
+  ret = ava::support::WriteData(fd, (const char *)&exists, sizeof(int));
+  if (!ret) {
+    FAILURE_PRINT("write");
+  }
   if (exists) {
-    ret = write(fd, (const void *)bid, sizeof(uint3));
-    if (ret == -1) {
-      fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-      exit(EXIT_FAILURE);
+    ret = ava::support::WriteData(fd, (const char *)bid, sizeof(uint3));
+    if (!ret) {
+      FAILURE_PRINT("write");
     }
   }
   exists = (bDim != NULL);
-  ret = write(fd, (const void *)&exists, sizeof(int));
-  if (ret == -1) {
-    fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-    exit(EXIT_FAILURE);
+  ret = ava::support::WriteData(fd, (const char *)&exists, sizeof(int));
+  if (!ret) {
+    FAILURE_PRINT("write");
   }
   if (exists) {
-    ret = write(fd, (const void *)bDim, sizeof(dim3));
-    if (ret == -1) {
-      fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-      exit(EXIT_FAILURE);
+    ret = ava::support::WriteData(fd, (const char *)bDim, sizeof(dim3));
+    if (!ret) {
+      FAILURE_PRINT("write");
     }
   }
   exists = (gDim != NULL);
-  ret = write(fd, (const void *)&exists, sizeof(int));
-  if (ret == -1) {
-    fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-    exit(EXIT_FAILURE);
+  ret = ava::support::WriteData(fd, (const char *)&exists, sizeof(int));
+  if (!ret) {
+    FAILURE_PRINT("write");
   }
   if (exists) {
-    ret = write(fd, (const void *)gDim, sizeof(dim3));
-    if (ret == -1) {
-      fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-      exit(EXIT_FAILURE);
+    ret = ava::support::WriteData(fd, (const char *)gDim, sizeof(dim3));
+    if (!ret) {
+      FAILURE_PRINT("write");
     }
   }
   exists = (wSize != NULL);
-  ret = write(fd, (const void *)&exists, sizeof(int));
-  if (ret == -1) {
-    fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-    exit(EXIT_FAILURE);
+  ret = ava::support::WriteData(fd, (const char *)&exists, sizeof(int));
+  if (!ret) {
+    FAILURE_PRINT("write");
   }
   if (exists) {
-    ret = write(fd, (const void *)wSize, sizeof(int));
-    if (ret == -1) {
-      fprintf(stderr, "write [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-      exit(EXIT_FAILURE);
+    ret = ava::support::WriteData(fd, (const char *)wSize, sizeof(int));
+    if (!ret) {
+      FAILURE_PRINT("write");
     }
   }
 }
@@ -3426,6 +3407,9 @@ CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSscal(cublasHandle_t handle, int n,
 
 /***** CUDNN (OOF) ******/
 
+size_t CUDNNWINAPI cudnnGetVersion(void);
+size_t CUDNNWINAPI cudnnGetCudartVersion(void);
+
 cudnnStatus_t CUDNNWINAPI cudnnBatchNormalizationForwardInference(
     cudnnHandle_t handle, cudnnBatchNormMode_t mode, const void *alpha, /* alpha[0] = result blend factor */
     const void *beta,                                                   /* beta[0] = dest layer blend factor */
@@ -4492,7 +4476,28 @@ cudnnStatus_t CUDNNWINAPI cudnnConvolutionBiasActivationForward(
     cudnnConvolutionFwdAlgo_t algo, void *workSpace, size_t workSpaceSizeInBytes, const void *alpha2,
     const cudnnTensorDescriptor_t zDesc, const void *z, const cudnnTensorDescriptor_t biasDesc, const void *bias,
     const cudnnActivationDescriptor_t activationDesc, const cudnnTensorDescriptor_t yDesc, void *y) {
-  ava_unsupported;
+  ava_argument(handle) ava_handle;
+  ava_argument(alpha1) {
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(xDesc) ava_handle;
+  ava_argument(x) ava_opaque;
+  ava_argument(wDesc) ava_handle;
+  ava_argument(w) ava_opaque;
+  ava_argument(convDesc) ava_handle;
+  ava_argument(workSpace) ava_opaque;
+  ava_argument(alpha2) {
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(zDesc) ava_handle;
+  ava_argument(z) ava_opaque;
+  ava_argument(biasDesc) ava_handle;
+  ava_argument(bias) ava_opaque;
+  ava_argument(activationDesc) ava_handle;
+  ava_argument(yDesc) ava_handle;
+  ava_argument(y) ava_opaque;
 }
 
 /* Function to compute the bias gradient for batch convolution */
@@ -4500,7 +4505,19 @@ cudnnStatus_t CUDNNWINAPI cudnnConvolutionBackwardBias(cudnnHandle_t handle, con
                                                        const cudnnTensorDescriptor_t dyDesc, const void *dy,
                                                        const void *beta, const cudnnTensorDescriptor_t dbDesc,
                                                        void *db) {
-  ava_unsupported;
+  ava_argument(handle) ava_handle;
+  ava_argument(alpha) {
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(dyDesc) ava_handle;
+  ava_argument(dy) ava_opaque;
+  ava_argument(beta) {
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(dbDesc) ava_handle;
+  ava_argument(db) ava_opaque;
 }
 
 cudnnStatus_t CUDNNWINAPI cudnnGetConvolutionBackwardFilterAlgorithmMaxCount(cudnnHandle_t handle, int *count) {
@@ -4725,23 +4742,39 @@ cudnnStatus_t CUDNNWINAPI cudnnGetPooling2dForwardOutputDim(const cudnnPoolingDe
 
 /* Activation functions: All of the form "output = alpha * Op(inputs) + beta * output" */
 cudnnStatus_t CUDNNWINAPI cudnnCreateActivationDescriptor(cudnnActivationDescriptor_t *activationDesc) {
-  ava_unsupported;
+  ava_argument(activationDesc) {
+    ava_out;
+    ava_buffer(1);
+    ava_element ava_handle;
+  }
 }
 
 cudnnStatus_t CUDNNWINAPI cudnnSetActivationDescriptor(cudnnActivationDescriptor_t activationDesc,
                                                        cudnnActivationMode_t mode, cudnnNanPropagation_t reluNanOpt,
                                                        double coef) {
-  ava_unsupported;
+  ava_argument(activationDesc) ava_handle;
 } /* ceiling for clipped RELU, alpha for ELU */
 
 cudnnStatus_t CUDNNWINAPI cudnnGetActivationDescriptor(const cudnnActivationDescriptor_t activationDesc,
                                                        cudnnActivationMode_t *mode, cudnnNanPropagation_t *reluNanOpt,
                                                        double *coef) {
-  ava_unsupported;
+  ava_argument(activationDesc) ava_handle;
+  ava_argument(mode) {
+    ava_out;
+    ava_buffer(1);
+  }
+  ava_argument(reluNanOpt) {
+    ava_out;
+    ava_buffer(1);
+  }
+  ava_argument(coef) {
+    ava_out;
+    ava_buffer(1);
+  }
 } /* ceiling for clipped RELU, alpha for ELU */
 
 cudnnStatus_t CUDNNWINAPI cudnnDestroyActivationDescriptor(cudnnActivationDescriptor_t activationDesc) {
-  ava_unsupported;
+  ava_argument(activationDesc) ava_handle;
 }
 
 /* Function to perform forward activation  */
@@ -5688,6 +5721,91 @@ cufftResult CUFFTAPI cufftDestroy(cufftHandle plan) { ava_unsupported; }
 cufftResult CUFFTAPI cufftGetVersion(int *version) { ava_unsupported; }
 
 cufftResult CUFFTAPI cufftGetProperty(libraryPropertyType type, int *value) { ava_unsupported; }
+
+/******* cufftXt *********/
+cufftResult CUFFTAPI cufftXtSetGPUs(cufftHandle handle, int nGPUs, int *whichGPUs) { ava_unsupported; }
+
+cufftResult CUFFTAPI cufftXtMalloc(cufftHandle plan, cudaLibXtDesc **descriptor, cufftXtSubFormat format) {
+  ava_unsupported;
+}
+
+cufftResult CUFFTAPI cufftXtMemcpy(cufftHandle plan, void *dstPointer, void *srcPointer, cufftXtCopyType type) {
+  ava_unsupported;
+}
+
+cufftResult CUFFTAPI cufftXtFree(cudaLibXtDesc *descriptor) { ava_unsupported; }
+
+cufftResult CUFFTAPI cufftXtSetWorkArea(cufftHandle plan, void **workArea) { ava_unsupported; }
+
+cufftResult CUFFTAPI cufftXtExecDescriptorC2C(cufftHandle plan, cudaLibXtDesc *input, cudaLibXtDesc *output,
+                                              int direction) {
+  ava_unsupported;
+}
+
+cufftResult CUFFTAPI cufftXtExecDescriptorR2C(cufftHandle plan, cudaLibXtDesc *input, cudaLibXtDesc *output) {
+  ava_unsupported;
+}
+
+cufftResult CUFFTAPI cufftXtExecDescriptorC2R(cufftHandle plan, cudaLibXtDesc *input, cudaLibXtDesc *output) {
+  ava_unsupported;
+}
+
+cufftResult CUFFTAPI cufftXtExecDescriptorZ2Z(cufftHandle plan, cudaLibXtDesc *input, cudaLibXtDesc *output,
+                                              int direction) {
+  ava_unsupported;
+}
+
+cufftResult CUFFTAPI cufftXtExecDescriptorD2Z(cufftHandle plan, cudaLibXtDesc *input, cudaLibXtDesc *output) {
+  ava_unsupported;
+}
+
+cufftResult CUFFTAPI cufftXtExecDescriptorZ2D(cufftHandle plan, cudaLibXtDesc *input, cudaLibXtDesc *output) {
+  ava_unsupported;
+}
+
+// Utility functions
+
+cufftResult CUFFTAPI cufftXtQueryPlan(cufftHandle plan, void *queryStruct, cufftXtQueryType queryType) {
+  ava_unsupported;
+}
+
+// callbacks
+
+cufftResult CUFFTAPI cufftXtSetCallback(cufftHandle plan, void **callback_routine, cufftXtCallbackType cbType,
+                                        void **caller_info) {
+  ava_unsupported;
+}
+cufftResult CUFFTAPI cufftXtClearCallback(cufftHandle plan, cufftXtCallbackType cbType) { ava_unsupported; }
+cufftResult CUFFTAPI cufftXtSetCallbackSharedSize(cufftHandle plan, cufftXtCallbackType cbType, size_t sharedSize) {
+  ava_unsupported;
+}
+
+cufftResult CUFFTAPI cufftXtMakePlanMany(cufftHandle plan, int rank, long long int *n, long long int *inembed,
+                                         long long int istride, long long int idist, cudaDataType inputtype,
+                                         long long int *onembed, long long int ostride, long long int odist,
+                                         cudaDataType outputtype, long long int batch, size_t *workSize,
+                                         cudaDataType executiontype) {
+  ava_unsupported;
+}
+
+cufftResult CUFFTAPI cufftXtGetSizeMany(cufftHandle plan, int rank, long long int *n, long long int *inembed,
+                                        long long int istride, long long int idist, cudaDataType inputtype,
+                                        long long int *onembed, long long int ostride, long long int odist,
+                                        cudaDataType outputtype, long long int batch, size_t *workSize,
+                                        cudaDataType executiontype) {
+  ava_unsupported;
+}
+
+cufftResult CUFFTAPI cufftXtExec(cufftHandle plan, void *input, void *output, int direction) { ava_unsupported; }
+
+cufftResult CUFFTAPI cufftXtExecDescriptor(cufftHandle plan, cudaLibXtDesc *input, cudaLibXtDesc *output,
+                                           int direction) {
+  ava_unsupported;
+}
+
+cufftResult CUFFTAPI cufftXtSetWorkAreaPolicy(cufftHandle plan, cufftXtWorkAreaPolicy policy, size_t *workSize) {
+  ava_unsupported;
+}
 
 /******* cusolver *********/
 cusolverStatus_t CUSOLVERAPI cusolverDnCreate(cusolverDnHandle_t *handle) { ava_unsupported; }
@@ -7916,6 +8034,78 @@ cusparseStatus_t CUSPARSEAPI cusparseZhybsv_solve(cusparseHandle_t handle, cuspa
 //##############################################################################
 //# SPARSE LEVEL 3 ROUTINES
 //##############################################################################
+/* Description: sparse - dense matrix multiplication C = alpha * op(A) * B  + beta * C,
+   where A is a sparse matrix in CSR format, B and C are dense tall matrices.  */
+cusparseStatus_t CUSPARSEAPI cusparseScsrmm(cusparseHandle_t handle, cusparseOperation_t transA, int m, int n, int k,
+                                            int nnz, const float *alpha, const cusparseMatDescr_t descrA,
+                                            const float *csrSortedValA, const int *csrSortedRowPtrA,
+                                            const int *csrSortedColIndA, const float *B, int ldb, const float *beta,
+                                            float *C, int ldc) {
+  ava_unsupported;
+}
+
+cusparseStatus_t CUSPARSEAPI cusparseDcsrmm(cusparseHandle_t handle, cusparseOperation_t transA, int m, int n, int k,
+                                            int nnz, const double *alpha, const cusparseMatDescr_t descrA,
+                                            const double *csrSortedValA, const int *csrSortedRowPtrA,
+                                            const int *csrSortedColIndA, const double *B, int ldb, const double *beta,
+                                            double *C, int ldc) {
+  ava_unsupported;
+}
+
+cusparseStatus_t CUSPARSEAPI cusparseCcsrmm(cusparseHandle_t handle, cusparseOperation_t transA, int m, int n, int k,
+                                            int nnz, const cuComplex *alpha, const cusparseMatDescr_t descrA,
+                                            const cuComplex *csrSortedValA, const int *csrSortedRowPtrA,
+                                            const int *csrSortedColIndA, const cuComplex *B, int ldb,
+                                            const cuComplex *beta, cuComplex *C, int ldc) {
+  ava_unsupported;
+}
+
+cusparseStatus_t CUSPARSEAPI cusparseZcsrmm(cusparseHandle_t handle, cusparseOperation_t transA, int m, int n, int k,
+                                            int nnz, const cuDoubleComplex *alpha, const cusparseMatDescr_t descrA,
+                                            const cuDoubleComplex *csrSortedValA, const int *csrSortedRowPtrA,
+                                            const int *csrSortedColIndA, const cuDoubleComplex *B, int ldb,
+                                            const cuDoubleComplex *beta, cuDoubleComplex *C, int ldc) {
+  ava_unsupported;
+}
+
+/* Description: sparse - dense matrix multiplication C = alpha * op(A) * B  + beta * C,
+   where A is a sparse matrix in CSR format, B and C are dense tall matrices.
+   This routine allows transposition of matrix B, which may improve performance. */
+cusparseStatus_t CUSPARSEAPI cusparseScsrmm2(cusparseHandle_t handle, cusparseOperation_t transA,
+                                             cusparseOperation_t transB, int m, int n, int k, int nnz,
+                                             const float *alpha, const cusparseMatDescr_t descrA,
+                                             const float *csrSortedValA, const int *csrSortedRowPtrA,
+                                             const int *csrSortedColIndA, const float *B, int ldb, const float *beta,
+                                             float *C, int ldc) {
+  ava_unsupported;
+}
+
+cusparseStatus_t CUSPARSEAPI cusparseDcsrmm2(cusparseHandle_t handle, cusparseOperation_t transA,
+                                             cusparseOperation_t transB, int m, int n, int k, int nnz,
+                                             const double *alpha, const cusparseMatDescr_t descrA,
+                                             const double *csrSortedValA, const int *csrSortedRowPtrA,
+                                             const int *csrSortedColIndA, const double *B, int ldb, const double *beta,
+                                             double *C, int ldc) {
+  ava_unsupported;
+}
+
+cusparseStatus_t CUSPARSEAPI cusparseCcsrmm2(cusparseHandle_t handle, cusparseOperation_t transA,
+                                             cusparseOperation_t transB, int m, int n, int k, int nnz,
+                                             const cuComplex *alpha, const cusparseMatDescr_t descrA,
+                                             const cuComplex *csrSortedValA, const int *csrSortedRowPtrA,
+                                             const int *csrSortedColIndA, const cuComplex *B, int ldb,
+                                             const cuComplex *beta, cuComplex *C, int ldc) {
+  ava_unsupported;
+}
+
+cusparseStatus_t CUSPARSEAPI cusparseZcsrmm2(cusparseHandle_t handle, cusparseOperation_t transA,
+                                             cusparseOperation_t transB, int m, int n, int k, int nnz,
+                                             const cuDoubleComplex *alpha, const cusparseMatDescr_t descrA,
+                                             const cuDoubleComplex *csrSortedValA, const int *csrSortedRowPtrA,
+                                             const int *csrSortedColIndA, const cuDoubleComplex *B, int ldb,
+                                             const cuDoubleComplex *beta, cuDoubleComplex *C, int ldc) {
+  ava_unsupported;
+}
 
 cusparseStatus_t CUSPARSEAPI cusparseSbsrmm(cusparseHandle_t handle, cusparseDirection_t dirA,
                                             cusparseOperation_t transA, cusparseOperation_t transB, int mb, int n,
@@ -11226,7 +11416,12 @@ __host__ cudaError_t CUDARTAPI cudaMemcpyToSymbolAsync(const void *symbol, const
 
 __host__ cudaError_t CUDARTAPI cudaMemcpyFromSymbolAsync(void *dst, const void *symbol, size_t count, size_t offset,
                                                          enum cudaMemcpyKind kind, cudaStream_t stream __dv(0)) {
-  ava_unsupported;
+  ava_async;
+  ava_argument(dst) {
+    ava_out;
+    ava_buffer(count);
+  }
+  ava_argument(symbol) ava_opaque;
 }
 
 __host__ cudaError_t CUDARTAPI cudaMemset2D(void *devPtr, size_t pitch, int value, size_t width, size_t height) {
@@ -11239,7 +11434,8 @@ __host__ cudaError_t CUDARTAPI cudaMemset3D(struct cudaPitchedPtr pitchedDevPtr,
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMemsetAsync(void *devPtr, int value, size_t count,
                                                                   cudaStream_t stream __dv(0)) {
-  ava_unsupported;
+  ava_async;
+  ava_argument(devPtr) ava_opaque;
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMemset2DAsync(void *devPtr, size_t pitch, int value, size_t width,
@@ -11554,6 +11750,15 @@ __host__ cudaError_t CUDARTAPI cudaGraphLaunch(cudaGraphExec_t graphExec, cudaSt
 __host__ cudaError_t CUDARTAPI cudaGraphExecDestroy(cudaGraphExec_t graphExec) { ava_unsupported; }
 
 __host__ cudaError_t CUDARTAPI cudaGraphDestroy(cudaGraph_t graph) { ava_unsupported; }
+
+__host__ cudaError_t CUDARTAPI cudaProfilerInitialize(const char *configFile, const char *outputFile,
+                                                      cudaOutputMode_t outputMode) {
+  ava_unsupported;
+}
+
+__host__ cudaError_t CUDARTAPI cudaProfilerStart(void);
+
+__host__ cudaError_t CUDARTAPI cudaProfilerStop(void);
 
 __host__ cudaError_t CUDARTAPI cudaThreadSynchronize(void) {}
 
