@@ -1,6 +1,7 @@
 #include "SVGPUManager.hpp"
 #include <boost/algorithm/string/join.hpp>
 #include <sys/wait.h>
+#include <nvml.h>
 
 /*************************************
  * 
@@ -50,16 +51,55 @@ void SVGPUManager::LaunchService() {
   builder.AddChannelArgument(GRPC_ARG_ALLOW_REUSEPORT, 1);
   builder.RegisterService(this);
 
-  grpc_server = builder.BuildAndStart();  
+  grpc_server = builder.BuildAndStart();
   std::cout << "Server listening on " << server_address << std::endl;
 }
 
-//TODO: get gpus as arguments and set
 void SVGPUManager::ResMngrClient::RegisterSelf() {
+
   RegisterGPUNodeRequest request;
-  RegisterGPUNodeRequest::GPU* g = request.add_gpus();
-  g->set_id(0);
-  g->set_memory(1000);
+  nvmlReturn_t result;
+  unsigned int device_count;
+
+  result = nvmlInit();
+  if (result != NVML_SUCCESS) {
+    std::cerr << "Failed to initialize NVML: " << nvmlErrorString(result) << std::endl;
+	std::exit(1);
+  }
+
+  result = nvmlDeviceGetCount(&device_count);
+  if (result != NVML_SUCCESS) {
+    std::cerr << "Failed to query device count NVML: " << nvmlErrorString(result) << std::endl;
+	std::exit(1);
+  }
+
+  // register each gpu with its available memory
+  for (unsigned int i = 0; i < device_count; i++) {
+    nvmlDevice_t device;
+	nvmlMemory_t memory;
+	
+	result = nvmlDeviceGetHandleByIndex(i, &device);
+    if (result != NVML_SUCCESS) {
+      std::cerr << "Failed to get handle for device " << i << ": " << nvmlErrorString(result) << std::endl;
+	  std::exit(1);
+    }
+
+	result = nvmlDeviceGetMemoryInfo(device, &memory);
+    if (result != NVML_SUCCESS) {
+      std::cerr << "Failed to get memory of device " << i << ": " << nvmlErrorString(result) << std::endl;
+	  std::exit(1);
+    }
+
+    RegisterGPUNodeRequest::GPU* g = request.add_gpus();
+    g->set_id(i);
+    g->set_memory(memory.free);
+  }
+
+  result = nvmlShutdown();
+  if (result != NVML_SUCCESS) {
+    std::cerr << "Failed to shutdown NVML: " << nvmlErrorString(result) << std::endl;
+	std::exit(1);
+  }
 
   ClientContext context;
   RegisterGPUNodeResponse reply;

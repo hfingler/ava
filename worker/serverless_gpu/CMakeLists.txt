@@ -54,6 +54,7 @@ add_custom_command(
   DEPENDS "${rm_proto}")
 
 include_directories("${CMAKE_CURRENT_BINARY_DIR}")
+include_directories("/usr/local/cuda-10.1/include")
 
 add_library(grpc_proto
   ${gpu_grpc_srcs}
@@ -84,7 +85,9 @@ target_link_libraries(svgpu-manager
   ${_REFLECTION}
   ${_GRPC_GRPCPP}
   ${_PROTOBUF_LIBPROTOBUF}
+  nvidia-ml
 )
+
 set_target_properties(svgpu-manager
   PROPERTIES OUTPUT_NAME manager
 )
