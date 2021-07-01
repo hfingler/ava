@@ -4,12 +4,11 @@
 #include "BaseScheduler.hpp"
 
 class RoundRobin : public BaseScheduler {
-  public:
+ public:
   uint16_t gpu_offset;
   uint16_t current_gpu;
 
-  RoundRobin(uint16_t ngpus, uint16_t gpu_offset) 
-    : BaseScheduler(ngpus), gpu_offset(gpu_offset), current_gpu(0) {};
+  RoundRobin(uint16_t ngpus, uint16_t gpu_offset) : BaseScheduler(ngpus), gpu_offset(gpu_offset), current_gpu(0){};
 
   int getGPU() {
     int gpu = gpu_offset + (current_gpu % ngpus);

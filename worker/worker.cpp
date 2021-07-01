@@ -5,20 +5,24 @@
 #include <errno.h>
 #include <execinfo.h>
 #include <fcntl.h>
+#include <fmt/core.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/syscall.h>
 #include <time.h>
 #include <unistd.h>
 
 #include <cstdio>
+#include <gsl/gsl>
 #include <iostream>
 
 #include "common/cmd_channel_impl.hpp"
 #include "common/cmd_handler.hpp"
 #include "common/socket.hpp"
+#include "common/linkage.h"
 #include "plog/Initializers/RollingFileInitializer.h"
 #include "provision_gpu.h"
 #include "worker_context.h"
@@ -73,6 +77,15 @@ void nw_report_throughput_resource_consumption(const char *const name, ssize_t a
 
 static struct command_channel *channel_create() { return chan; }
 
+EXPORTED_WEAKLY std::string worker_init_log() {
+  std::ios_base::Init();
+  // Initialize logger
+  std::string log_file = std::tmpnam(nullptr);
+  plog::init(plog::debug, log_file.c_str());
+  std::cerr << "To check the state of AvA remoting progress, use `tail -f " << log_file << "`" << std::endl;
+  return log_file;
+}
+
 int main(int argc, char *argv[]) {
   if (!(argc == 3 && !strcmp(argv[1], "migrate")) && (argc != 2)) {
     printf(
@@ -92,17 +105,10 @@ int main(int argc, char *argv[]) {
   std::string gpu_mem = gpu_mem_str ? std::string(gpu_mem_str) : "";
   provision_gpu = new ProvisionGpu(cuda_uuid, gpu_uuid, gpu_mem);
 
-  // Initialize logger
-  std::string log_file = std::tmpnam(nullptr);
-  plog::init(plog::debug, log_file.c_str());
-  std::cerr << "To check the state of AvA remoting progress, use `tail -f " << log_file << "`" << std::endl;
-
   /* setup signal handler */
   if ((original_sigint_handler = signal(SIGINT, sigint_handler)) == SIG_ERR) printf("failed to catch SIGINT\n");
 
   if ((original_sigsegv_handler = signal(SIGSEGV, sigsegv_handler)) == SIG_ERR) printf("failed to catch SIGSEGV\n");
-
-  if ((original_sigchld_handler = signal(SIGCHLD, SIG_IGN)) == SIG_ERR) printf("failed to ignore SIGCHLD\n");
 
   absl::FailureSignalHandlerOptions options;
   options.call_previous_handler = true;
@@ -117,7 +123,7 @@ int main(int argc, char *argv[]) {
   if (!strcmp(argv[1], "migrate")) {
     listen_port = (unsigned int)atoi(argv[2]);
     wctx->set_api_server_listen_port(listen_port);
-    std::cerr << "[worker#" << listen_port << "] To check the state of AvA remoting progress, use `tail -f " << log_file
+    std::cerr << "[worker#" << listen_port << "] To check the state of AvA remoting progress, use `tail -f " << wctx->log_file
               << "`" << std::endl;
 
     chan = (struct command_channel *)command_channel_socket_tcp_migration_new(listen_port, 0);
@@ -136,7 +142,7 @@ int main(int argc, char *argv[]) {
   /* parse arguments */
   listen_port = (unsigned int)atoi(argv[1]);
   wctx->set_api_server_listen_port(listen_port);
-  std::cerr << "[worker#" << listen_port << "] To check the state of AvA remoting progress, use `tail -f " << log_file
+  std::cerr << "[worker#" << listen_port << "] To check the state of AvA remoting progress, use `tail -f " << wctx->log_file
             << "`" << std::endl;
 
   if (!getenv("AVA_CHANNEL") || !strcmp(getenv("AVA_CHANNEL"), "TCP")) {

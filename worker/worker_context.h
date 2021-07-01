@@ -21,6 +21,7 @@ class EXPORTED WorkerContext final : public ava::support::Singleton<WorkerContex
 
   unsigned int get_api_server_listen_port() const { return api_server_listen_port; }
 
+  std::string log_file;
  private:
   WorkerContext();
 

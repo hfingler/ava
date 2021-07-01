@@ -1,24 +1,28 @@
 #include "SVGPUManager.hpp"
-#include <boost/algorithm/string/join.hpp>
-#include <sys/wait.h>
+
 #include <nvml.h>
+#include <sys/wait.h>
+
+#include <boost/algorithm/string/join.hpp>
+
+#include "declaration.h"
 
 /*************************************
- * 
+ *
  *    gRPC methods
- * 
- *************************************/ 
+ *
+ *************************************/
 
-Status SVGPUManager::SpawnGPUWorker(ServerContext* context, const SpawnGPUWorkerRequest* request, SpawnGPUWorkerReply* response) {
+Status SVGPUManager::SpawnGPUWorker(ServerContext *AVA_UNUSED(context), const SpawnGPUWorkerRequest *request,
+                                    SpawnGPUWorkerReply *response) {
   for (auto &pair : request->workers()) {
     uint32_t gpuid = pair.first;
     uint32_t n = pair.second;
 
-    //TODO: make sure gpuid is sane
+    // TODO: make sure gpuid is sane
 
-    for (int i = 0 ; i < n ; i++) {
+    for (uint32_t i = 0; i < n; i++) {
       uint32_t port = LaunchWorker(gpuid);
-      
       auto w = response->add_workers();
       w->set_id(gpuid);
       w->set_port(port);
@@ -29,17 +33,16 @@ Status SVGPUManager::SpawnGPUWorker(ServerContext* context, const SpawnGPUWorker
 }
 
 void SVGPUManager::RegisterSelf(std::string rm_addr) {
-  resmngr_client = new ResMngrClient(
-    grpc::CreateChannel(rm_addr, grpc::InsecureChannelCredentials()));
+  resmngr_client = new ResMngrClient(grpc::CreateChannel(rm_addr, grpc::InsecureChannelCredentials()));
 
-  //TODO: get local GPU resources and pass as argument
+  // TODO: get local GPU resources and pass as argument
   resmngr_client->RegisterSelf();
 }
 
 void SVGPUManager::LaunchService() {
-  //std::string server_address("128.83.122.71:");
+  // std::string server_address("128.83.122.71:");
   std::string server_address("[::]:");
-  if(const char* port = std::getenv("AVAMNGR_PORT")) {
+  if (const char *port = std::getenv("AVAMNGR_PORT")) {
     server_address += port;
   } else {
     std::cerr << "AVAMNGR_PORT not defined (you probably didnt run using task)" << std::endl;
@@ -56,7 +59,6 @@ void SVGPUManager::LaunchService() {
 }
 
 void SVGPUManager::ResMngrClient::RegisterSelf() {
-
   RegisterGPUNodeRequest request;
   nvmlReturn_t result;
   unsigned int device_count;
@@ -64,33 +66,33 @@ void SVGPUManager::ResMngrClient::RegisterSelf() {
   result = nvmlInit();
   if (result != NVML_SUCCESS) {
     std::cerr << "Failed to initialize NVML: " << nvmlErrorString(result) << std::endl;
-	std::exit(1);
+    std::exit(1);
   }
 
   result = nvmlDeviceGetCount(&device_count);
   if (result != NVML_SUCCESS) {
     std::cerr << "Failed to query device count NVML: " << nvmlErrorString(result) << std::endl;
-	std::exit(1);
+    std::exit(1);
   }
 
   // register each gpu with its available memory
   for (unsigned int i = 0; i < device_count; i++) {
     nvmlDevice_t device;
-	nvmlMemory_t memory;
-	
-	result = nvmlDeviceGetHandleByIndex(i, &device);
+    nvmlMemory_t memory;
+
+    result = nvmlDeviceGetHandleByIndex(i, &device);
     if (result != NVML_SUCCESS) {
       std::cerr << "Failed to get handle for device " << i << ": " << nvmlErrorString(result) << std::endl;
-	  std::exit(1);
+      std::exit(1);
     }
 
-	result = nvmlDeviceGetMemoryInfo(device, &memory);
+    result = nvmlDeviceGetMemoryInfo(device, &memory);
     if (result != NVML_SUCCESS) {
       std::cerr << "Failed to get memory of device " << i << ": " << nvmlErrorString(result) << std::endl;
-	  std::exit(1);
+      std::exit(1);
     }
 
-    RegisterGPUNodeRequest::GPU* g = request.add_gpus();
+    RegisterGPUNodeRequest::GPU *g = request.add_gpus();
     g->set_id(i);
     g->set_memory(memory.free);
   }
@@ -98,26 +100,25 @@ void SVGPUManager::ResMngrClient::RegisterSelf() {
   result = nvmlShutdown();
   if (result != NVML_SUCCESS) {
     std::cerr << "Failed to shutdown NVML: " << nvmlErrorString(result) << std::endl;
-	std::exit(1);
+    std::exit(1);
   }
 
   ClientContext context;
   RegisterGPUNodeResponse reply;
   Status status = stub_->RegisterGPUNode(&context, request, &reply);
-  
+
   if (!status.ok()) {
-    std::cerr << "Error registering self with resmngr:" << status.error_code() << 
-        ": " << status.error_message() << std::endl;
+    std::cerr << "Error registering self with resmngr:" << status.error_code() << ": " << status.error_message()
+              << std::endl;
     std::exit(1);
   }
 }
 
-
 /*************************************
- * 
+ *
  *    AvA HandleRequest override
- * 
- *************************************/ 
+ *
+ *************************************/
 
 ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::WorkerAssignRequest &request) {
   ava_proto::WorkerAssignReply reply;
@@ -140,7 +141,7 @@ uint32_t SVGPUManager::LaunchWorker(uint32_t gpu_id) {
 
   std::string visible_devices = "CUDA_VISIBLE_DEVICES=" + std::to_string(gpu_id);
   environments.push_back(visible_devices);
-  
+
   // Let API server use TCP channel
   environments.push_back("AVA_CHANNEL=TCP");
 

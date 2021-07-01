@@ -11,6 +11,8 @@
 #include <plog/Log.h>
 
 #include <vector>
+#include <string>
+std::string worker_init_log();
 
 extern "C" {
 #endif

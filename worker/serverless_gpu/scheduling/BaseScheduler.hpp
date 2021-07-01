@@ -7,13 +7,13 @@
 /* TODO features:
  *  - keep list of all gpus with their resources
  *  - make request accept some parameters
- */ 
+ */
 class BaseScheduler {
-    public:
-    uint16_t ngpus; 
+ public:
+  uint16_t ngpus;
 
-    BaseScheduler(uint16_t ngpus) : ngpus(ngpus) {};
-    virtual int getGPU() = 0;
+  BaseScheduler(uint16_t ngpus) : ngpus(ngpus){};
+  virtual int getGPU() = 0;
 };
 
 #endif

@@ -16,15 +16,19 @@ def source(api: API) -> Tuple[str, str]:
 #define ava_is_guest 0
 
 #include "worker.h"
+#include "worker_context.h"
 
 #undef AVA_BENCHMARKING_MIGRATE
 
 {handle_command_header(api)}
 
-void init_worker(void) {{
+namespace ava {{
+WorkerContext::WorkerContext() {{
     __handle_command_{api.identifier.lower()}_init();
+    log_file = worker_init_log();
     {api.worker_init_epilogue};
 }}
+}} //// namespace ava
 """
     stubs = f"""
 ////// API function stub implementations
