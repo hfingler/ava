@@ -81,6 +81,8 @@ add_executable(svgpu-manager
 target_link_libraries(svgpu-manager
   ${manager_service_libraries}
   ${absl_flags_libraries}
+  absl::symbolize
+  absl::failure_signal_handler
   grpc_proto
   ${_REFLECTION}
   ${_GRPC_GRPCPP}

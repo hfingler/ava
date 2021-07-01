@@ -1,6 +1,7 @@
 #include <chrono>
 #include <thread>
 
+#include <absl/debugging/symbolize.h>
 #include <absl/flags/parse.h>
 #include <absl/flags/flag.h>
 
@@ -19,6 +20,7 @@ ABSL_FLAG(std::string, resmngr_addr, "", "(OPTIONAL) Address of the Alouatta res
 
 int main(int argc, const char *argv[]) {
   absl::ParseCommandLine(argc, const_cast<char **>(argv));
+  absl::InitializeSymbolizer(argv[0]);
   ava_manager::setupSignalHandlers();
   auto worker_argv = absl::GetFlag(FLAGS_worker_argv);
   auto worker_env = absl::GetFlag(FLAGS_worker_env);
