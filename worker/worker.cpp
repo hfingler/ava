@@ -95,6 +95,7 @@ int main(int argc, char *argv[]) {
   // Initialize logger
   std::string log_file = std::tmpnam(nullptr);
   plog::init(plog::debug, log_file.c_str());
+  std::cerr << "To check the state of AvA remoting progress, use `tail -f " << log_file << "`" << std::endl;
 
   /* setup signal handler */
   if ((original_sigint_handler = signal(SIGINT, sigint_handler)) == SIG_ERR) printf("failed to catch SIGINT\n");
