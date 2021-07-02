@@ -32,7 +32,7 @@ class SVGPUManager : public ManagerServiceServerBase, public GPU::Service {
       : stub_(ResMngrService::NewStub(channel)) {}
       
       //TODO: get gpus as arguments and set
-      void RegisterSelf();
+      void RegisterSelf(uint32_t gpu_offset, uint32_t n_gpus);
 
     private:
       std::unique_ptr<ResMngrService::Stub> stub_;
@@ -42,6 +42,8 @@ class SVGPUManager : public ManagerServiceServerBase, public GPU::Service {
   BaseScheduler* scheduler;
   ResMngrClient* resmngr_client;
   std::unique_ptr<Server> grpc_server;
+  uint32_t n_gpus;
+  uint32_t gpu_offset;
 
   //methods
   SVGPUManager(uint32_t port, uint32_t worker_port_base, std::string worker_path, std::vector<std::string> &worker_argv,
@@ -49,6 +51,8 @@ class SVGPUManager : public ManagerServiceServerBase, public GPU::Service {
     : ManagerServiceServerBase(port, worker_port_base, worker_path, worker_argv, worker_env) {
       // TODO: choose scheduler somehow
       scheduler = new RoundRobin(ngpus, gpu_offset);
+      n_gpus = ngpus;
+      gpu_offset = gpu_offset;
     };
 
   void RegisterSelf(std::string rm_addr);
