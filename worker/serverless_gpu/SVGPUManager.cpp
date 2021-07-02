@@ -99,8 +99,6 @@ void SVGPUManager::ResMngrClient::RegisterSelf(uint32_t gpu_offset, uint32_t n_g
     RegisterGPUNodeRequest::GPU *g = request.add_gpus();
     g->set_id(i);
     g->set_memory(memory.free);
-
-    std::cerr << "Registered device: " << i << std::endl;
   }
 
   result = nvmlShutdown();
