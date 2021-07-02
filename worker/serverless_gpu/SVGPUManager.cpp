@@ -35,8 +35,7 @@ Status SVGPUManager::SpawnGPUWorker(ServerContext *AVA_UNUSED(context), const Sp
 void SVGPUManager::RegisterSelf(std::string rm_addr) {
   resmngr_client = new ResMngrClient(grpc::CreateChannel(rm_addr, grpc::InsecureChannelCredentials()));
 
-  // TODO: get local GPU resources and pass as argument
-  resmngr_client->RegisterSelf();
+  resmngr_client->RegisterSelf(gpu_offset, n_gpus);
 }
 
 void SVGPUManager::LaunchService() {
@@ -58,10 +57,10 @@ void SVGPUManager::LaunchService() {
   std::cout << "Server listening on " << server_address << std::endl;
 }
 
-void SVGPUManager::ResMngrClient::RegisterSelf() {
+void SVGPUManager::ResMngrClient::RegisterSelf(uint32_t gpu_offset, uint32_t n_gpus) {
   RegisterGPUNodeRequest request;
   nvmlReturn_t result;
-  unsigned int device_count;
+  uint32_t  device_count;
 
   result = nvmlInit();
   if (result != NVML_SUCCESS) {
@@ -75,8 +74,13 @@ void SVGPUManager::ResMngrClient::RegisterSelf() {
     std::exit(1);
   }
 
+  // bounds check requested gpus, use all gpus if n_gpus == 0
+  uint32_t start_gpu = gpu_offset >= device_count ? 0 : gpu_offset;
+  uint32_t requested_gpu_max = n_gpus == 0 ? device_count : start_gpu + n_gpus;
+  device_count = std::min(device_count, requested_gpu_max);
+
   // register each gpu with its available memory
-  for (unsigned int i = 0; i < device_count; i++) {
+  for (unsigned int i = start_gpu; i < device_count; i++) {
     nvmlDevice_t device;
     nvmlMemory_t memory;
 
@@ -95,6 +99,8 @@ void SVGPUManager::ResMngrClient::RegisterSelf() {
     RegisterGPUNodeRequest::GPU *g = request.add_gpus();
     g->set_id(i);
     g->set_memory(memory.free);
+
+    std::cerr << "Registered device: " << i << std::endl;
   }
 
   result = nvmlShutdown();
