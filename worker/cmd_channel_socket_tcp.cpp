@@ -32,7 +32,6 @@ struct command_channel *command_channel_socket_tcp_worker_new(int worker_port) {
   pthread_mutex_init(&chan->recv_mutex, NULL);
 
   struct sockaddr_in address;
-  int addrlen = sizeof(address);
   int opt;
   memset(&address, 0, sizeof(address));
 
@@ -62,37 +61,51 @@ struct command_channel *command_channel_socket_tcp_worker_new(int worker_port) {
     perror("listen");
   }
 
-  fprintf(stderr, "[%d] Waiting for guestlib connection\n", chan->listen_port);
-  chan->sock_fd = accept(chan->listen_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
-  if (chan->sock_fd < 0) {
+  return (struct command_channel *)chan;
+}
+
+//
+struct command_channel *command_channel_listen(struct command_channel* chan) {
+  struct chansocketutil::command_channel_socket *ch = (struct chansocketutil::command_channel_socket *) chan;
+
+  struct sockaddr_in address;
+  int addrlen = sizeof(address);
+  memset(&address, 0, sizeof(address));
+  address.sin_family = AF_INET;
+  address.sin_addr.s_addr = INADDR_ANY;
+  address.sin_port = htons(ch->listen_port);
+  
+  fprintf(stderr, "[%d] Waiting for guestlib connection\n", ch->listen_port);
+  ch->sock_fd = accept(ch->listen_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
+  if (ch->sock_fd < 0) {
     perror("accept");
   }
-  setsockopt_lowlatency(chan->sock_fd);
+  setsockopt_lowlatency(ch->sock_fd);
 
   /* Get source address */
 #ifndef NDEBUG
   struct sockaddr_storage source_addr;
   socklen_t source_addr_len = sizeof(struct sockaddr_storage);
-  getpeername(chan->sock_fd, (struct sockaddr *)&source_addr, &source_addr_len);
+  getpeername(ch->sock_fd, (struct sockaddr *)&source_addr, &source_addr_len);
   if (source_addr.ss_family == AF_INET) {
     struct sockaddr_in *s = (struct sockaddr_in *)&source_addr;
     char ipstr[64];
     inet_ntop(AF_INET, &s->sin_addr, ipstr, sizeof(ipstr));
-    fprintf(stderr, "[%d] Accept guestlib at %s:%d\n", chan->listen_fd, ipstr, ntohs(s->sin_port));
+    fprintf(stderr, "[%d] Accept guestlib at %s:%d\n", ch->listen_fd, ipstr, ntohs(s->sin_port));
   }
 #endif
 
   /* Receive handler initialization API */
   struct command_handler_initialize_api_command init_msg;
-  recv_socket(chan->sock_fd, &init_msg, sizeof(struct command_handler_initialize_api_command));
-  chan->init_command_type = init_msg.new_api_id;
-  chan->vm_id = init_msg.base.vm_id;
-  fprintf(stderr, "[%d] Accept guestlib with API_ID=%x\n", chan->listen_port, chan->init_command_type);
+  recv_socket(ch->sock_fd, &init_msg, sizeof(struct command_handler_initialize_api_command));
+  ch->init_command_type = init_msg.new_api_id;
+  ch->vm_id = init_msg.base.vm_id;
+  fprintf(stderr, "[%d] Accept guestlib with API_ID=%x\n", ch->listen_port, ch->init_command_type);
 
-  chan->pfd.fd = chan->sock_fd;
-  chan->pfd.events = POLLIN | POLLRDHUP;
+  ch->pfd.fd = ch->sock_fd;
+  ch->pfd.events = POLLIN | POLLRDHUP;
 
-  return (struct command_channel *)chan;
+  return (struct command_channel *)ch;
 }
 
 namespace {
@@ -103,4 +116,4 @@ struct command_channel_vtable command_channel_socket_tcp_vtable = {
     chansocketutil::command_channel_socket_get_buffer,       chansocketutil::command_channel_socket_get_data_region,
     chansocketutil::command_channel_socket_free_command,     chansocketutil::command_channel_socket_free,
     chansocketutil::command_channel_socket_print_command};
-};
+}

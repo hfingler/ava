@@ -54,7 +54,10 @@ EXPORTED_WEAKLY void register_command_handler(int api_id,
   LOG_INFO << "Registering API command handler for API id " << api_id << ": handler at 0x" << std::hex
            << (uintptr_t)handle;
   struct command_handler_t *api = &nw_apis[api_id];
-  assert(api->handle == NULL && "Only one handler can be registered for each API id");
+  //assert(api->handle == NULL && "Only one handler can be registered for each API id");
+  if (api->handle != NULL) {
+    LOG_INFO << "Overwriting API id " << api_id << std::endl;
+  }
   api->handle = handle;
   api->print = print;
   api->replay = replay;
@@ -80,6 +83,11 @@ static int handle_command(struct command_channel *chan, struct nw_handle_pool *h
 static void _handle_commands_loop(struct command_channel *chan) {
   while (1) {
     struct command_base *cmd = command_channel_receive_command(chan);
+
+    if (cmd == NULL) {
+      LOG_INFO << "received NULL cmd, ending thread" << std::endl;
+      return;
+    }
 
 #ifdef AVA_PRINT_TIMESTAMP
     if (cmd->api_id != 0) {
@@ -132,12 +140,14 @@ EXPORTED_WEAKLY void init_command_handler(struct command_channel *(*channel_crea
   pthread_mutex_unlock(&nw_handler_lock);
 }
 
-EXPORTED_WEAKLY void destroy_command_handler() {
+EXPORTED_WEAKLY void destroy_command_handler(bool destroy_channel) {
   pthread_mutex_lock(&nw_handler_lock);
   if (init_command_handler_executed) {
     pthread_cancel(nw_handler_thread);
     pthread_join(nw_handler_thread, NULL);
-    command_channel_free(nw_global_command_channel);
+    if (destroy_channel) {
+      command_channel_free(nw_global_command_channel);
+    }
     atomic_thread_fence(memory_order_release);
     init_command_handler_executed = 0;
   }

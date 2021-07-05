@@ -149,7 +149,8 @@ struct command_base *command_channel_socket_receive_command(struct command_chann
   if (chan->pfd.revents & POLLRDHUP) {
     AVA_WARNING << "command_channel_socket shutdown";
     close(chan->pfd.fd);
-    exit(-1);
+    //exit(-1);
+    return NULL;
   }
 
   if (chan->pfd.revents & POLLIN) {

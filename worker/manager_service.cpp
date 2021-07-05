@@ -150,6 +150,7 @@ pid_t ManagerServiceServerBase::SpawnWorker(const std::vector<std::string> &envi
   }
   argv_list.push_back(NULL);
 
+  std::cerr << "exec'ing worker at " << argv_list[0] << std::endl;
   if (execvpe(argv_list[0], (char *const *)argv_list.data(), (char *const *)envp_list.data()) < 0)
     perror("execvpe worker failed");
 

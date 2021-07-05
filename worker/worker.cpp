@@ -119,26 +119,6 @@ int main(int argc, char *argv[]) {
   nw_worker_id = 0;
   unsigned int listen_port;
 
-  /* This is a target API server. Starts live migration */
-  if (!strcmp(argv[1], "migrate")) {
-    listen_port = (unsigned int)atoi(argv[2]);
-    wctx->set_api_server_listen_port(listen_port);
-    std::cerr << "[worker#" << listen_port << "] To check the state of AvA remoting progress, use `tail -f " << wctx->log_file
-              << "`" << std::endl;
-
-    chan = (struct command_channel *)command_channel_socket_tcp_migration_new(listen_port, 0);
-    nw_record_command_channel = command_channel_log_new(listen_port);
-
-    init_internal_command_handler();
-    init_command_handler(channel_create);
-    LOG_INFO << "[worker#" << listen_port << "] start polling tasks";
-    wait_for_command_handler();
-
-    // TODO(migration): connect the guestlib
-
-    return 0;
-  }
-
   /* parse arguments */
   listen_port = (unsigned int)atoi(argv[1]);
   wctx->set_api_server_listen_port(listen_port);
@@ -147,19 +127,37 @@ int main(int argc, char *argv[]) {
 
   if (!getenv("AVA_CHANNEL") || !strcmp(getenv("AVA_CHANNEL"), "TCP")) {
     chan_hv = NULL;
+    //create tcp socket
     chan = command_channel_socket_tcp_worker_new(listen_port);
-    // } else if (!strcmp(getenv("AVA_CHANNEL"), "SHM")) {
-    //   chan_hv = command_channel_hv_new(listen_port);
-    //   chan = command_channel_shm_worker_new(listen_port);
-    // } else if (!strcmp(getenv("AVA_CHANNEL"), "VSOCK")) {
-    //   chan_hv = command_channel_hv_new(listen_port);
-    //   chan = command_channel_socket_worker_new(listen_port);
+    //create log file
+    nw_record_command_channel = command_channel_log_new(listen_port);
+
+    //this sets API id and other stuff
+    init_internal_command_handler();
+    //TODO: make this a flag that only executes when using serverless
+    while (true) {
+      //get a guestlib connection
+      std::cerr << "[worker#" << listen_port << "] waiting for connection" << std::endl;
+      chan = command_channel_listen(chan);
+      //this launches the thread that listens for commands
+      init_command_handler(channel_create);
+      std::cerr << "[worker#" << listen_port << "] got one, setting up cmd handler" << std::endl;
+      wait_for_command_handler();
+      destroy_command_handler(false);
+      std::cerr << "[worker#" << listen_port << "] worker is done, looping." << std::endl;
+    }
+
+    std::cerr << "[worker#" << listen_port << "] freeing channel and quiting." << std::endl;
+    command_channel_free(chan);
+    command_channel_free((struct command_channel *)nw_record_command_channel);
+    return 0;
+
   } else {
     printf("Unsupported AVA_CHANNEL type (export AVA_CHANNEL=[TCP]\n");
     return 0;
   }
 
-  nw_record_command_channel = command_channel_log_new(listen_port);
+  //nw_record_command_channel = command_channel_log_new(listen_port);
   init_internal_command_handler();
   init_command_handler(channel_create);
   LOG_INFO << "[worker#" << listen_port << "] start polling tasks";
