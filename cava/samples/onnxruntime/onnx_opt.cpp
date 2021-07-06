@@ -1012,7 +1012,7 @@ __host__ cudaError_t CUDARTAPI cudaMemcpyToSymbol(const void *symbol, const void
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMemcpyAsync(void *dst, const void *src, size_t count,
                                                                   enum cudaMemcpyKind kind, cudaStream_t stream) {
-  ava_async;
+  // ava_async;
 
   ava_argument(dst) {
     if (kind == cudaMemcpyHostToDevice) {
@@ -1034,11 +1034,11 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMemcpyAsync(void *dst, con
 
   ava_argument(stream) ava_handle;
 
-#warning Force synchronization of async buffers
-  ava_execute();
-  if (ava_is_worker && kind == cudaMemcpyDeviceToHost) {
-    cudaStreamSynchronize(stream);
-  }
+// #warning Force synchronization of async buffers
+//   ava_execute();
+//   if (ava_is_worker && kind == cudaMemcpyDeviceToHost) {
+//     cudaStreamSynchronize(stream);
+//   }
 }
 
 __host__ cudaError_t CUDARTAPI cudaMemset(void *devPtr, int value, size_t count) { ava_argument(devPtr) ava_opaque; }
@@ -12251,8 +12251,8 @@ void ava_preload_cubin_guestlib() {
 }
 ava_end_replacement;
 
-ava_utility void __helper_worker_init_epilogue() {
-#ifdef AVA_PRELOAD_CUBIN
+ava_begin_utility;
+void ava_load_cubin_worker() {
   /* Preload CUDA fat binaries */
   fatbin_handle_list = g_ptr_array_new();
   /* Read cubin number */
@@ -12285,6 +12285,12 @@ ava_utility void __helper_worker_init_epilogue() {
     g_ptr_array_add(fatbin_handle_list, (gpointer)fatbin_handle);
   }
   close(fd);
+}
+ava_end_utility;
+
+ava_utility void __helper_worker_init_epilogue() {
+#ifdef AVA_PRELOAD_CUBIN
+  ava_load_cubin_worker();
 #endif
   worker_tf_opt_init();
 }
