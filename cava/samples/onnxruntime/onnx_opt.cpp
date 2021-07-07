@@ -65,6 +65,7 @@ ava_begin_utility;
 #include "common/support/time_util.h"
 #include "common/support/gen_stat.h"
 #include "common/support/io.h"
+#include "common/support/fmt.h"
 #include "guestlib/extensions/extension_api.h"
 #include "guestlib/extensions/guest_cmd_batching_queue.h"
 #include "guestlib/extensions/gpu_address_tracking.h"
@@ -351,7 +352,7 @@ ava_utility CUmodule __helper_init_module(struct fatbin_wrapper *fatCubin, void 
   return mod;
 }
 
-ava_utility void __helper_load_function_arg_info(void) {
+ava_utility void __helper_load_function_arg_info(absl::string_view dump_dir) {
   GPtrArray *fatbin_funcs;
   GHashTable *ht;
   if (ava_metadata(NULL)->fatbin_funcs == NULL) {
@@ -368,10 +369,9 @@ ava_utility void __helper_load_function_arg_info(void) {
   int fd;
   bool read_ret;
   bool eof_ret;
-  char filename[50];
-  sprintf(filename, "/cuda_dumps/function_arg-%d.ava", ava_metadata(NULL)->num_fatbins);
+  auto filename = fmt::format("{}/function_arg-{}.ava", dump_dir, ava_metadata(NULL)->num_fatbins);
   AVA_DEBUG << "Loading " << filename;
-  fd = open(filename, O_RDONLY, 0666);
+  fd = open(filename.c_str(), O_RDONLY, 0666);
   if (fd == -1) {
     SYSCALL_FAILURE_PRINT("open");
   }
@@ -416,16 +416,15 @@ ava_utility void __helper_load_function_arg_info(void) {
 /**
  * This utility function should only be called by the worker.
  */
-ava_utility void **__helper_load_and_register_fatbin(void *fatCubin) {
+ava_utility void **__helper_load_and_register_fatbin(void *fatCubin, absl::string_view dump_dir) {
   /* Read fatbin dump */
   int fd, ret;
   bool read_ret;
   bool eof_ret;
   struct stat file_stat;
-  char filename[50];
-  sprintf(filename, "/cuda_dumps/fatbin-%d.ava", ava_metadata(NULL)->num_fatbins);
+  auto filename  = fmt::format("{}/fatbin-{}.ava", dump_dir, ava_metadata(NULL)->num_fatbins);
   AVA_DEBUG << "Loading " << filename;
-  fd = open(filename, O_RDONLY, 0666);
+  fd = open(filename.c_str(), O_RDONLY, 0666);
   if (fd == -1) {
     SYSCALL_FAILURE_PRINT("open");
   }
@@ -462,8 +461,8 @@ ava_utility void **__helper_load_and_register_fatbin(void *fatCubin) {
   CUmodule mod = __helper_init_module(wrapper, fatbin_handle);
 
   /* Load function argument information */
-  // GHashTable *ht = __helper_load_function_arg_info();
-  __helper_load_function_arg_info();
+  // GHashTable *ht = __helper_load_function_arg_info(dump_dir);
+  __helper_load_function_arg_info(dump_dir);
   GHashTable *ht = ava_metadata(NULL)->ht_name2idx;
 
   /* Register CUDA functions */
@@ -471,7 +470,12 @@ ava_utility void **__helper_load_and_register_fatbin(void *fatCubin) {
   struct fatbin_function *func;
 
   if (ava_metadata(NULL)->fatfunction_fd == 0) {
-    ava_metadata(NULL)->fatfunction_fd = open("/cuda_dumps/fatfunction.ava", O_RDONLY, 0666);
+    auto fatfunction_path = fmt::format("{}/fatfunction.ava", dump_dir);
+    ret = open(fatfunction_path.c_str(), O_RDONLY, 0666);
+    if (ret == -1) {
+      SYSCALL_FAILURE_PRINT("open");
+    }
+    ava_metadata(NULL)->fatfunction_fd = ret;
   }
   fd = ava_metadata(NULL)->fatfunction_fd;
 
@@ -12245,30 +12249,29 @@ void ava_preload_cubin_guestlib() {
   int i;
   ava_metadata(NULL)->num_fatbins = 0;
   for (i = 0; i < fatbin_num; i++) {
-    __helper_load_function_arg_info();
+    __helper_load_function_arg_info("/cuda_dumps");
   }
 #endif
 }
 ava_end_replacement;
 
 ava_begin_utility;
-void ava_load_cubin_worker() {
+void ava_load_cubin_worker(absl::string_view dump_dir) {
   /* Preload CUDA fat binaries */
   fatbin_handle_list = g_ptr_array_new();
   /* Read cubin number */
   int fd;
   bool ret;
   int fatbin_num;
-  fd = open("/cuda_dumps/fatbin-info.ava", O_RDONLY, 0666);
+  auto fatbin_info_path = fmt::format("{}/fatbin-info.ava", dump_dir);
+  fd = open(fatbin_info_path.c_str(), O_RDONLY, 0666);
   if (fd == -1) {
-    fprintf(stderr, "open /cuda_dumps/fatbin-info.ava [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__,
-            __LINE__);
-    exit(EXIT_FAILURE);
+    ava_fatal("open %s [errno=%d, errstr=%s] at %s:%d", fatbin_info_path.c_str(), errno, strerror(errno), __FILE__,
+        __LINE__);
   }
   ret = ava::support::ReadData(fd, (char *)&fatbin_num, sizeof(int), nullptr);
   if (!ret) {
-    fprintf(stderr, "read [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-    exit(EXIT_FAILURE);
+    SYSCALL_FAILURE_PRINT("read");
   }
   AVA_DEBUG << "Fatbinary number = " << fatbin_num;
   int i;
@@ -12278,10 +12281,9 @@ void ava_load_cubin_worker() {
     fatCubin = malloc(sizeof(struct fatbin_wrapper));
     ret = ava::support::ReadData(fd, (char *)fatCubin, sizeof(struct fatbin_wrapper), nullptr);
     if (!ret) {
-      fprintf(stderr, "read [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__, __LINE__);
-      exit(EXIT_FAILURE);
+      SYSCALL_FAILURE_PRINT("read");
     }
-    fatbin_handle = __helper_load_and_register_fatbin(fatCubin);
+    fatbin_handle = __helper_load_and_register_fatbin(fatCubin, dump_dir);
     g_ptr_array_add(fatbin_handle_list, (gpointer)fatbin_handle);
   }
   close(fd);
@@ -12290,7 +12292,7 @@ ava_end_utility;
 
 ava_utility void __helper_worker_init_epilogue() {
 #ifdef AVA_PRELOAD_CUBIN
-  ava_load_cubin_worker();
+  ava_load_cubin_worker("/cuda_dumps");
 #endif
   worker_tf_opt_init();
 }
