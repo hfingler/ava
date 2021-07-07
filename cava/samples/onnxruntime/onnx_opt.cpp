@@ -858,7 +858,7 @@ void CUDARTAPI __cudaRegisterTexture(void **fatCubinHandle,
 __host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, dim3 blockDim, void **args,
                                                 size_t sharedMem, cudaStream_t stream) {
   /* May lead to TensorFlow internal race condition but safe for ONNX. */
-  ava_async;
+  //ava_async;
   ava_disable_native_call;
 
   ava_implicit_argument void *func_id = ava_metadata(func)->func_id;
@@ -12228,7 +12228,7 @@ __host__ cudaError_t CUDARTAPI cudaGetExportTable(const void **ppExportTable, co
 
 ava_begin_replacement;
 void ava_preload_cubin_guestlib() {
-#ifdef AVA_PRELOAD_CUBIN
+#ifndef AVA_DONT_PRELOAD_CUBIN
   /* Preload CUDA fat binaries */
   /* Read cubin number */
   int fd;
@@ -12291,7 +12291,7 @@ void ava_load_cubin_worker(absl::string_view dump_dir) {
 ava_end_utility;
 
 ava_utility void __helper_worker_init_epilogue() {
-#ifdef AVA_PRELOAD_CUBIN
+#ifndef AVA_DONT_PRELOAD_CUBIN
   ava_load_cubin_worker("/cuda_dumps");
 #endif
   worker_tf_opt_init();
