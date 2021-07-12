@@ -105,7 +105,7 @@ struct command_base {
   /**
    * Reserved region for other purposes, for example, param_block seeker
    * in shared memory implementation. */
-  char reserved_area[64];
+  char reserved_area[128];
 };
 
 /**

@@ -8,6 +8,7 @@
 #include "common/shadow_thread_pool.hpp"
 #ifdef AVA_WORKER
 #include "worker/worker_context.h"
+#include "worker/worker.h"
 #endif
 
 #ifdef __cplusplus
@@ -366,6 +367,22 @@ void internal_api_handler(struct command_channel *chan, struct nw_handle_pool *h
                    call_cmd, ret_cmd);
     break;
   }
+
+  case COMMAND_HANDLER_REGISTER_DUMP_DIR: {
+    const char* dump_dir = (const char*)cmd->reserved_area;
+    if (dump_dir) {
+        printf("\n//! sets directory for dump files to %s, pid: %d\n\n", dump_dir, getpid());
+        if (setenv("AVA_DUMP_DIR", dump_dir, 1)) {
+          perror("setenv failed for AVA_DUMP_DIR\n");
+          exit(0);
+        }
+#ifdef AVA_PRELOAD_CUBIN
+        ava_load_cubin_worker(dump_dir);
+#endif
+    }
+    break;
+  }
+
 #endif
 
   default:

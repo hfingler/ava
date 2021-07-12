@@ -13481,15 +13481,24 @@ __host__ cudaError_t CUDARTAPI cudaGetExportTable(const void **ppExportTable, co
 
 ava_begin_replacement;
 void ava_preload_cubin_guestlib() {
-#ifndef AVA_DONT_PRELOAD_CUBIN
   /* Preload CUDA fat binaries */
+  const char *dump_dir;
+  if (std::getenv("AVA_DUMP_DIR")) {
+    dump_dir = std::getenv("AVA_DUMP_DIR");
+    AVA_DEBUG << "Setting dump directory to " << dump_dir << std::endl;
+  } else {
+    AVA_DEBUG << "AVA_DUMP_DIR is not set, using /cuda_dumps" << std::endl;
+    dump_dir = "/cuda_dumps";
+  }
   /* Read cubin number */
   int fd;
   bool ret;
   int fatbin_num;
-  fd = open("/cuda_dumps/fatbin-info.ava", O_RDONLY, 0666);
+  char file_name[148];
+  sprintf(file_name, "%s/fatbin-info.ava", dump_dir);
+  fd = open(file_name, O_RDONLY, 0666);
   if (fd == -1) {
-    fprintf(stderr, "open /cuda_dumps/fatbin-info.ava [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__,
+    fprintf(stderr, "open %s/fatbin-info.ava [errno=%d, errstr=%s] at %s:%d", dump_dir, errno, strerror(errno), __FILE__,
             __LINE__);
     exit(EXIT_FAILURE);
   }
@@ -13502,9 +13511,8 @@ void ava_preload_cubin_guestlib() {
   int i;
   ava_metadata(NULL)->num_fatbins = 0;
   for (i = 0; i < fatbin_num; i++) {
-    __helper_load_function_arg_info("/cuda_dumps");
+    __helper_load_function_arg_info(dump_dir);
   }
-#endif
 }
 ava_end_replacement;
 
@@ -13543,9 +13551,17 @@ void ava_load_cubin_worker(absl::string_view dump_dir) {
 }
 
 void __helper_worker_init_epilogue() {
-#ifndef AVA_DONT_PRELOAD_CUBIN
-  ava_load_cubin_worker("/cuda_dumps");
-#endif
+  // the internal_api_handler usually calls ava_load_cubin_worker if DUMP_DIR is set,
+  // but leaving the env var check here in case it's set when the worker is ran
+  const char *dump_dir;
+  if (std::getenv("AVA_DUMP_DIR") != NULL) {
+    dump_dir = std::getenv("AVA_DUMP_DIR");
+    AVA_DEBUG << "setting dump directory to " << dump_dir << std::endl;
+  } else {
+    AVA_DEBUG << "AVA_DUMP_DIR is not set, using /cuda_dumps" << std::endl;
+    dump_dir = "/cuda_dumps";
+  }
+  ava_load_cubin_worker(dump_dir);
   worker_tf_opt_init();
 }
 ava_end_worker_replacement;

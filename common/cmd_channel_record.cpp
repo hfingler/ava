@@ -194,7 +194,9 @@ struct command_base *command_channel_log_load_command(struct command_channel_log
   lseek(chan->fd, offset, SEEK_SET);
 
   ssize_t size = read(chan->fd, &metadata, sizeof(struct record_command_metadata));
-  if (size != sizeof(struct record_command_metadata)) return NULL;
+  if (size != sizeof(struct record_command_metadata))
+    return NULL;
+  
   if (flags != NULL) {
     *flags = metadata.flags;
   }
