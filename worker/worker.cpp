@@ -147,7 +147,7 @@ int main(int argc, char *argv[]) {
       wait_for_command_handler();
       destroy_command_handler(false);
       std::cerr << "[worker#" << listen_port << "] worker is done, looping." << std::endl;
-    } while(rm_addr)
+    } while(rm_addr);
 
     std::cerr << "[worker#" << listen_port << "] freeing channel and quiting." << std::endl;
     command_channel_free(chan);
