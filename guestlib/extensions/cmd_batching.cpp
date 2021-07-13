@@ -41,6 +41,9 @@ static void batch_emit(GAsyncQueue *active_cmds) {
   }
 
   void *__command_buffer = malloc(__total_buffer_size);
+  if (__command_buffer == nullptr) {
+    SYSCALL_FAILURE_PRINT("malloc");
+  }
   {
     off_t offset = 0;
     struct command_base *cmd;
@@ -72,6 +75,9 @@ static void batch_emit(GAsyncQueue *active_cmds) {
 EXPORTED_WEAKLY void batch_insert_command(struct command_batch *cmd_batch, struct command_base *cmd,
                                           struct command_channel *chan, int is_async) {
   struct command_wrapper *wrap = reinterpret_cast<struct command_wrapper *>(g_malloc(sizeof(struct command_wrapper)));
+  if (wrap == nullptr) {
+    SYSCALL_FAILURE_PRINT("malloc");
+  }
   wrap->cmd = cmd;
   wrap->chan = chan;
   wrap->is_async = is_async;

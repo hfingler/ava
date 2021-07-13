@@ -59,6 +59,9 @@ struct command_base *command_channel_socket_new_command(struct command_channel *
                                                         size_t data_region_size) {
   struct command_channel_socket *chan = (struct command_channel_socket *)c;
   struct command_base *cmd = (struct command_base *)malloc(command_struct_size + data_region_size);
+  if (cmd == nullptr) {
+    SYSCALL_FAILURE_PRINT("malloc");
+  }
   static_assert(sizeof(struct block_seeker) <= sizeof(cmd->reserved_area),
                 "command_base::reserved_area is not large enough.");
   struct block_seeker *seeker = (struct block_seeker *)cmd->reserved_area;
