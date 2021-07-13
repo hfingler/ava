@@ -134,8 +134,10 @@ int main(int argc, char *argv[]) {
 
     //this sets API id and other stuff
     init_internal_command_handler();
-    //TODO: make this a flag that only executes when using serverless
-    while (true) {
+
+    char *rm_addr = std::getenv("RESMNGR_ADDR");
+    //only loop if we are in serverless mode
+    do {
       //get a guestlib connection
       std::cerr << "[worker#" << listen_port << "] waiting for connection" << std::endl;
       chan = command_channel_listen(chan);
@@ -145,13 +147,12 @@ int main(int argc, char *argv[]) {
       wait_for_command_handler();
       destroy_command_handler(false);
       std::cerr << "[worker#" << listen_port << "] worker is done, looping." << std::endl;
-    }
+    } while(rm_addr)
 
     std::cerr << "[worker#" << listen_port << "] freeing channel and quiting." << std::endl;
     command_channel_free(chan);
     command_channel_free((struct command_channel *)nw_record_command_channel);
     return 0;
-
   } else {
     printf("Unsupported AVA_CHANNEL type (export AVA_CHANNEL=[TCP]\n");
     return 0;
