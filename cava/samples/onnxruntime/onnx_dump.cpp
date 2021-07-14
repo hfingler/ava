@@ -571,7 +571,30 @@ ava_end_replacement;
 void CUDARTAPI __cudaRegisterTexture(void **fatCubinHandle,
                                      const void *hostVar,  // struct textureReference *hostVar
                                      const void **deviceAddress, const char *deviceName, int dim, int norm, int ext) {
-  ava_unsupported;
+  ava_argument(fatCubinHandle) {
+    ava_in;
+    ava_buffer(__helper_cubin_num(fatCubinHandle) + 1);
+    ava_element {
+      if (fatCubinHandle[ava_index] != NULL) ava_handle;
+    }
+  }
+
+  ava_argument(deviceName) {
+    ava_in;
+    ava_buffer(strlen(deviceName) + 1);
+  }
+  
+  ava_argument(hostVar) {
+    ava_in;
+    ava_buffer(1);
+  }
+
+  //this breaks
+  ava_argument(deviceAddress) {
+    ava_in;
+    ava_buffer(1);
+    ava_element { ava_buffer(1); }
+  }
 }
 
 __host__ __device__ unsigned CUDARTAPI
