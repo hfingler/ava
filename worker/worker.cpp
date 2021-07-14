@@ -27,6 +27,8 @@
 #include "provision_gpu.h"
 #include "worker_context.h"
 
+#include "extensions/gpu_memory_tracker.hpp"
+
 struct command_channel *chan;
 struct command_channel *chan_hv = NULL;
 extern int nw_global_vm_id;
@@ -95,6 +97,8 @@ int main(int argc, char *argv[]) {
     return 0;
   }
   absl::InitializeSymbolizer(argv[0]);
+
+  print_test_tracker();
 
   /* Read GPU provision information. */
   char const *cuda_uuid_str = getenv("CUDA_VISIBLE_DEVICES");

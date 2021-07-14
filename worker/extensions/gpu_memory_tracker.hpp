@@ -1,0 +1,8 @@
+#ifndef AVA_COMMON_EXTENSIONS_GPUMEMORYTRACKER_HPP_
+#define AVA_COMMON_EXTENSIONS_GPUMEMORYTRACKER_HPP_
+
+
+void print_test_tracker();
+
+
+#endif

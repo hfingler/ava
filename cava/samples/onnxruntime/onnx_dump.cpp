@@ -6,7 +6,7 @@ ava_number(10);
 ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -I/usr/local/cuda-10.1/nvvm/include);
 ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver -L/usr/local/cuda-10.1/nvvm/lib64 -lnvvm);
 ava_guestlib_srcs(../common/extensions/cudart_10.1_utilities.cpp cuda/nvvm_helper.cpp extensions/gpu_address_tracking.cpp);
-ava_worker_srcs(../common/extensions/cudart_10.1_utilities.cpp extensions/cuda.cpp);
+ava_worker_srcs(../common/extensions/cudart_10.1_utilities.cpp extensions/cuda.cpp extensions/gpu_memory_tracker.cpp);
 ava_export_qualifier();
 ava_soname(libcuda.so libcuda.so.1 libcudart.so.10 libcudart.so.10.1 libcublas.so.10 libcublasLt.so.10 libcudnn.so.7 libcufft.so.10 libcurand.so.10 libcusolver.so.10 libcusparse.so.10);
 // clang-format on
@@ -49,6 +49,7 @@ ava_begin_utility;
 #include <cusparse.h>
 #include <cusolver_common.h>
 #include <cusolverDn.h>
+#include <cusolverSp.h>
 #include <cuda_profiler_api.h>
 
 #include "cudart_nw_internal.h"
@@ -59,6 +60,10 @@ ava_begin_utility;
 #include "guestlib/cuda/nvvm_helper.h"
 #include "common/support/io.h"
 #include "guestlib/extensions/gpu_address_tracking.h"
+
+#include "worker/extensions/gpu_memory_tracker.hpp"
+
+#include "cuTexRefSetAddress.hpp"
 
 #if !defined(__dv)
 #define __dv(v)
@@ -640,6 +645,9 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMalloc(void **devPtr, size
   void *ret = reinterpret_cast<void *>(ava_execute());
   if (ava_is_guest) {
     __helper_save_gpu_address_range(reinterpret_cast<uint64_t>(*devPtr), size, static_cast<void *>(&ret));
+  }
+  if (ava_is_worker) {
+    print_test_tracker();
   }
 }
 
@@ -11633,6 +11641,1629 @@ __host__ cudaError_t CUDARTAPI cudaMalloc3DArray(cudaArray_t *array, const struc
                                                  struct cudaExtent extent, unsigned int flags __dv(0)) {
   ava_unsupported;
 }
+
+//CUPY stuff
+__host__ cudaError_t CUDARTAPI cudaMallocArray (cudaArray_t* array, const cudaChannelFormatDesc* desc, 
+                                                size_t width, size_t height, unsigned int  flags) {
+  ava_unsupported;
+}
+
+CUBLASAPI cublasStatus_t CUBLASWINAPI cublasGetStream(cublasHandle_t handle, cudaStream_t *streamId) {
+  ava_unsupported;
+}
+
+CUBLASAPI cublasStatus_t CUBLASWINAPI cublasGetProperty(libraryPropertyType type, int *value) {
+  ava_unsupported;
+}
+
+CUBLASAPI cublasStatus_t CUBLASWINAPI cublasGetVersion(cublasHandle_t handle, int *version) {
+  ava_unsupported;
+}
+
+CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSetWorkspace(cublasHandle_t handle, void *workspace, size_t workspaceSizeInBytes) {
+  ava_unsupported;
+}
+
+//deprecated stuff that cupy wants
+
+CUresult CUDAAPI cuTexRefSetAddress2D(CUtexref hTexRef, 
+          const CUDA_ARRAY_DESCRIPTOR *desc, CUdeviceptr dptr, size_t Pitch) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuTexRefSetFilterMode(CUtexref hTexRef, CUfilter_mode fm) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuGetErrorString ( CUresult error, const char** pStr ) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuTexRefSetArray(CUtexref hTexRef, CUarray hArray, unsigned int Flags) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuTexRefSetFormat(CUtexref hTexRef, CUarray_format fmt, 
+        int NumPackedComponents) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuTexRefSetAddressMode(CUtexref hTexRef, int dim, CUaddress_mode am)  {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuTexRefSetFlags(CUtexref hTexRef, unsigned int Flags) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuTexRefGetAddress(CUdeviceptr *pdptr, CUtexref hTexRef) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuTexRefGetArray(CUarray *phArray, CUtexref hTexRef) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuTexRefGetAddressMode(CUaddress_mode *pam, CUtexref hTexRef, int dim) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuModuleGetTexRef(CUtexref *pTexRef, CUmodule hmod, const char *name) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuTexRefSetBorderColor(CUtexref hTexRef, float *pBorderColor) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuTexRefGetFormat(CUarray_format *pFormat, int *pNumChannels, CUtexref hTexRef) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuTexRefGetFlags(unsigned int *pFlags, CUtexref hTexRef) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuTexRefCreate(CUtexref *pTexRef) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuTexRefDestroy(CUtexref hTexRef) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuTexRefSetAddress(unsigned int *ByteOffset, CUtexref hTexRef, 
+    CUdeviceptr dptr, unsigned int bytes) {
+  ava_unsupported;
+}
+
+//CUresult CUDAAPI cuTexRefSetAddress_v2(unsigned int *ByteOffset, CUtexref hTexRef, 
+//    CUdeviceptr dptr, unsigned int bytes) {
+//  ava_unsupported;
+//}
+
+CUresult CUDAAPI cuTexObjectCreate(CUtexObject *pTexObject, const CUDA_RESOURCE_DESC *pResDesc,
+       const CUDA_TEXTURE_DESC *pTexDesc, const CUDA_RESOURCE_VIEW_DESC *pResViewDesc) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuTexObjectDestroy(CUtexObject texObject) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuTexObjectGetResourceDesc(CUDA_RESOURCE_DESC *pResDesc, CUtexObject texObject) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuTexObjectGetTextureDesc(CUDA_TEXTURE_DESC *pTexDesc, CUtexObject texObject) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuFuncSetAttribute(CUfunction hfunc, CUfunction_attribute attrib, int value) {
+  ava_unsupported;
+}
+
+
+CUresult CUDAAPI cuFuncSetSharedMemConfig(CUfunction hfunc, CUsharedconfig config) {
+  ava_unsupported;
+}
+
+CUresult CUDAAPI cuModuleLoad(CUmodule *module, const char *fname) {
+  ava_unsupported;
+}
+
+//missing cusparse
+
+cusparseStatus_t CUSPARSEAPI
+cusparseConstrainedGeMM(cusparseHandle_t           handle,
+                        cusparseOperation_t        opA,
+                        cusparseOperation_t        opB,
+                        const void*                alpha,
+                        const cusparseDnMatDescr_t matA,
+                        const cusparseDnMatDescr_t matB,
+                        const void*                beta,
+                        cusparseSpMatDescr_t       matC,
+                        cudaDataType               computeType,
+                        void*                      externalBuffer) {
+  ava_unsupported;
+}
+
+cusparseStatus_t CUSPARSEAPI
+cusparseConstrainedGeMM_bufferSize(cusparseHandle_t           handle,
+                                   cusparseOperation_t        opA,
+                                   cusparseOperation_t        opB,
+                                   const void*                alpha,
+                                   const cusparseDnMatDescr_t matA,
+                                   const cusparseDnMatDescr_t matB,
+                                   const void*                beta,
+                                   cusparseSpMatDescr_t       matC,
+                                   cudaDataType               computeType,
+                                   size_t*                    bufferSize) {
+  ava_unsupported;
+}
+
+
+cusparseStatus_t CUSPARSEAPI
+cusparseZcsrmv(cusparseHandle_t         handle,
+               cusparseOperation_t      transA,
+               int                      m,
+               int                      n,
+               int                      nnz,
+               const cuDoubleComplex*   alpha,
+               const cusparseMatDescr_t descrA,
+               const cuDoubleComplex*   csrSortedValA,
+               const int*               csrSortedRowPtrA,
+               const int*               csrSortedColIndA,
+               const cuDoubleComplex*   x,
+               const cuDoubleComplex*   beta,
+               cuDoubleComplex*         y) {
+  ava_unsupported;
+}
+
+cusparseStatus_t CUSPARSEAPI
+cusparseScsrmv_mp(cusparseHandle_t         handle,
+                  cusparseOperation_t      transA,
+                  int                      m,
+                  int                      n,
+                  int                      nnz,
+                  const float*             alpha,
+                  const cusparseMatDescr_t descrA,
+                  const float*             csrSortedValA,
+                  const int*               csrSortedRowPtrA,
+                  const int*               csrSortedColIndA,
+                  const float*             x,
+                  const float*             beta,
+                  float*                   y) {
+  ava_unsupported;
+}
+
+cusparseStatus_t CUSPARSEAPI
+cusparseDcsrmv_mp(cusparseHandle_t         handle,
+                  cusparseOperation_t      transA,
+                  int                      m,
+                  int                      n,
+                  int                      nnz,
+                  const double*            alpha,
+                  const cusparseMatDescr_t descrA,
+                  const double*            csrSortedValA,
+                  const int*               csrSortedRowPtrA,
+                  const int*               csrSortedColIndA,
+                  const double*            x,
+                  const double*            beta,
+                  double*                  y) {
+  ava_unsupported;
+}
+
+cusparseStatus_t CUSPARSEAPI
+cusparseCcsrmv_mp(cusparseHandle_t         handle,
+                  cusparseOperation_t      transA,
+                  int                      m,
+                  int                      n,
+                  int                      nnz,
+                  const cuComplex*         alpha,
+                  const cusparseMatDescr_t descrA,
+                  const cuComplex*         csrSortedValA,
+                  const int*               csrSortedRowPtrA,
+                  const int*               csrSortedColIndA,
+                  const cuComplex*         x,
+                  const cuComplex*         beta,
+                  cuComplex*               y) {
+  ava_unsupported;
+}
+
+cusparseStatus_t CUSPARSEAPI
+cusparseXcsrgemmNnz(cusparseHandle_t         handle,
+                    cusparseOperation_t      transA,
+                    cusparseOperation_t      transB,
+                    int                      m,
+                    int                      n,
+                    int                      k,
+                    const cusparseMatDescr_t descrA,
+                    const int                nnzA,
+                    const int*               csrSortedRowPtrA,
+                    const int*               csrSortedColIndA,
+                    const cusparseMatDescr_t descrB,
+                    const int                nnzB,
+                    const int*               csrSortedRowPtrB,
+                    const int*               csrSortedColIndB,
+                    const cusparseMatDescr_t descrC,
+                    int*                     csrSortedRowPtrC,
+                    int*                     nnzTotalDevHostPtr) {
+  ava_unsupported;
+}
+
+
+cusparseStatus_t CUSPARSEAPI
+cusparseScsrgemm(cusparseHandle_t         handle,
+                 cusparseOperation_t      transA,
+                 cusparseOperation_t      transB,
+                 int                      m,
+                 int                      n,
+                 int                      k,
+                 const cusparseMatDescr_t descrA,
+                 const int                nnzA,
+                 const float*             csrSortedValA,
+                 const int*               csrSortedRowPtrA,
+                 const int*               csrSortedColIndA,
+                 const cusparseMatDescr_t descrB,
+                 const int                nnzB,
+                 const float*             csrSortedValB,
+                 const int*               csrSortedRowPtrB,
+                 const int*               csrSortedColIndB,
+                 const cusparseMatDescr_t descrC,
+                 float*                   csrSortedValC,
+                 const int*               csrSortedRowPtrC,
+                 int*                     csrSortedColIndC) {
+  ava_unsupported;
+}
+
+
+cusparseStatus_t CUSPARSEAPI
+cusparseDcsrgemm(cusparseHandle_t         handle,
+                 cusparseOperation_t      transA,
+                 cusparseOperation_t      transB,
+                 int                      m,
+                 int                      n,
+                 int                      k,
+                 const cusparseMatDescr_t descrA,
+                 int                      nnzA,
+                 const double*            csrSortedValA,
+                 const int*               csrSortedRowPtrA,
+                 const int*               csrSortedColIndA,
+                 const cusparseMatDescr_t descrB,
+                 int                      nnzB,
+                 const double*            csrSortedValB,
+                 const int*               csrSortedRowPtrB,
+                 const int*               csrSortedColIndB,
+                 const cusparseMatDescr_t descrC,
+                 double*                  csrSortedValC,
+                 const int*               csrSortedRowPtrC,
+                 int*                     csrSortedColIndC) {
+  ava_unsupported;
+}
+
+
+cusparseStatus_t CUSPARSEAPI
+cusparseCcsrgemm(cusparseHandle_t         handle,
+                 cusparseOperation_t      transA,
+                 cusparseOperation_t      transB,
+                 int                      m,
+                 int                      n,
+                 int                      k,
+                 const cusparseMatDescr_t descrA,
+                 int                      nnzA,
+                 const cuComplex*         csrSortedValA,
+                 const int*               csrSortedRowPtrA,
+                 const int*               csrSortedColIndA,
+                 const cusparseMatDescr_t descrB,
+                 int                      nnzB,
+                 const cuComplex*         csrSortedValB,
+                 const int*               csrSortedRowPtrB,
+                 const int*               csrSortedColIndB,
+                 const cusparseMatDescr_t descrC,
+                 cuComplex*               csrSortedValC,
+                 const int*               csrSortedRowPtrC,
+                 int*                     csrSortedColIndC) {
+  ava_unsupported;
+}
+
+
+cusparseStatus_t CUSPARSEAPI
+cusparseZcsrgemm(cusparseHandle_t         handle,
+                 cusparseOperation_t      transA,
+                 cusparseOperation_t      transB,
+                 int                      m,
+                 int                      n,
+                 int                      k,
+                 const cusparseMatDescr_t descrA,
+                 int                      nnzA,
+                 const cuDoubleComplex*   csrSortedValA,
+                 const int*               csrSortedRowPtrA,
+                 const int*               csrSortedColIndA,
+                 const cusparseMatDescr_t descrB,
+                 int                      nnzB,
+                 const cuDoubleComplex*   csrSortedValB,
+                 const int*               csrSortedRowPtrB,
+                 const int*               csrSortedColIndB,
+                 const cusparseMatDescr_t descrC,
+                 cuDoubleComplex*         csrSortedValC,
+                 const int*               csrSortedRowPtrC,
+                 int*                     csrSortedColIndC) {
+  ava_unsupported;
+}
+
+
+cusparseStatus_t CUSPARSEAPI
+cusparseCsr2cscEx(cusparseHandle_t    handle,
+                  int                 m,
+                  int                 n,
+                  int                 nnz,
+                  const void*         csrSortedVal,
+                  cudaDataType        csrSortedValtype,
+                  const int*          csrSortedRowPtr,
+                  const int*          csrSortedColInd,
+                  void*               cscSortedVal,
+                  cudaDataType        cscSortedValtype,
+                  int*                cscSortedRowInd,
+                  int*                cscSortedColPtr,
+                  cusparseAction_t    copyValues,
+                  cusparseIndexBase_t idxBase,
+                  cudaDataType        executiontype) {
+  ava_unsupported;
+}
+
+
+cusparseStatus_t CUSPARSEAPI
+cusparseScsr2csc(cusparseHandle_t    handle,
+                 int                 m,
+                 int                 n,
+                 int                 nnz,
+                 const float*        csrSortedVal,
+                 const int*          csrSortedRowPtr,
+                 const int*          csrSortedColInd,
+                 float*              cscSortedVal,
+                 int*                cscSortedRowInd,
+                 int*                cscSortedColPtr,
+                 cusparseAction_t    copyValues,
+                 cusparseIndexBase_t idxBase) {
+  ava_unsupported;
+}
+
+
+cusparseStatus_t CUSPARSEAPI
+cusparseDcsr2csc(cusparseHandle_t    handle,
+                 int                 m,
+                 int                 n,
+                 int                 nnz,
+                 const double*       csrSortedVal,
+                 const int*          csrSortedRowPtr,
+                 const int*          csrSortedColInd,
+                 double*             cscSortedVal,
+                 int*                cscSortedRowInd,
+                 int*                cscSortedColPtr,
+                 cusparseAction_t    copyValues,
+                 cusparseIndexBase_t idxBase) {
+  ava_unsupported;
+}
+
+
+cusparseStatus_t CUSPARSEAPI
+cusparseCcsr2csc(cusparseHandle_t    handle,
+                 int                 m,
+                 int                 n,
+                 int                 nnz,
+                 const cuComplex*    csrSortedVal,
+                 const int*          csrSortedRowPtr,
+                 const int*          csrSortedColInd,
+                 cuComplex*          cscSortedVal,
+                 int*                cscSortedRowInd,
+                 int*                cscSortedColPtr,
+                 cusparseAction_t    copyValues,
+                 cusparseIndexBase_t idxBase) {
+  ava_unsupported;
+}
+
+
+cusparseStatus_t CUSPARSEAPI
+cusparseZcsr2csc(cusparseHandle_t       handle,
+                 int                    m,
+                 int                    n,
+                 int                    nnz,
+                 const cuDoubleComplex* csrSortedVal,
+                 const int*             csrSortedRowPtr,
+                 const int*             csrSortedColInd,
+                 cuDoubleComplex*       cscSortedVal,
+                 int*                   cscSortedRowInd,
+                 int*                   cscSortedColPtr,
+                 cusparseAction_t       copyValues,
+                 cusparseIndexBase_t    idxBase) {
+  ava_unsupported;
+}
+
+
+cusparseStatus_t CUSPARSEAPI
+cusparseScsrmv(cusparseHandle_t         handle,
+               cusparseOperation_t      transA,
+               int                      m,
+               int                      n,
+               int                      nnz,
+               const float*             alpha,
+               const cusparseMatDescr_t descrA,
+               const float*             csrSortedValA,
+               const int*               csrSortedRowPtrA,
+               const int*               csrSortedColIndA,
+               const float*             x,
+               const float*             beta,
+               float*                   y) {
+  ava_unsupported;
+}
+
+
+cusparseStatus_t CUSPARSEAPI
+cusparseDcsrmv(cusparseHandle_t         handle,
+               cusparseOperation_t      transA,
+               int                      m,
+               int                      n,
+               int                      nnz,
+               const double*            alpha,
+               const cusparseMatDescr_t descrA,
+               const double*            csrSortedValA,
+               const int*               csrSortedRowPtrA,
+               const int*               csrSortedColIndA,
+               const double*            x,
+               const double*            beta,
+               double*                  y) {
+  ava_unsupported;
+}
+
+
+cusparseStatus_t CUSPARSEAPI
+cusparseCcsrmv(cusparseHandle_t         handle,
+               cusparseOperation_t      transA,
+               int                      m,
+               int                      n,
+               int                      nnz,
+               const cuComplex*         alpha,
+               const cusparseMatDescr_t descrA,
+               const cuComplex*         csrSortedValA,
+               const int*               csrSortedRowPtrA,
+               const int*               csrSortedColIndA,
+               const cuComplex*         x,
+               const cuComplex*         beta,
+               cuComplex*               y) {
+  ava_unsupported;
+}
+
+
+
+
+
+
+cusparseStatus_t CUSPARSEAPI
+cusparseXcsrgeamNnz(cusparseHandle_t         handle,
+                    int                      m,
+                    int                      n,
+                    const cusparseMatDescr_t descrA,
+                    int                      nnzA,
+                    const int*               csrSortedRowPtrA,
+                    const int*               csrSortedColIndA,
+                    const cusparseMatDescr_t descrB,
+                    int                      nnzB,
+                    const int*               csrSortedRowPtrB,
+                    const int*               csrSortedColIndB,
+                    const cusparseMatDescr_t descrC,
+                    int*                     csrSortedRowPtrC,
+                    int*                     nnzTotalDevHostPtr) {
+  ava_unsupported;
+}
+
+
+cusparseStatus_t CUSPARSEAPI
+cusparseScsrgeam(cusparseHandle_t         handle,
+                 int                      m,
+                 int                      n,
+                 const float*             alpha,
+                 const cusparseMatDescr_t descrA,
+                 int                      nnzA,
+                 const float*             csrSortedValA,
+                 const int*               csrSortedRowPtrA,
+                 const int*               csrSortedColIndA,
+                 const float*             beta,
+                 const cusparseMatDescr_t descrB,
+                 int                      nnzB,
+                 const float*             csrSortedValB,
+                 const int*               csrSortedRowPtrB,
+                 const int*               csrSortedColIndB,
+                 const cusparseMatDescr_t descrC,
+                 float*                   csrSortedValC,
+                 int*                     csrSortedRowPtrC,
+                 int*                     csrSortedColIndC) {
+  ava_unsupported;
+}
+
+
+cusparseStatus_t CUSPARSEAPI
+cusparseDcsrgeam(cusparseHandle_t         handle,
+                 int                      m,
+                 int                      n,
+                 const double*            alpha,
+                 const cusparseMatDescr_t descrA,
+                 int                      nnzA,
+                 const double*            csrSortedValA,
+                 const int*               csrSortedRowPtrA,
+                 const int*               csrSortedColIndA,
+                 const double*            beta,
+                 const cusparseMatDescr_t descrB,
+                 int                      nnzB,
+                 const double*            csrSortedValB,
+                 const int*               csrSortedRowPtrB,
+                 const int*               csrSortedColIndB,
+                 const cusparseMatDescr_t descrC,
+                 double*                  csrSortedValC,
+                 int*                     csrSortedRowPtrC,
+                 int*                     csrSortedColIndC) {
+  ava_unsupported;
+}
+
+
+cusparseStatus_t CUSPARSEAPI
+cusparseCcsrgeam(cusparseHandle_t         handle,
+                 int                      m,
+                 int                      n,
+                 const cuComplex*         alpha,
+                 const cusparseMatDescr_t descrA,
+                 int                      nnzA,
+                 const cuComplex*         csrSortedValA,
+                 const int*               csrSortedRowPtrA,
+                 const int*               csrSortedColIndA,
+                 const cuComplex*         beta,
+                 const cusparseMatDescr_t descrB,
+                 int                      nnzB,
+                 const cuComplex*         csrSortedValB,
+                 const int*               csrSortedRowPtrB,
+                 const int*               csrSortedColIndB,
+                 const cusparseMatDescr_t descrC,
+                 cuComplex*               csrSortedValC,
+                 int*                     csrSortedRowPtrC,
+                 int*                     csrSortedColIndC) {
+  ava_unsupported;
+}
+
+
+cusparseStatus_t CUSPARSEAPI
+cusparseZcsrgeam(cusparseHandle_t         handle,
+                 int                      m,
+                 int                      n,
+                 const cuDoubleComplex*   alpha,
+                 const cusparseMatDescr_t descrA,
+                 int                      nnzA,
+                 const cuDoubleComplex*   csrSortedValA,
+                 const int*               csrSortedRowPtrA,
+                 const int*               csrSortedColIndA,
+                 const cuDoubleComplex*   beta,
+                 const cusparseMatDescr_t descrB,
+                 int                      nnzB,
+                 const cuDoubleComplex*   csrSortedValB,
+                 const int*               csrSortedRowPtrB,
+                 const int*               csrSortedColIndB,
+                 const cusparseMatDescr_t descrC,
+                 cuDoubleComplex*         csrSortedValC,
+                 int*                     csrSortedRowPtrC,
+                 int*                     csrSortedColIndC) {
+  ava_unsupported;
+}
+
+
+
+//cusolver APIs
+
+cusolverStatus_t CUSOLVERAPI cusolverGetProperty(
+    libraryPropertyType type, 
+    int *value){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverGetVersion(
+    int *version){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpCreate(cusolverSpHandle_t *handle){
+  ava_unsupported;
+}
+cusolverStatus_t CUSOLVERAPI cusolverSpDestroy(cusolverSpHandle_t handle){
+  ava_unsupported;
+}
+cusolverStatus_t CUSOLVERAPI cusolverSpSetStream (cusolverSpHandle_t handle, cudaStream_t streamId){
+  ava_unsupported;
+}
+cusolverStatus_t CUSOLVERAPI cusolverSpGetStream(cusolverSpHandle_t handle, cudaStream_t *streamId){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpXcsrissymHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnzA,
+    const cusparseMatDescr_t descrA,
+    const int *csrRowPtrA,
+    const int *csrEndPtrA,
+    const int *csrColIndA,
+    int *issym){
+  ava_unsupported;
+}
+
+/* -------- GPU linear solver by LU factorization
+ *       solve A*x = b, A can be singular 
+ * [ls] stands for linear solve
+ * [v] stands for vector
+ * [lu] stands for LU factorization
+ */
+cusolverStatus_t CUSOLVERAPI cusolverSpScsrlsvluHost(
+    cusolverSpHandle_t handle,
+    int n,
+    int nnzA,
+    const cusparseMatDescr_t descrA,
+    const float *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    const float *b,
+    float tol, 
+    int reorder,
+    float *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpDcsrlsvluHost(
+    cusolverSpHandle_t handle,
+    int n,
+    int nnzA,
+    const cusparseMatDescr_t descrA,
+    const double *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    const double *b,
+    double tol,
+    int reorder,
+    double *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpCcsrlsvluHost(
+    cusolverSpHandle_t handle,
+    int n,
+    int nnzA,
+    const cusparseMatDescr_t descrA,
+    const cuComplex *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    const cuComplex *b,
+    float tol,
+    int reorder,
+    cuComplex *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpZcsrlsvluHost(
+    cusolverSpHandle_t handle,
+    int n,
+    int nnzA,
+    const cusparseMatDescr_t descrA,
+    const cuDoubleComplex *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    const cuDoubleComplex *b,
+    double tol,
+    int reorder,
+    cuDoubleComplex *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+
+/* -------- GPU linear solver by QR factorization
+ *       solve A*x = b, A can be singular 
+ * [ls] stands for linear solve
+ * [v] stands for vector
+ * [qr] stands for QR factorization
+ */
+cusolverStatus_t CUSOLVERAPI cusolverSpScsrlsvqr(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const float *csrVal,
+    const int *csrRowPtr,
+    const int *csrColInd,
+    const float *b,
+    float tol,
+    int reorder,
+    float *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpDcsrlsvqr(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const double *csrVal,
+    const int *csrRowPtr,
+    const int *csrColInd,
+    const double *b,
+    double tol,
+    int reorder,
+    double *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpCcsrlsvqr(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuComplex *csrVal,
+    const int *csrRowPtr,
+    const int *csrColInd,
+    const cuComplex *b,
+    float tol,
+    int reorder,
+    cuComplex *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpZcsrlsvqr(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuDoubleComplex *csrVal,
+    const int *csrRowPtr,
+    const int *csrColInd,
+    const cuDoubleComplex *b,
+    double tol,
+    int reorder,
+    cuDoubleComplex *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+
+
+/* -------- CPU linear solver by QR factorization
+ *       solve A*x = b, A can be singular 
+ * [ls] stands for linear solve
+ * [v] stands for vector
+ * [qr] stands for QR factorization
+ */ 
+cusolverStatus_t CUSOLVERAPI cusolverSpScsrlsvqrHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const float *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    const float *b,
+    float tol,
+    int reorder,
+    float *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpDcsrlsvqrHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const double *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    const double *b,
+    double tol,
+    int reorder,
+    double *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpCcsrlsvqrHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuComplex *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    const cuComplex *b,
+    float tol,
+    int reorder,
+    cuComplex *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpZcsrlsvqrHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuDoubleComplex *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    const cuDoubleComplex *b,
+    double tol,
+    int reorder,
+    cuDoubleComplex *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+
+/* -------- CPU linear solver by Cholesky factorization
+ *       solve A*x = b, A can be singular 
+ * [ls] stands for linear solve
+ * [v] stands for vector
+ * [chol] stands for Cholesky factorization
+ *
+ * Only works for symmetric positive definite matrix.
+ * The upper part of A is ignored.
+ */ 
+cusolverStatus_t CUSOLVERAPI cusolverSpScsrlsvcholHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const float *csrVal,
+    const int *csrRowPtr,
+    const int *csrColInd,
+    const float *b,
+    float tol,
+    int reorder,
+    float *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpDcsrlsvcholHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const double *csrVal,
+    const int *csrRowPtr,
+    const int *csrColInd,
+    const double *b,
+    double tol,
+    int reorder,
+    double *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpCcsrlsvcholHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuComplex *csrVal,
+    const int *csrRowPtr,
+    const int *csrColInd,
+    const cuComplex *b,
+    float tol,
+    int reorder,
+    cuComplex *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpZcsrlsvcholHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuDoubleComplex *csrVal,
+    const int *csrRowPtr,
+    const int *csrColInd,
+    const cuDoubleComplex *b,
+    double tol,
+    int reorder,
+    cuDoubleComplex *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+/* -------- GPU linear solver by Cholesky factorization
+ *       solve A*x = b, A can be singular 
+ * [ls] stands for linear solve
+ * [v] stands for vector
+ * [chol] stands for Cholesky factorization
+ *
+ * Only works for symmetric positive definite matrix.
+ * The upper part of A is ignored.
+ */
+cusolverStatus_t CUSOLVERAPI cusolverSpScsrlsvchol(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const float *csrVal,
+    const int *csrRowPtr,
+    const int *csrColInd,
+    const float *b,
+    float tol,
+    int reorder,
+    // output
+    float *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpDcsrlsvchol(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const double *csrVal,
+    const int *csrRowPtr,
+    const int *csrColInd,
+    const double *b,
+    double tol,
+    int reorder,
+    // output
+    double *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpCcsrlsvchol(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuComplex *csrVal,
+    const int *csrRowPtr,
+    const int *csrColInd,
+    const cuComplex *b,
+    float tol,
+    int reorder,
+    // output
+    cuComplex *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpZcsrlsvchol(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuDoubleComplex *csrVal,
+    const int *csrRowPtr,
+    const int *csrColInd,
+    const cuDoubleComplex *b,
+    double tol,
+    int reorder,
+    // output
+    cuDoubleComplex *x,
+    int *singularity){
+  ava_unsupported;
+}
+
+
+
+/* ----------- CPU least square solver by QR factorization
+ *       solve min|b - A*x| 
+ * [lsq] stands for least square
+ * [v] stands for vector
+ * [qr] stands for QR factorization
+ */ 
+cusolverStatus_t CUSOLVERAPI cusolverSpScsrlsqvqrHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int n,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const float *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    const float *b,
+    float tol,
+    int *rankA,
+    float *x,
+    int *p,
+    float *min_norm){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpDcsrlsqvqrHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int n,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const double *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    const double *b,
+    double tol,
+    int *rankA,
+    double *x,
+    int *p,
+    double *min_norm){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpCcsrlsqvqrHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int n,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuComplex *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    const cuComplex *b,
+    float tol,
+    int *rankA,
+    cuComplex *x,
+    int *p,
+    float *min_norm){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpZcsrlsqvqrHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int n,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuDoubleComplex *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    const cuDoubleComplex *b,
+    double tol,
+    int *rankA,
+    cuDoubleComplex *x,
+    int *p,
+    double *min_norm){
+  ava_unsupported;
+}
+
+/* --------- CPU eigenvalue solver by shift inverse
+ *      solve A*x = lambda * x 
+ *   where lambda is the eigenvalue nearest mu0.
+ * [eig] stands for eigenvalue solver
+ * [si] stands for shift-inverse
+ */
+cusolverStatus_t CUSOLVERAPI cusolverSpScsreigvsiHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const float *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    float mu0,
+    const float *x0,
+    int maxite,
+    float tol,
+    float *mu,
+    float *x){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpDcsreigvsiHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const double *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    double mu0,
+    const double *x0,
+    int maxite,
+    double tol,
+    double *mu,
+    double *x){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpCcsreigvsiHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuComplex *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    cuComplex mu0,
+    const cuComplex *x0,
+    int maxite,
+    float tol,
+    cuComplex *mu,
+    cuComplex *x){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpZcsreigvsiHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuDoubleComplex *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    cuDoubleComplex mu0,
+    const cuDoubleComplex *x0,
+    int maxite,
+    double tol,
+    cuDoubleComplex *mu,
+    cuDoubleComplex *x){
+  ava_unsupported;
+}
+
+
+/* --------- GPU eigenvalue solver by shift inverse
+ *      solve A*x = lambda * x 
+ *   where lambda is the eigenvalue nearest mu0.
+ * [eig] stands for eigenvalue solver
+ * [si] stands for shift-inverse
+ */
+cusolverStatus_t CUSOLVERAPI cusolverSpScsreigvsi(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const float *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    float mu0,
+    const float *x0,
+    int maxite,
+    float eps,
+    float *mu,
+    float *x){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpDcsreigvsi(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const double *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    double mu0,
+    const double *x0,
+    int maxite,
+    double eps,
+    double *mu, 
+    double *x){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpCcsreigvsi(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuComplex *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    cuComplex mu0,
+    const cuComplex *x0,
+    int maxite,
+    float eps,
+    cuComplex *mu, 
+    cuComplex *x){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpZcsreigvsi(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuDoubleComplex *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    cuDoubleComplex mu0,
+    const cuDoubleComplex *x0,
+    int maxite,
+    double eps,
+    cuDoubleComplex *mu, 
+    cuDoubleComplex *x){
+  ava_unsupported;
+}
+
+
+// ----------- enclosed eigenvalues
+
+cusolverStatus_t CUSOLVERAPI cusolverSpScsreigsHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const float *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    cuComplex left_bottom_corner,
+    cuComplex right_upper_corner,
+    int *num_eigs){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpDcsreigsHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const double *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    cuDoubleComplex left_bottom_corner,
+    cuDoubleComplex right_upper_corner,
+    int *num_eigs){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpCcsreigsHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuComplex *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    cuComplex left_bottom_corner,
+    cuComplex right_upper_corner,
+    int *num_eigs){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpZcsreigsHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuDoubleComplex *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    cuDoubleComplex left_bottom_corner,
+    cuDoubleComplex right_upper_corner,
+    int *num_eigs){
+  ava_unsupported;
+}
+
+
+
+/* --------- CPU symrcm
+ *   Symmetric reverse Cuthill McKee permutation         
+ *
+ */
+cusolverStatus_t CUSOLVERAPI cusolverSpXcsrsymrcmHost(
+    cusolverSpHandle_t handle,
+    int n,
+    int nnzA,
+    const cusparseMatDescr_t descrA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    int *p){
+  ava_unsupported;
+}
+
+/* --------- CPU symmdq 
+ *   Symmetric minimum degree algorithm by quotient graph
+ *
+ */
+cusolverStatus_t CUSOLVERAPI cusolverSpXcsrsymmdqHost(
+    cusolverSpHandle_t handle,
+    int n,
+    int nnzA,
+    const cusparseMatDescr_t descrA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    int *p){
+  ava_unsupported;
+}
+
+/* --------- CPU symmdq 
+ *   Symmetric Approximate minimum degree algorithm by quotient graph
+ *
+ */
+cusolverStatus_t CUSOLVERAPI cusolverSpXcsrsymamdHost(
+    cusolverSpHandle_t handle,
+    int n,
+    int nnzA,
+    const cusparseMatDescr_t descrA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    int *p){
+  ava_unsupported;
+}
+
+/* --------- CPU metis 
+ *   symmetric reordering 
+ */
+cusolverStatus_t CUSOLVERAPI cusolverSpXcsrmetisndHost(
+    cusolverSpHandle_t handle,
+    int n,
+    int nnzA,
+    const cusparseMatDescr_t descrA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    const int64_t *options,
+    int *p){
+  ava_unsupported;
+}
+
+
+/* --------- CPU zfd
+ *  Zero free diagonal reordering
+ */
+cusolverStatus_t CUSOLVERAPI cusolverSpScsrzfdHost(
+    cusolverSpHandle_t handle,
+    int n,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const float *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    int *P,
+    int *numnz){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpDcsrzfdHost(
+    cusolverSpHandle_t handle,
+    int n,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const double *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    int *P,
+    int *numnz){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpCcsrzfdHost(
+    cusolverSpHandle_t handle,
+    int n,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuComplex *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    int *P,
+    int *numnz){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpZcsrzfdHost(
+    cusolverSpHandle_t handle,
+    int n,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuDoubleComplex *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    int *P,
+    int *numnz){
+  ava_unsupported;
+}
+
+
+/* --------- CPU permuation
+ *   P*A*Q^T        
+ *
+ */
+cusolverStatus_t CUSOLVERAPI cusolverSpXcsrperm_bufferSizeHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int n,
+    int nnzA,
+    const cusparseMatDescr_t descrA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    const int *p,
+    const int *q,
+    size_t *bufferSizeInBytes){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpXcsrpermHost(
+    cusolverSpHandle_t handle,
+    int m,
+    int n,
+    int nnzA,
+    const cusparseMatDescr_t descrA,
+    int *csrRowPtrA,
+    int *csrColIndA,
+    const int *p,
+    const int *q,
+    int *map,
+    void *pBuffer){
+  ava_unsupported;
+}
+
+
+
+/*
+ *  Low-level API: Batched QR
+ *
+ */
+
+cusolverStatus_t CUSOLVERAPI cusolverSpCreateCsrqrInfo(
+    csrqrInfo_t *info){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpDestroyCsrqrInfo(
+    csrqrInfo_t info){
+  ava_unsupported;
+}
+
+
+cusolverStatus_t CUSOLVERAPI cusolverSpXcsrqrAnalysisBatched(
+    cusolverSpHandle_t handle,
+    int m,
+    int n,
+    int nnzA,
+    const cusparseMatDescr_t descrA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    csrqrInfo_t info){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpScsrqrBufferInfoBatched(
+    cusolverSpHandle_t handle,
+    int m,
+    int n,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const float *csrVal,
+    const int *csrRowPtr,
+    const int *csrColInd,
+    int batchSize,
+    csrqrInfo_t info,
+    size_t *internalDataInBytes,
+    size_t *workspaceInBytes){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpDcsrqrBufferInfoBatched(
+    cusolverSpHandle_t handle,
+    int m,
+    int n,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const double *csrVal,
+    const int *csrRowPtr,
+    const int *csrColInd,
+    int batchSize,
+    csrqrInfo_t info,
+    size_t *internalDataInBytes,
+    size_t *workspaceInBytes){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpCcsrqrBufferInfoBatched(
+    cusolverSpHandle_t handle,
+    int m,
+    int n,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuComplex *csrVal,
+    const int *csrRowPtr,
+    const int *csrColInd,
+    int batchSize,
+    csrqrInfo_t info,
+    size_t *internalDataInBytes,
+    size_t *workspaceInBytes){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpZcsrqrBufferInfoBatched(
+    cusolverSpHandle_t handle,
+    int m,
+    int n,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuDoubleComplex *csrVal,
+    const int *csrRowPtr,
+    const int *csrColInd,
+    int batchSize,
+    csrqrInfo_t info,
+    size_t *internalDataInBytes,
+    size_t *workspaceInBytes){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpScsrqrsvBatched(
+    cusolverSpHandle_t handle,
+    int m,
+    int n,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const float *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    const float *b,   
+    float *x,  
+    int batchSize,
+    csrqrInfo_t info,
+    void *pBuffer){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpDcsrqrsvBatched(
+    cusolverSpHandle_t handle,
+    int m,
+    int n,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const double *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    const double *b,   
+    double *x,  
+    int batchSize,
+    csrqrInfo_t info,
+    void *pBuffer){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpCcsrqrsvBatched(
+    cusolverSpHandle_t handle,
+    int m,
+    int n,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuComplex *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    const cuComplex *b, 
+    cuComplex *x,  
+    int batchSize,
+    csrqrInfo_t info,
+    void *pBuffer){
+  ava_unsupported;
+}
+
+cusolverStatus_t CUSOLVERAPI cusolverSpZcsrqrsvBatched(
+    cusolverSpHandle_t handle,
+    int m,
+    int n,
+    int nnz,
+    const cusparseMatDescr_t descrA,
+    const cuDoubleComplex *csrValA,
+    const int *csrRowPtrA,
+    const int *csrColIndA,
+    const cuDoubleComplex *b,  
+    cuDoubleComplex *x,  
+    int batchSize,
+    csrqrInfo_t info,
+    void *pBuffer){
+  ava_unsupported;
+}
+
+
+
+
+
+
 
 __host__ cudaError_t CUDARTAPI cudaMallocMipmappedArray(cudaMipmappedArray_t *mipmappedArray,
                                                         const struct cudaChannelFormatDesc *desc,
