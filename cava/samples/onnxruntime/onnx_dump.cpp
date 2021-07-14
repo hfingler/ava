@@ -63,8 +63,6 @@ ava_begin_utility;
 
 #include "worker/extensions/gpu_memory_tracker.hpp"
 
-#include "cuTexRefSetAddress.hpp"
-
 #if !defined(__dv)
 #define __dv(v)
 #endif /* !__dv */
@@ -11732,15 +11730,13 @@ CUresult CUDAAPI cuTexRefDestroy(CUtexref hTexRef) {
   ava_unsupported;
 }
 
-CUresult CUDAAPI cuTexRefSetAddress(unsigned int *ByteOffset, CUtexref hTexRef, 
-    CUdeviceptr dptr, unsigned int bytes) {
+CUresult CUDAAPI  cuTexRefSetAddress(size_t *ByteOffset, CUtexref hTexRef, CUdeviceptr dptr, size_t bytes) {
   ava_unsupported;
 }
 
-//CUresult CUDAAPI cuTexRefSetAddress_v2(unsigned int *ByteOffset, CUtexref hTexRef, 
-//    CUdeviceptr dptr, unsigned int bytes) {
-//  ava_unsupported;
-//}
+CUresult CUDAAPI cuTexRefSetMaxAnisotropy(CUtexref hTexRef, unsigned int maxAniso) {
+  ava_unsupported;
+}
 
 CUresult CUDAAPI cuTexObjectCreate(CUtexObject *pTexObject, const CUDA_RESOURCE_DESC *pResDesc,
        const CUDA_TEXTURE_DESC *pTexDesc, const CUDA_RESOURCE_VIEW_DESC *pResViewDesc) {
