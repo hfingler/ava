@@ -63,8 +63,6 @@ ava_begin_utility;
 
 #include "worker/extensions/gpu_memory_tracker.hpp"
 
-#include "cuTexRefSetAddress.hpp"
-
 #if !defined(__dv)
 #define __dv(v)
 #endif /* !__dv */
@@ -573,7 +571,30 @@ ava_end_replacement;
 void CUDARTAPI __cudaRegisterTexture(void **fatCubinHandle,
                                      const void *hostVar,  // struct textureReference *hostVar
                                      const void **deviceAddress, const char *deviceName, int dim, int norm, int ext) {
-  ava_unsupported;
+  ava_argument(fatCubinHandle) {
+    ava_in;
+    ava_buffer(__helper_cubin_num(fatCubinHandle) + 1);
+    ava_element {
+      if (fatCubinHandle[ava_index] != NULL) ava_handle;
+    }
+  }
+
+  ava_argument(deviceAddress) {
+    ava_in;
+    ava_buffer(1);
+    ava_element ava_opaque;
+  }
+
+  ava_argument(hostVar) {
+    ava_in;
+    ava_buffer(1);
+  }
+
+  ava_argument(deviceName) {
+    ava_in;
+    ava_buffer(strlen(deviceName) + 1);
+  }
+
 }
 
 __host__ __device__ unsigned CUDARTAPI
@@ -11732,15 +11753,13 @@ CUresult CUDAAPI cuTexRefDestroy(CUtexref hTexRef) {
   ava_unsupported;
 }
 
-CUresult CUDAAPI cuTexRefSetAddress(unsigned int *ByteOffset, CUtexref hTexRef, 
-    CUdeviceptr dptr, unsigned int bytes) {
+CUresult CUDAAPI  cuTexRefSetAddress(size_t *ByteOffset, CUtexref hTexRef, CUdeviceptr dptr, size_t bytes) {
   ava_unsupported;
 }
 
-//CUresult CUDAAPI cuTexRefSetAddress_v2(unsigned int *ByteOffset, CUtexref hTexRef, 
-//    CUdeviceptr dptr, unsigned int bytes) {
-//  ava_unsupported;
-//}
+CUresult CUDAAPI cuTexRefSetMaxAnisotropy(CUtexref hTexRef, unsigned int maxAniso) {
+  ava_unsupported;
+}
 
 CUresult CUDAAPI cuTexObjectCreate(CUtexObject *pTexObject, const CUDA_RESOURCE_DESC *pResDesc,
        const CUDA_TEXTURE_DESC *pTexDesc, const CUDA_RESOURCE_VIEW_DESC *pResViewDesc) {
