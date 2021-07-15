@@ -54,6 +54,7 @@ add_custom_command(
   DEPENDS "${rm_proto}")
 
 include_directories("${CMAKE_CURRENT_BINARY_DIR}")
+include_directories("${CMAKE_CURRENT_BINARY_DIR}/memory_server")
 include_directories("/usr/local/cuda-10.1/include")
 
 add_library(grpc_proto
@@ -74,9 +75,14 @@ target_link_libraries(grpc_proto
 add_executable(svgpu-manager
   manager.cpp
   SVGPUManager.cpp
+  memory_server/server.cpp
+  memory_server/gpuserver.cpp
   ${manager_service_proto_srcs}
   ${manager_service_ava_srcs}
 )
+
+find_package(CUDA 10.1 REQUIRED)
+
 
 target_link_libraries(svgpu-manager
   ${manager_service_libraries}
@@ -87,6 +93,7 @@ target_link_libraries(svgpu-manager
   ${_REFLECTION}
   ${_GRPC_GRPCPP}
   ${_PROTOBUF_LIBPROTOBUF}
+  ${CUDA_LIBRARIES}
   nvidia-ml
 )
 
