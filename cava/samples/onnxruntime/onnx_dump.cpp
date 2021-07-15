@@ -579,22 +579,22 @@ void CUDARTAPI __cudaRegisterTexture(void **fatCubinHandle,
     }
   }
 
-  ava_argument(deviceName) {
+  ava_argument(deviceAddress) {
     ava_in;
-    ava_buffer(strlen(deviceName) + 1);
+    ava_buffer(1);
+    ava_element ava_opaque;
   }
-  
+
   ava_argument(hostVar) {
     ava_in;
     ava_buffer(1);
   }
 
-  //this breaks
-  ava_argument(deviceAddress) {
+  ava_argument(deviceName) {
     ava_in;
-    ava_buffer(1);
-    ava_element { ava_buffer(1); }
+    ava_buffer(strlen(deviceName) + 1);
   }
+
 }
 
 __host__ __device__ unsigned CUDARTAPI
