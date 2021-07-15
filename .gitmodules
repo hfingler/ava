@@ -33,3 +33,6 @@
 	url = https://gitlab.gnome.org/GNOME/glib.git
   branch = 2.56.3
   ignore = dirty
+[submodule "third_party/libzmq"]
+	path = third_party/libzmq
+	url = https://github.com/zeromq/libzmq.git

@@ -1,11 +1,12 @@
 #include "SVGPUManager.hpp"
-
 #include <nvml.h>
 #include <sys/wait.h>
-
 #include <boost/algorithm/string/join.hpp>
-
 #include "declaration.h"
+#include "memory_server/gpuserver.hpp"
+
+#include <string>
+#include <memory>
 
 /*************************************
  *
@@ -34,12 +35,10 @@ Status SVGPUManager::SpawnGPUWorker(ServerContext *AVA_UNUSED(context), const Sp
 
 void SVGPUManager::RegisterSelf(std::string rm_addr) {
   resmngr_client = new ResMngrClient(grpc::CreateChannel(rm_addr, grpc::InsecureChannelCredentials()));
-
   resmngr_client->RegisterSelf(gpu_offset, n_gpus);
 }
 
 void SVGPUManager::LaunchService() {
-  // std::string server_address("128.83.122.71:");
   std::string server_address("[::]:");
   if (const char *port = std::getenv("AVAMNGR_PORT")) {
     server_address += port;
@@ -57,10 +56,10 @@ void SVGPUManager::LaunchService() {
   std::cout << "Server listening on " << server_address << std::endl;
 }
 
-void SVGPUManager::ResMngrClient::RegisterSelf(uint32_t gpu_offset, uint32_t n_gpus) {
+void SVGPUManager::ResMngrClient::RegisterSelf(uint32_t& gpu_offset, uint32_t& n_gpus) {
   RegisterGPUNodeRequest request;
   nvmlReturn_t result;
-  uint32_t  device_count;
+  uint32_t device_count;
 
   result = nvmlInit();
   if (result != NVML_SUCCESS) {
@@ -78,6 +77,10 @@ void SVGPUManager::ResMngrClient::RegisterSelf(uint32_t gpu_offset, uint32_t n_g
   uint32_t start_gpu = gpu_offset >= device_count ? 0 : gpu_offset;
   uint32_t requested_gpu_max = n_gpus == 0 ? device_count : start_gpu + n_gpus;
   device_count = std::min(device_count, requested_gpu_max);
+
+  //update real values
+  gpu_offset = start_gpu;
+  n_gpus = device_count;
 
   // register each gpu with its available memory
   for (unsigned int i = start_gpu; i < device_count; i++) {
@@ -137,6 +140,34 @@ ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::Worker
   reply.worker_address().push_back("0.0.0.0:" + std::to_string(port));
 
   return reply;
+}
+
+/*************************************
+ *
+ *    General stuff
+ *
+ *************************************/
+
+void SVGPUManager::LaunchMemoryServers() {
+  if(memory_mode == "server") {
+    std::cerr << "Using memory server mode " << std::endl;
+    std::string base_path = "/tmp/gpumemserver_sock";
+
+    for (int i = gpu_offset ; i < n_gpus ; i++) {
+      std::ostringstream stringStream;
+      stringStream << base_path << i;
+      
+      std::cerr << "Launching GPU memory server for GPU " << i << " at socket "
+            << stringStream.str() << std::endl;
+      
+      auto sv = std::make_unique<GPUMemoryServer::Server>(i, stringStream.str());
+      sv.get()->start();
+      memory_servers.push_back(std::move(sv));
+    }
+  }
+  else {
+    std::cerr << "Using other memory mode: " << memory_mode << std::endl;
+  }
 }
 
 uint32_t SVGPUManager::LaunchWorker(uint32_t gpu_id) {
