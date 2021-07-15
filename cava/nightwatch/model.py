@@ -569,6 +569,7 @@ class API:
         self.worker_srcs = ""
         self.common_utility_srcs = ""
         self.c_replacement_code = ""
+        self.c_worker_replacement_code = ""
         self.guestlib_init_prologue = ""
         self.guestlib_init_epilogue = ""
         self.guestlib_fini_prologue = ""

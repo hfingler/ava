@@ -40,4 +40,11 @@ WorkerContext::WorkerContext() {{
 
     function = handle_call(api)
 
-    return api.c_worker_spelling, prelude + stubs + function
+    replacement = f"""
+////// Worker replacement declarations
+#define ava_begin_worker_replacement
+#define ava_end_worker_replacement
+{api.c_worker_replacement_code}
+    """
+
+    return api.c_worker_spelling, prelude + stubs + function + replacement

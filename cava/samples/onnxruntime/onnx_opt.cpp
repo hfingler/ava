@@ -70,6 +70,8 @@ ava_begin_utility;
 #include "guestlib/extensions/extension_api.h"
 #include "guestlib/extensions/guest_cmd_batching_queue.h"
 #include "guestlib/extensions/gpu_address_tracking.h"
+#include "worker/worker.h"
+#include <absl/strings/string_view.h>
 
 #if !defined(__dv)
 #define __dv(v)
@@ -423,7 +425,7 @@ ava_utility void **__helper_load_and_register_fatbin(void *fatCubin, absl::strin
   bool read_ret;
   bool eof_ret;
   struct stat file_stat;
-  auto filename  = fmt::format("{}/fatbin-{}.ava", dump_dir, ava_metadata(NULL)->num_fatbins);
+  auto filename = fmt::format("{}/fatbin-{}.ava", dump_dir, ava_metadata(NULL)->num_fatbins);
   AVA_DEBUG << "Loading " << filename;
   fd = open(filename.c_str(), O_RDONLY, 0666);
   if (fd == -1) {
@@ -859,7 +861,7 @@ void CUDARTAPI __cudaRegisterTexture(void **fatCubinHandle,
 __host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, dim3 blockDim, void **args,
                                                 size_t sharedMem, cudaStream_t stream) {
   /* May lead to TensorFlow internal race condition but safe for ONNX. */
-  //ava_async;
+  // ava_async;
   ava_disable_native_call;
 
   ava_implicit_argument void *func_id = ava_metadata(func)->func_id;
@@ -1015,8 +1017,7 @@ __host__ cudaError_t CUDARTAPI cudaMemcpyToSymbol(const void *symbol, const void
   }
 }
 
-cudaError_t __helper_cuda_memcpy_async_host_to_host(void *dst, const void *src,
-    size_t count, cudaStream_t stream) {
+cudaError_t __helper_cuda_memcpy_async_host_to_host(void *dst, const void *src, size_t count, cudaStream_t stream) {
   ava_async;
   ava_argument(dst) {
     ava_out;
@@ -1029,12 +1030,9 @@ cudaError_t __helper_cuda_memcpy_async_host_to_host(void *dst, const void *src,
   ava_argument(stream) ava_handle;
 }
 
-cudaError_t __helper_cuda_memcpy_async_host_to_device(void *dst, const void *src,
-    size_t count, cudaStream_t stream) {
+cudaError_t __helper_cuda_memcpy_async_host_to_device(void *dst, const void *src, size_t count, cudaStream_t stream) {
   ava_async;
-  ava_argument(dst) {
-    ava_opaque;
-  }
+  ava_argument(dst) { ava_opaque; }
   ava_argument(src) {
     ava_in;
     ava_buffer(count);
@@ -1042,28 +1040,24 @@ cudaError_t __helper_cuda_memcpy_async_host_to_device(void *dst, const void *src
   ava_argument(stream) ava_handle;
 }
 
-cudaError_t __helper_cuda_memcpy_async_device_to_host(void *dst, const void *src,
-    size_t count, cudaStream_t stream) {
+cudaError_t __helper_cuda_memcpy_async_device_to_host(void *dst, const void *src, size_t count, cudaStream_t stream) {
   ava_argument(dst) {
     ava_out;
     ava_buffer(count);
   }
-  ava_argument(src) {
-    ava_opaque;
-  }
+  ava_argument(src) { ava_opaque; }
   ava_argument(stream) ava_handle;
 }
 
-cudaError_t __helper_cuda_memcpy_async_device_to_device(void *dst, const void *src,
-    size_t count, cudaStream_t stream) {
+cudaError_t __helper_cuda_memcpy_async_device_to_device(void *dst, const void *src, size_t count, cudaStream_t stream) {
   ava_async;
   ava_argument(dst) ava_opaque;
   ava_argument(src) ava_opaque;
   ava_argument(stream) ava_handle;
 }
 
-cudaError_t __helper_cuda_memcpy_async_default(void *dst, const void *src,
-    size_t count, cudaStream_t stream, bool dst_is_gpu, bool src_is_gpu) {
+cudaError_t __helper_cuda_memcpy_async_default(void *dst, const void *src, size_t count, cudaStream_t stream,
+                                               bool dst_is_gpu, bool src_is_gpu) {
   if (dst_is_gpu) {
     ava_argument(dst) {
       ava_opaque;
@@ -1077,9 +1071,7 @@ cudaError_t __helper_cuda_memcpy_async_default(void *dst, const void *src,
   }
 
   if (src_is_gpu) {
-    ava_argument(src) {
-      ava_opaque;
-    }
+    ava_argument(src) { ava_opaque; }
   } else {
     ava_argument(src) {
       ava_in;
@@ -1091,7 +1083,8 @@ cudaError_t __helper_cuda_memcpy_async_default(void *dst, const void *src,
 
 ava_begin_replacement;
 EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMemcpyAsync(void *dst, const void *src, size_t count,
-    enum cudaMemcpyKind kind, cudaStream_t stream) {
+                                                                           enum cudaMemcpyKind kind,
+                                                                           cudaStream_t stream) {
   cudaError_t ret;
   if (kind == cudaMemcpyHostToHost) {
     ret = __helper_cuda_memcpy_async_host_to_host(dst, src, count, stream);
@@ -1101,7 +1094,7 @@ EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMemcpyAsync(void 
     ret = __helper_cuda_memcpy_async_device_to_host(dst, src, count, stream);
   } else if (kind == cudaMemcpyDeviceToDevice) {
     ret = __helper_cuda_memcpy_async_device_to_device(dst, src, count, stream);
-  } else if (kind == cudaMemcpyDefault) { // cudaMemcpyDefault
+  } else if (kind == cudaMemcpyDefault) {  // cudaMemcpyDefault
     struct cudaPointerAttributes dst_attr;
     struct cudaPointerAttributes src_attr;
     bool dst_is_gpu = false;
@@ -1109,19 +1102,18 @@ EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMemcpyAsync(void 
     ret = cudaPointerGetAttributes(&dst_attr, dst);
     if (ret != cudaSuccess) {
       dst_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(dst));
-      cudaGetLastError(); // reset error to cudaSuccess
+      cudaGetLastError();  // reset error to cudaSuccess
     } else {
       dst_is_gpu = (dst_attr.type == cudaMemoryTypeDevice);
     }
     ret = cudaPointerGetAttributes(&src_attr, src);
     if (ret != cudaSuccess) {
       src_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(src));
-      cudaGetLastError(); // reset error to cudaSuccess
+      cudaGetLastError();  // reset error to cudaSuccess
     } else {
       src_is_gpu = (src_attr.type == cudaMemoryTypeDevice);
     }
-    ret = __helper_cuda_memcpy_async_default(dst, src, count, stream,
-        dst_is_gpu, src_is_gpu);
+    ret = __helper_cuda_memcpy_async_default(dst, src, count, stream, dst_is_gpu, src_is_gpu);
   }
   return ret;
 }
@@ -12564,7 +12556,7 @@ void ava_preload_cubin_guestlib() {
 }
 ava_end_replacement;
 
-ava_begin_utility;
+ava_begin_worker_replacement;
 void ava_load_cubin_worker(absl::string_view dump_dir) {
   /* Preload CUDA fat binaries */
   fatbin_handle_list = g_ptr_array_new();
@@ -12576,7 +12568,7 @@ void ava_load_cubin_worker(absl::string_view dump_dir) {
   fd = open(fatbin_info_path.c_str(), O_RDONLY, 0666);
   if (fd == -1) {
     ava_fatal("open %s [errno=%d, errstr=%s] at %s:%d", fatbin_info_path.c_str(), errno, strerror(errno), __FILE__,
-        __LINE__);
+              __LINE__);
   }
   ret = ava::support::ReadData(fd, (char *)&fatbin_num, sizeof(int), nullptr);
   if (!ret) {
@@ -12597,7 +12589,7 @@ void ava_load_cubin_worker(absl::string_view dump_dir) {
   }
   close(fd);
 }
-ava_end_utility;
+ava_end_worker_replacement;
 
 ava_utility void __helper_worker_init_epilogue() {
 #ifndef AVA_DONT_PRELOAD_CUBIN

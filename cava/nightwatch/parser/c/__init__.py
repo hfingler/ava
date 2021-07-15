@@ -114,6 +114,7 @@ def parse(filename: str, include_path: List[str], definitions: List[Any], extra_
     primary_include_extents = []
     utility_extents = []
     replacement_extents = []
+    worker_replacement_extents = []
     type_extents = []
 
     global_config = {}
@@ -389,17 +390,21 @@ def parse(filename: str, include_path: List[str], definitions: List[Any], extra_
     utility_mode_start = None
     replacement_mode = False
     replacement_mode_start = None
+    worker_replacement_mode = False
+    worker_replacement_mode_start = None
 
     def convert_decl(c: Cursor):
-        nonlocal utility_mode, utility_mode_start, replacement_mode, replacement_mode_start, metadata_type
-        assert not (replacement_mode and utility_mode)
+        nonlocal utility_mode, utility_mode_start, replacement_mode, \
+            replacement_mode_start, worker_replacement_mode, \
+            worker_replacement_mode_start, metadata_type
+        assert not (replacement_mode and utility_mode and worker_replacement_mode)
         if c.kind in ignored_cursor_kinds:
             return
 
-        normal_mode = not replacement_mode and not utility_mode
+        normal_mode = not replacement_mode and not utility_mode and not worker_replacement_mode
 
         # not (c.kind == CursorKind.VAR_DECL and c.displayname.startswith(
-        #     NIGHTWATCH_PREFIX)) and (utility_mode or replacement_mode):
+        #     NIGHTWATCH_PREFIX)) and (utility_mode or replacement_mode or worker_replacement_mode):
         included_extent = True
         if (
             normal_mode
@@ -466,6 +471,21 @@ def parse(filename: str, include_path: List[str], definitions: List[Any], extra_
                 replacement_mode = False
                 parse_assert(replacement_mode_start is not None, "Should be unreachable.")
                 replacement_extents.append((replacement_mode_start, c.extent.end.line))
+            elif name == "begin_worker_replacement":
+                parse_requires(
+                    not worker_replacement_mode,
+                    "ava_begin_worker_replacement can only be used outside worker replacement mode to enter that mode.",
+                )
+                worker_replacement_mode = True
+                worker_replacement_mode_start = c.extent.start.line
+            elif name == "end_worker_replacement":
+                parse_requires(
+                    worker_replacement_mode,
+                    "ava_end_worker_replacement can only be used inside replacement mode to exit that mode.",
+                )
+                worker_replacement_mode = False
+                parse_assert(worker_replacement_mode_start is not None, "Should be unreachable.")
+                worker_replacement_extents.append((worker_replacement_mode_start, c.extent.end.line))
             else:
                 global_config[name] = get_string_literal(c)
         elif (
@@ -648,6 +668,7 @@ Functions appear in {filename}, but are not in {", ".join(primary_include_files.
     c_utility_code = load_extents(utility_extents)
     c_replacement_code = load_extents(replacement_extents)
     c_type_code = load_extents(type_extents)
+    c_worker_replacement_code = load_extents(worker_replacement_extents)
 
     return API(
         functions=list(functions.values()) + list(include_functions.values()),
@@ -656,6 +677,7 @@ Functions appear in {filename}, but are not in {", ".join(primary_include_files.
         c_type_code=c_type_code,
         c_utility_code=c_utility_code,
         c_replacement_code=c_replacement_code,
+        c_worker_replacement_code=c_worker_replacement_code,
         metadata_type=metadata_type,
         missing_functions=list(include_functions.values()),
         cplusplus=cplusplus,

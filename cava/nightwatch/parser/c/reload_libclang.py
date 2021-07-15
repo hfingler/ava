@@ -8,11 +8,7 @@ clang_directories = glob("/usr/lib*/llvm-{v}/lib/clang/{v}*/include".format(v=cl
     "/usr/lib*/clang/{v}*/include".format(v=clang_version)
 )
 clang_flags = (
-    [
-        "-Wno-return-type",
-        "-Wno-empty-body",
-        "-nobuiltininc",
-    ]
+    ["-Wno-return-type", "-Wno-empty-body", "-nobuiltininc",]
     + [a for d in clang_directories for a in ["-isystem", d]]
     + ["-I../worker/include"]
 )

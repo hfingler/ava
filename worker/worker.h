@@ -8,11 +8,13 @@
 #include "common/cmd_channel.hpp"
 
 #ifdef __cplusplus
+#include <absl/strings/string_view.h>
 #include <plog/Log.h>
 
-#include <vector>
 #include <string>
+#include <vector>
 std::string worker_init_log();
+void ava_load_cubin_worker(absl::string_view dump_dir);
 
 extern "C" {
 #endif
@@ -23,7 +25,6 @@ typedef struct MemoryRegion {
 } MemoryRegion;
 
 void init_worker();
-void ava_load_cubin_worker();
 void nw_report_storage_resource_allocation(const char *const name, ssize_t amount);
 void nw_report_throughput_resource_consumption(const char *const name, ssize_t amount);
 

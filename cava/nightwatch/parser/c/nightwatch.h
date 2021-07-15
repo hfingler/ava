@@ -394,6 +394,16 @@ typedef void (*ava_replace_function)(void *obj, void *data, size_t length);
 /// See ava_begin_replacement.
 #define ava_end_replacement int __MAKE_UNIQUE(__AVA_NAME(end_replacement)) = 0
 
+/// Begin a region of replacement code that will be provided to the application
+/// as part the worker without being changed or interpreted. This is used
+/// to include library functions that could be used by other library and that function calls
+/// utility functions which are static inside the spec.
+#define ava_begin_worker_replacement int __MAKE_UNIQUE(__AVA_NAME(begin_worker_replacement)) = 1
+
+/// End a region of worker replacement code.
+/// See ava_begin_worker_replacement.
+#define ava_end_worker_replacement int __MAKE_UNIQUE(__AVA_NAME(end_worker_replacement)) = 0
+
 /// The helper functions called in the guestlib's and worker's constructors and
 /// destructors. The endpoint library is always initialized first and destroyed
 /// last.
