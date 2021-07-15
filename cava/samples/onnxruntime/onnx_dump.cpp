@@ -561,40 +561,49 @@ void CUDARTAPI __cudaRegisterFunction(void **fatCubinHandle, const char *hostFun
 
 ava_begin_replacement;
 EXPORTED void CUDARTAPI __cudaRegisterVar(void **fatCubinHandle, char *hostVar, char *deviceAddress,
-                                          const char *deviceName, int ext, size_t size, int constant, int global) {}
+                                          const char *deviceName, int ext, size_t size, int constant, int global) {
+  fprintf(stderr, "__cudaRegisterVar is a dummpy implementation\n");
+}
 
 EXPORTED void CUDARTAPI __cudaRegisterFatBinaryEnd(void **fatCubinHandle) {
 #warning This API is called for CUDA 10.1 and 10.2, but it seems to be able to be ignored.
 }
+
+EXPORTED void CUDARTAPI __cudaRegisterTexture(void **fatCubinHandle,
+                                              const void *hostVar,  // struct textureReference *hostVar
+                                              const void **deviceAddress, const char *deviceName, int dim, int norm,
+                                              int ext) {
+  fprintf(stderr, "__cudaRegisterTexture is a dummpy implementation\n");
+}
 ava_end_replacement;
 
-void CUDARTAPI __cudaRegisterTexture(void **fatCubinHandle,
-                                     const void *hostVar,  // struct textureReference *hostVar
-                                     const void **deviceAddress, const char *deviceName, int dim, int norm, int ext) {
-  ava_argument(fatCubinHandle) {
-    ava_in;
-    ava_buffer(__helper_cubin_num(fatCubinHandle) + 1);
-    ava_element {
-      if (fatCubinHandle[ava_index] != NULL) ava_handle;
-    }
-  }
-
-  ava_argument(deviceAddress) {
-    ava_in;
-    ava_buffer(1);
-    ava_element ava_opaque;
-  }
-
-  ava_argument(hostVar) {
-    ava_in;
-    ava_buffer(1);
-  }
-
-  ava_argument(deviceName) {
-    ava_in;
-    ava_buffer(strlen(deviceName) + 1);
-  }
-}
+// void CUDARTAPI __cudaRegisterTexture(void **fatCubinHandle,
+//                                      const void *hostVar,  // struct textureReference *hostVar
+//                                      const void **deviceAddress, const char *deviceName, int dim, int norm, int ext)
+//                                      {
+//   ava_argument(fatCubinHandle) {
+//     ava_in;
+//     ava_buffer(1);
+//     ava_element ava_handle;
+//   }
+//
+//   ava_argument(deviceAddress) {
+//     ava_out;
+//     ava_buffer(1);
+//     ava_element ava_opaque;
+//   }
+//
+//   ava_argument(hostVar) {
+//     ava_in;
+//     ava_type_cast(struct textureReference *);
+//     ava_buffer(1);
+//   }
+//
+//   ava_argument(deviceName) {
+//     ava_in;
+//     ava_buffer(strlen(deviceName) + 1);
+//   }
+// }
 
 __host__ __device__ unsigned CUDARTAPI
 __cudaPushCallConfiguration(dim3 gridDim, dim3 blockDim,
@@ -11630,7 +11639,22 @@ __host__ cudaError_t CUDARTAPI cudaFreeArray(cudaArray_t array) { ava_unsupporte
 
 __host__ cudaError_t CUDARTAPI cudaFreeMipmappedArray(cudaMipmappedArray_t mipmappedArray) { ava_unsupported; }
 
-__host__ cudaError_t CUDARTAPI cudaHostAlloc(void **pHost, size_t size, unsigned int flags) { ava_unsupported; }
+__host__ cudaError_t CUDARTAPI cudaHostAlloc(void **pHost, size_t size, unsigned int flags) {
+  ava_argument(pHost) {
+    ava_out;
+    ava_buffer(1);
+    ava_element {
+      ava_buffer(size);
+      ava_buffer_allocator(__helper_cu_mem_host_alloc_portable, __helper_cu_mem_host_free);
+      ava_lifetime_manual;
+      ava_allocates;
+      ava_no_copy;
+    }
+  }
+
+  ava_execute();
+  ava_metadata(*pHost)->is_pinned = 1;
+}
 
 __host__ cudaError_t CUDARTAPI cudaHostRegister(void *ptr, size_t size, unsigned int flags) { ava_unsupported; }
 
@@ -11711,13 +11735,11 @@ CUresult CUDAAPI cuTexRefSetAddress(unsigned int *ByteOffset, CUtexref hTexRef, 
   ava_unsupported;
 }
 
-CUresult CUDAAPI  cuTexRefSetAddress(size_t *ByteOffset, CUtexref hTexRef, CUdeviceptr dptr, size_t bytes) {
+CUresult CUDAAPI cuTexRefSetAddress(size_t *ByteOffset, CUtexref hTexRef, CUdeviceptr dptr, size_t bytes) {
   ava_unsupported;
 }
 
-CUresult CUDAAPI cuTexRefSetMaxAnisotropy(CUtexref hTexRef, unsigned int maxAniso) {
-  ava_unsupported;
-}
+CUresult CUDAAPI cuTexRefSetMaxAnisotropy(CUtexref hTexRef, unsigned int maxAniso) { ava_unsupported; }
 
 CUresult CUDAAPI cuTexObjectCreate(CUtexObject *pTexObject, const CUDA_RESOURCE_DESC *pResDesc,
                                    const CUDA_TEXTURE_DESC *pTexDesc, const CUDA_RESOURCE_VIEW_DESC *pResViewDesc) {
@@ -12702,10 +12724,18 @@ __host__ cudaError_t CUDARTAPI cudaGetChannelDesc(struct cudaChannelFormatDesc *
   ava_unsupported;
 }
 
-__host__ struct cudaChannelFormatDesc CUDARTAPI cudaCreateChannelDesc(int x, int y, int z, int w,
-                                                                      enum cudaChannelFormatKind f) {
-  ava_unsupported;
+ava_begin_replacement;
+EXPORTED __host__ struct cudaChannelFormatDesc CUDARTAPI cudaCreateChannelDesc(int x, int y, int z, int w,
+                                                                               enum cudaChannelFormatKind f) {
+  struct cudaChannelFormatDesc a;
+  a.x = x;
+  a.y = y;
+  a.z = z;
+  a.w = w;
+  a.f = f;
+  return a;
 }
+ava_end_replacement;
 
 __host__ cudaError_t CUDARTAPI cudaCreateTextureObject(cudaTextureObject_t *pTexObject,
                                                        const struct cudaResourceDesc *pResDesc,
