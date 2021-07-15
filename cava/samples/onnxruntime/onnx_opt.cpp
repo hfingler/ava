@@ -70,7 +70,6 @@ ava_begin_utility;
 #include "guestlib/extensions/extension_api.h"
 #include "guestlib/extensions/guest_cmd_batching_queue.h"
 #include "guestlib/extensions/gpu_address_tracking.h"
-#include "worker/worker.h"
 #include <absl/strings/string_view.h>
 
 #if !defined(__dv)
@@ -108,6 +107,7 @@ extern GQueue *cu_event_pool;
 extern GQueue *idle_cu_event_pool;
 
 extern cudaError_t cuda_last_error;
+void __helper_worker_init_epilogue();
 
 ava_end_utility;
 
@@ -767,7 +767,9 @@ ava_end_replacement;
 
 ava_begin_replacement;
 EXPORTED void CUDARTAPI __cudaRegisterVar(void **fatCubinHandle, char *hostVar, char *deviceAddress,
-                                          const char *deviceName, int ext, size_t size, int constant, int global) {}
+                                          const char *deviceName, int ext, size_t size, int constant, int global) {
+  fprintf(stderr, "__cudaRegisterVar is a dummpy implementation\n");
+}
 
 EXPORTED void CUDARTAPI __cudaRegisterFatBinaryEnd(void **fatCubinHandle) {
 #warning This API is called for CUDA 10.1 and 10.2, but it seems to be able to be ignored.
@@ -850,13 +852,15 @@ EXPORTED cudaError_t CUDARTAPI __cudaPopCallConfiguration(dim3 *gridDim, dim3 *b
 #endif
   return cudaSuccess;
 }
-ava_end_replacement;
 
-void CUDARTAPI __cudaRegisterTexture(void **fatCubinHandle,
-                                     const void *hostVar,  // struct textureReference *hostVar
-                                     const void **deviceAddress, const char *deviceName, int dim, int norm, int ext) {
-  ava_unsupported;
+EXPORTED void CUDARTAPI __cudaRegisterTexture(void **fatCubinHandle,
+                                              const void *hostVar,  // struct textureReference *hostVar
+                                              const void **deviceAddress, const char *deviceName, int dim, int norm,
+                                              int ext) {
+  fprintf(stderr, "__cudaRegisterTexture is a dummpy implementation\n");
 }
+
+ava_end_replacement;
 
 __host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, dim3 blockDim, void **args,
                                                 size_t sharedMem, cudaStream_t stream) {
@@ -12026,7 +12030,22 @@ __host__ cudaError_t CUDARTAPI cudaFreeArray(cudaArray_t array) { ava_unsupporte
 
 __host__ cudaError_t CUDARTAPI cudaFreeMipmappedArray(cudaMipmappedArray_t mipmappedArray) { ava_unsupported; }
 
-__host__ cudaError_t CUDARTAPI cudaHostAlloc(void **pHost, size_t size, unsigned int flags) { ava_unsupported; }
+__host__ cudaError_t CUDARTAPI cudaHostAlloc(void **pHost, size_t size, unsigned int flags) {
+  ava_argument(pHost) {
+    ava_out;
+    ava_buffer(1);
+    ava_element {
+      ava_buffer(size);
+      ava_buffer_allocator(__helper_cu_mem_host_alloc_portable, __helper_cu_mem_host_free);
+      ava_lifetime_manual;
+      ava_allocates;
+      ava_no_copy;
+    }
+  }
+
+  ava_execute();
+  ava_metadata(*pHost)->is_pinned = 1;
+}
 
 __host__ cudaError_t CUDARTAPI cudaHostRegister(void *ptr, size_t size, unsigned int flags) { ava_unsupported; }
 
@@ -12294,10 +12313,18 @@ __host__ cudaError_t CUDARTAPI cudaGetChannelDesc(struct cudaChannelFormatDesc *
   ava_unsupported;
 }
 
-__host__ struct cudaChannelFormatDesc CUDARTAPI cudaCreateChannelDesc(int x, int y, int z, int w,
-                                                                      enum cudaChannelFormatKind f) {
-  ava_unsupported;
+ava_begin_replacement;
+EXPORTED __host__ struct cudaChannelFormatDesc CUDARTAPI cudaCreateChannelDesc(int x, int y, int z, int w,
+                                                                               enum cudaChannelFormatKind f) {
+  struct cudaChannelFormatDesc a;
+  a.x = x;
+  a.y = y;
+  a.z = z;
+  a.w = w;
+  a.f = f;
+  return a;
 }
+ava_end_replacement;
 
 __host__ cudaError_t CUDARTAPI cudaCreateTextureObject(cudaTextureObject_t *pTexObject,
                                                        const struct cudaResourceDesc *pResDesc,
@@ -12589,14 +12616,14 @@ void ava_load_cubin_worker(absl::string_view dump_dir) {
   }
   close(fd);
 }
-ava_end_worker_replacement;
 
-ava_utility void __helper_worker_init_epilogue() {
+void __helper_worker_init_epilogue() {
 #ifndef AVA_DONT_PRELOAD_CUBIN
   ava_load_cubin_worker("/cuda_dumps");
 #endif
   worker_tf_opt_init();
 }
+ava_end_worker_replacement;
 
 ava_guestlib_init_prologue(__helper_guestlib_init_prologue(this));
 ava_guestlib_fini_prologue(__helper_guestlib_fini_prologue(this));
