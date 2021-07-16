@@ -1,4 +1,3 @@
-#include "gpuserver.hpp"
 #include <map>
 #include <memory>
 #include <string>
@@ -8,10 +7,10 @@
 #include <cuda_runtime_api.h>
 #include "cuda_helper.hpp"
 #include <zmq.h>
+#include "server.hpp"
+#include "common.hpp"
 
 namespace GPUMemoryServer {
-
-#define BUF_SIZE 4096
 
 //The default value for flags is cudaMemAttachGlobal. If cudaMemAttachGlobal is specified, then this memory is accessible from any stream on any device.
 //cudaMallocManaged ( void** devPtr, size_t size, unsigned int  flags = cudaMemAttachGlobal ) 
@@ -70,7 +69,7 @@ void Server::handleRequest(char* buffer, Reply* rep) {
         used_memory[req.worker_id] += req.data.size;
 
         //construct reply
-        memcpy(&(rep->memHandle), &memHandle, sizeof(cudaIpcMemHandle_t));
+        memcpy(&(rep->data.memHandle), &memHandle, sizeof(cudaIpcMemHandle_t));
     }
     /*************************
      *       cudaFree
@@ -91,7 +90,7 @@ void Server::handleRequest(char* buffer, Reply* rep) {
         }
 
         //construct reply
-        memcpy(&(rep->memHandle), 0, sizeof(Reply));
+        memset(&(rep), 0, sizeof(Reply));
     }
     /*************************
      * worker finished, cleanup
@@ -100,7 +99,7 @@ void Server::handleRequest(char* buffer, Reply* rep) {
         used_memory[req.worker_id] = 0;
         allocs[req.worker_id].clear();
         //construct reply
-        memcpy(&(rep->memHandle), 0, sizeof(Reply));
+        memset(&(rep), 0, sizeof(Reply));
     }
 }   
 

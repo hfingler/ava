@@ -3,7 +3,7 @@
 #include <sys/wait.h>
 #include <boost/algorithm/string/join.hpp>
 #include "declaration.h"
-#include "memory_server/gpuserver.hpp"
+#include "extensions/memory_server/server.hpp"
 
 #include <string>
 #include <memory>
@@ -151,7 +151,7 @@ ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::Worker
 void SVGPUManager::LaunchMemoryServers() {
   if(memory_mode == "server") {
     std::cerr << "Using memory server mode " << std::endl;
-    std::string base_path = "/tmp/gpumemserver_sock";
+    std::string base_path = GPUMemoryServer::get_base_socket_path();
 
     for (int i = gpu_offset ; i < n_gpus ; i++) {
       std::ostringstream stringStream;

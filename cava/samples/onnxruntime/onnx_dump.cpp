@@ -4,9 +4,9 @@ ava_version("10.1.0");
 ava_identifier(ONNX_DUMP);
 ava_number(10);
 ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -I/usr/local/cuda-10.1/nvvm/include);
-ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver -L/usr/local/cuda-10.1/nvvm/lib64 -lnvvm);
+ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver -L/usr/local/cuda-10.1/nvvm/lib64 -lnvvm zmq);
 ava_guestlib_srcs(../common/extensions/cudart_10.1_utilities.cpp cuda/nvvm_helper.cpp extensions/gpu_address_tracking.cpp);
-ava_worker_srcs(../common/extensions/cudart_10.1_utilities.cpp extensions/cuda.cpp extensions/gpu_memory_tracker.cpp);
+ava_worker_srcs(../common/extensions/cudart_10.1_utilities.cpp extensions/cuda.cpp ../common/extensions/memory_server/client.cpp);
 ava_export_qualifier();
 ava_soname(libcuda.so libcuda.so.1 libcudart.so.10 libcudart.so.10.1 libcublas.so.10 libcublasLt.so.10 libcudnn.so.7 libcufft.so.10 libcurand.so.10 libcusolver.so.10 libcusparse.so.10);
 // clang-format on
@@ -60,8 +60,6 @@ ava_begin_utility;
 #include "guestlib/cuda/nvvm_helper.h"
 #include "common/support/io.h"
 #include "guestlib/extensions/gpu_address_tracking.h"
-
-#include "worker/extensions/gpu_memory_tracker.hpp"
 
 #if !defined(__dv)
 #define __dv(v)
@@ -675,9 +673,9 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMalloc(void **devPtr, size
   if (ava_is_guest) {
     __helper_save_gpu_address_range(reinterpret_cast<uint64_t>(*devPtr), size, static_cast<void *>(&ret));
   }
-  if (ava_is_worker) {
-    print_test_tracker();
-  }
+  //if (ava_is_worker) {
+  //  print_test_tracker();
+  //}
 }
 
 __host__ cudaError_t CUDARTAPI cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind) {

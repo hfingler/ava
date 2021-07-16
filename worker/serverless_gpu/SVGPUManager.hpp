@@ -9,7 +9,7 @@
 #include "resmngr.grpc.pb.h"
 #include "scheduling/BaseScheduler.hpp"
 #include "scheduling/RoundRobin.hpp"
-#include "memory_server/gpuserver.hpp"
+#include "extensions/memory_server/server.hpp"
 
 using ava_manager::ManagerServiceServerBase;
 using gpuserver::GPU;

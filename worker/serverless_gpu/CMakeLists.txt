@@ -4,8 +4,6 @@ project(svgpu-manager C CXX)
 
 list(APPEND CMAKE_MODULE_PATH)
 
-#"${CMAKE_CURRENT_BINARY_DIR}/../../third_party/libzmq/cmake"
-
 set(protobuf_MODULE_COMPATIBLE TRUE)
 find_package(Protobuf CONFIG REQUIRED)
 message(STATUS "Using protobuf ${Protobuf_VERSION}")
@@ -80,7 +78,7 @@ target_link_libraries(grpc_proto
 add_executable(svgpu-manager
   manager.cpp
   SVGPUManager.cpp
-  memory_server/gpuserver.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../common/extensions/memory_server/server.cpp
   ${manager_service_proto_srcs}
   ${manager_service_ava_srcs}
 )

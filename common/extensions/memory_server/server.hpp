@@ -7,26 +7,9 @@
 #include <memory>
 #include <thread>
 #include <cuda_runtime_api.h>
+#include "common.hpp"
 
 namespace GPUMemoryServer {
-
-    enum RequestType { ALLOC, FREE, FINISHED };
-
-    union RequestData {
-        uint64_t size;
-        void* devPtr;
-    };
-
-    struct Request {
-        RequestType type;
-        uint32_t worker_id;
-        RequestData data;
-    };
-
-    struct Reply {
-        cudaIpcMemHandle_t memHandle;
-    };
-
     struct Allocation {
         uint64_t size;
         void* devPtr;

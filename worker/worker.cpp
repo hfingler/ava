@@ -18,6 +18,11 @@
 #include <cstdio>
 #include <gsl/gsl>
 #include <iostream>
+#include <string>
+#include <chrono>
+#include <thread>
+
+#include <zmq.h>
 
 #include "common/cmd_channel_impl.hpp"
 #include "common/cmd_handler.hpp"
@@ -27,7 +32,8 @@
 #include "provision_gpu.h"
 #include "worker_context.h"
 
-#include "extensions/gpu_memory_tracker.hpp"
+#include "extensions/memory_server/client.hpp"
+
 
 struct command_channel *chan;
 struct command_channel *chan_hv = NULL;
@@ -98,8 +104,6 @@ int main(int argc, char *argv[]) {
   }
   absl::InitializeSymbolizer(argv[0]);
 
-  print_test_tracker();
-
   /* Read GPU provision information. */
   char const *cuda_uuid_str = getenv("CUDA_VISIBLE_DEVICES");
   std::string cuda_uuid = cuda_uuid_str ? std::string(cuda_uuid_str) : "";
@@ -139,6 +143,22 @@ int main(int argc, char *argv[]) {
     //this sets API id and other stuff
     init_internal_command_handler();
 
+    char *cmmode = std::getenv("GPU_MEMORY_MODE");
+    std::string mmode = cmmode ? std::string(cmmode) : "default";
+    //if it's server mode we need to connect to it
+    if (mmode == "server") {
+      uint16_t gpuid = std::stoi(cuda_uuid);
+      std::cerr << "[worker#" << listen_port << "] connecting to memory server at GPU #" << gpuid << ". if it loops here we couldn't connect" << std::endl;
+      int rc = 1;
+      //we need to loop since it's very likely we are created before the server is
+      while (rc != 0) {
+        GPUMemoryServer::Client::getInstance().connectToGPU(gpuid);
+        //be kind
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      }
+      std::cerr << "[worker#" << listen_port << "] connected to memory server at GPU #" << gpuid << "!" << std::endl;
+    }
+
     //only loop if we are in serverless mode
     do {
       //get a guestlib connection
@@ -150,6 +170,11 @@ int main(int argc, char *argv[]) {
       wait_for_command_handler();
       destroy_command_handler(false);
       std::cerr << "[worker#" << listen_port << "] worker is done, looping." << std::endl;
+
+      //if mem server mode, clean up allocations
+      if (mmode == "server") {
+        GPUMemoryServer::Client::getInstance().sendCleanupRequest();
+      }
     } while(std::getenv("SERVERLESS_MODE"));
 
     std::cerr << "[worker#" << listen_port << "] freeing channel and quiting." << std::endl;
