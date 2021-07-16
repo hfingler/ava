@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <absl/debugging/symbolize.h>
 #include <absl/flags/flag.h>
 #include <absl/flags/parse.h>
@@ -18,6 +19,9 @@ ABSL_FLAG(uint16_t, ngpus, 1, "(OPTIONAL) Number of GPUs the manager should use"
 ABSL_FLAG(uint16_t, gpuoffset, 0, "(OPTIONAL)GPU id offset");
 ABSL_FLAG(std::string, resmngr_addr, "",
           "(OPTIONAL) Address of the Alouatta resource manager. If enabled will run on grpc mode.");
+ABSL_FLAG(std::string, gpumemory_mode, "normal",
+          "(OPTIONAL) GPU memory mode, normal means all guestlib do their own, server means we use memory servers.");
+
 
 int main(int argc, const char *argv[]) {
   absl::ParseCommandLine(argc, const_cast<char **>(argv));
@@ -37,10 +41,10 @@ int main(int argc, const char *argv[]) {
   std::cerr << "Using port " << port << " for AvA" << std::endl;
   SVGPUManager *manager =
       new SVGPUManager(port, absl::GetFlag(FLAGS_worker_port_base), absl::GetFlag(FLAGS_worker_path), worker_argv,
-                       worker_env, absl::GetFlag(FLAGS_ngpus), absl::GetFlag(FLAGS_gpuoffset));
+                       worker_env, absl::GetFlag(FLAGS_ngpus), absl::GetFlag(FLAGS_gpuoffset),
+                       absl::GetFlag(FLAGS_gpumemory_mode));
 
   char *rm_addr = std::getenv("RESMNGR_ADDR");
-
   // normal ava mode
   if (!rm_addr) {
     std::cerr << "Running manager on normal manager mode" << std::endl;
@@ -48,6 +52,9 @@ int main(int argc, const char *argv[]) {
   }
   // gRPC mode
   else {
+    //let's just rename this thing since a lot of parts will use it
+    setenv("SERVERLESS_MODE", "1", 1);
+    
     std::string full_addr(rm_addr);
     full_addr += ":";
     full_addr += std::getenv("RESMNGR_PORT");
@@ -57,6 +64,10 @@ int main(int argc, const char *argv[]) {
     // wait a bit
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
     manager->RegisterSelf(full_addr);
+
+    //launch the memory servers, needs to be after LaunchService, which fills device count
+    manager->LaunchMemoryServers();
+
     // block forever
     manager->grpc_server->Wait();
   }

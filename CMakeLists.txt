@@ -141,9 +141,25 @@ target_link_libraries(glib2.0 INTERFACE
 set(GLIB2_INCLUDE_DIRS ${INSTALL_PREFIX}/lib/x86_64-linux-gnu/glib-2.0/include
   ${INSTALL_PREFIX}/include/glib-2.0/)
 
+# zmq
+ExternalProject_Add(zmq_build
+  BUILD_BYPRODUCTS ${INSTALL_PREFIX}/lib/libzmq.a
+  SOURCE_DIR ${CMAKE_SOURCE_DIR}/third_party/libzmq
+  CMAKE_ARGS -DBUILD_EXAMPLES=OFF -DBUILD_SHARED_LIBS=OFF BUILD_TESTS=OFF -DBUILD_STATIC=ON 
+    -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+  INSTALL_DIR ${INSTALL_PREFIX}
+)
+add_library(zmq INTERFACE)
+add_dependencies(zmq zmq_build)
+target_include_directories(zmq INTERFACE
+  ${INSTALL_PREFIX}/include)
+target_link_libraries(zmq INTERFACE
+  ${INSTALL_PREFIX}/lib/libzmq.a)
+
 add_subdirectory(third_party/fmt)
 add_subdirectory(third_party/abseil-cpp)
 add_subdirectory(third_party/GSL)
+add_subdirectory(third_party/libzmq)
 
 ###### Build AvA manager ######
 

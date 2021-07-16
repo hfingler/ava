@@ -5,7 +5,7 @@
 #include <string>
 #include <map>
 #include <memory>
-
+#include <thread>
 #include <cuda_runtime_api.h>
 
 namespace GPUMemoryServer {
@@ -46,10 +46,15 @@ namespace GPUMemoryServer {
         std::map<uint32_t, std::map<uint64_t, std::unique_ptr<Allocation>>> allocs;
         std::map<uint32_t, uint64_t> used_memory;
 
-        Server(uint16_t gpu, std::string unix_socket_path) : gpu(gpu), unix_socket_path(unix_socket_path){}
-        void run();
-    };
+        std::thread self_thread;
 
+        Server(uint16_t gpu, std::string unix_socket_path) : gpu(gpu), unix_socket_path(unix_socket_path){}
+        void handleRequest(char* buffer, Reply* rep);
+        void run();
+        void start() {
+            self_thread = std::thread(&Server::run, this);
+        }
+    };
 
 }
 
