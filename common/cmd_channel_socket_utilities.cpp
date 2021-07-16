@@ -12,7 +12,7 @@
 #include "common/devconf.h"
 #include "common/guest_mem.h"
 #include "common/logging.h"
-#include <errno.h>
+#include <sys/resource.h>
 
 namespace chansocketutil {
 
@@ -58,7 +58,8 @@ size_t command_channel_socket_buffer_size(const struct command_channel *AVA_UNUS
 struct command_base *command_channel_socket_new_command(struct command_channel *c, size_t command_struct_size,
                                                         size_t data_region_size) {
   struct command_channel_socket *chan = (struct command_channel_socket *)c;
-  struct command_base *cmd = (struct command_base *)malloc(command_struct_size + data_region_size);
+  size_t total_size = command_struct_size + data_region_size;
+  struct command_base *cmd = (struct command_base *)malloc(total_size);
   if (cmd == nullptr) {
     SYSCALL_FAILURE_PRINT("malloc");
   }
@@ -152,7 +153,7 @@ struct command_base *command_channel_socket_receive_command(struct command_chann
   if (chan->pfd.revents & POLLRDHUP) {
     AVA_WARNING << "command_channel_socket shutdown";
     close(chan->pfd.fd);
-    //exit(-1);
+    // exit(-1);
     return NULL;
   }
 

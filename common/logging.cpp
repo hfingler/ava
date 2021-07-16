@@ -67,8 +67,9 @@ void ava_fatal(const char *format, ...) {
   static_cast<void>(len);
   va_end(ap);
 
-  AVA_ERROR << str;
+  fprintf(stderr, str);
   free(str);
+  exit(EXIT_FAILURE);
 }
 
 namespace ava {
@@ -84,7 +85,6 @@ LogMessageFatal::LogMessageFatal(const char *file, int line, const std::string &
 
 LogMessageFatal::~LogMessageFatal() {
   (*plog::get<PLOG_DEFAULT_INSTANCE_ID>()) += record_.ref();
-  raise(SIGABRT);
   exit(EXIT_FAILURE);
 }
 
