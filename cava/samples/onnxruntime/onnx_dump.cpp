@@ -1454,8 +1454,6 @@ CUresult CUDAAPI cuMemGetAddressRange(CUdeviceptr *pbase, size_t *psize, CUdevic
 
 CUresult CUDAAPI cuMemHostGetFlags(unsigned int *pFlags, void *p) { ava_unsupported; }
 
-CUresult CUDAAPI cuCtxSynchronize(void);
-
 CUresult CUDAAPI cuLinkCreate(unsigned int numOptions, CUjit_option *options, void **optionValues,
                               CUlinkState *stateOut) {
   ava_argument(options) {
@@ -11682,12 +11680,28 @@ __host__ cudaError_t CUDARTAPI cudaMallocArray(cudaArray_t *array, const cudaCha
 }
 
 CUBLASAPI cublasStatus_t CUBLASWINAPI cublasGetStream(cublasHandle_t handle, cudaStream_t *streamId) {
-  ava_unsupported;
+  ava_argument(handle) ava_handle;
+  ava_argument(streamId) {
+    ava_out;
+    ava_buffer(1);
+    ava_element ava_handle;
+  }
 }
 
-CUBLASAPI cublasStatus_t CUBLASWINAPI cublasGetProperty(libraryPropertyType type, int *value) { ava_unsupported; }
+CUBLASAPI cublasStatus_t CUBLASWINAPI cublasGetProperty(libraryPropertyType type, int *value) {
+  ava_argument(value) {
+    ava_out;
+    ava_buffer(1);
+  }
+}
 
-CUBLASAPI cublasStatus_t CUBLASWINAPI cublasGetVersion(cublasHandle_t handle, int *version) { ava_unsupported; }
+CUBLASAPI cublasStatus_t CUBLASWINAPI cublasGetVersion(cublasHandle_t handle, int *version) {
+  ava_argument(handle) ava_handle;
+  ava_argument(version) {
+    ava_out;
+    ava_buffer(1);
+  }
+}
 
 CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSetWorkspace(cublasHandle_t handle, void *workspace,
                                                          size_t workspaceSizeInBytes) {
@@ -12773,7 +12787,12 @@ __host__ cudaError_t CUDARTAPI cudaGetSurfaceObjectResourceDesc(struct cudaResou
   ava_unsupported;
 }
 
-__host__ cudaError_t CUDARTAPI cudaDriverGetVersion(int *driverVersion) { ava_unsupported; }
+__host__ cudaError_t CUDARTAPI cudaDriverGetVersion(int *driverVersion) {
+  ava_argument(driverVersion) {
+    ava_out;
+    ava_buffer(1);
+  }
+}
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaRuntimeGetVersion(int *runtimeVersion) {
   ava_argument(runtimeVersion) {
