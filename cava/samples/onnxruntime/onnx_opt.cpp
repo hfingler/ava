@@ -72,6 +72,7 @@ ava_begin_utility;
 #include "guestlib/extensions/guest_cmd_batching_queue.h"
 #include "guestlib/extensions/gpu_address_tracking.h"
 #include <absl/strings/string_view.h>
+#include "common/extensions/memory_server/client.hpp"
 
 #if !defined(__dv)
 #define __dv(v)
@@ -933,7 +934,9 @@ EXPORTED __host__ cudaError_t CUDARTAPI cudaFreeHost(void *ptr) {
 }
 ava_end_replacement;
 
-__host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMalloc(void **devPtr, size_t size) {
+//this is the RPC declaration on guestlib
+//definition will be executed on worker
+cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
   ava_argument(devPtr) {
     ava_out;
     ava_buffer(1);
@@ -944,6 +947,13 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMalloc(void **devPtr, size
     __helper_save_gpu_address_range(reinterpret_cast<uint64_t>(*devPtr), size, static_cast<void *>(&ret));
   }
 }
+
+ava_begin_replacement;
+EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMalloc(void **devPtr, size_t size) { 
+  printf("in replaced cudaMalloc\n");
+  return __internal_cudaMalloc(devPtr, size);
+}
+ava_end_replacement;
 
 __host__ cudaError_t CUDARTAPI cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind) {
   ava_argument(dst) {
@@ -965,7 +975,9 @@ __host__ cudaError_t CUDARTAPI cudaMemcpy(void *dst, const void *src, size_t cou
   }
 }
 
-__host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFree(void *devPtr) {
+//this is the RPC declaration on guestlib
+//definition will be executed on worker
+cudaError_t __internal_cudaFree(void *devPtr) {
   ava_async;
   ava_argument(devPtr) ava_opaque;
   ava_execute();
@@ -973,6 +985,12 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFree(void *devPtr) {
     __helper_remove_gpu_address_range(reinterpret_cast<uint64_t>(devPtr));
   }
 }
+
+ava_begin_replacement;
+__host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFree(void *devPtr) {
+  __internal_cudaFree(devPtr);
+}
+ava_end_replacement;
 
 /* Rich set of APIs */
 

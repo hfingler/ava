@@ -6,39 +6,78 @@
 #include "common.hpp"
 #include "client.hpp"
 #include <zmq.h>
+#include <errno.h>
+
+//I'll just dumpt it here so I don't have to link yet another .cpp
+cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
+    //if we are not connected, use normal cudaMalloc
+    if(!GPUMemoryServer::Client::getInstance().isConnected()) {
+        return cudaMalloc(devPtr, size);
+    }
+
+    GPUMemoryServer::Reply rep =
+            GPUMemoryServer::Client::getInstance().sendMallocRequest(size); 
+    printf("Done, err code is %d\n", rep.returnErr);
+
+    void* ourDevPtr;
+    if (rep.returnErr == 0) {
+        //mapping
+
+        printf("MAPPING bytes of memhandle\n");
+        for (int i = 0 ; i < sizeof(cudaIpcMemHandle_t) ; i++) {
+            printf("%#02x ", ((char*)&rep.data.memHandle)[i]);
+        }
+        printf("Mapping dev ptr in this process\n");
+        cudaError_t err = cudaIpcOpenMemHandle(&ourDevPtr, rep.data.memHandle, cudaIpcMemLazyEnablePeerAccess);
+        printf("cudaIpcOpenMemHandle code is %d\n", err);
+        printf("mapped ptr is %p\n", ourDevPtr);
+    }
+
+    //even if the malloc failed, this is fine
+    *devPtr = ourDevPtr;
+    return rep.returnErr;
+}
+
+cudaError_t __internal_cudaFree(void *devPtr) {
+    GPUMemoryServer::Reply rep =
+            GPUMemoryServer::Client::getInstance().sendFreeRequest(devPtr); 
+    return rep.returnErr;
+}
 
 namespace GPUMemoryServer {
 
-    void Client::connectToGPU(uint16_t gpuId) {
+    int Client::connectToGPU(uint16_t gpuId) {
         context = zmq_ctx_new();
         socket = zmq_socket(context, ZMQ_REQ);
         std::ostringstream stringStream;
         stringStream << get_base_socket_path() << gpuId;
-        socket = zmq_connect(socket, stringStream.str().c_str());
+        is_connected = true;
+        int ret = zmq_connect(socket, stringStream.str().c_str());
+        if (ret == -1) {
+            printf("connect failed, errno: %d\n", errno);
+        }
+        return ret;
     }
 
-    void* Client::sendMallocRequest(uint64_t size) {
+    Reply Client::sendMallocRequest(uint64_t size) {
         Request req;
         req.type = RequestType::ALLOC;
         req.data.size = size;
-
-        Reply rep = sendRequest(req);
-        return rep.data.devPtr;
+        return sendRequest(req);
     }
     
-    void Client::sendFreeRequest(void* devPtr) {
+    Reply Client::sendFreeRequest(void* devPtr) {
         Request req;
         req.type = RequestType::FREE;
         req.data.devPtr = devPtr;
-
-        sendRequest(req);
+        return sendRequest(req);
     }
     
     //this is called when we are done, so cleanup too
-    void Client::sendCleanupRequest() {
+    Reply Client::sendCleanupRequest() {
         Request req;
         req.type = RequestType::FINISHED;
-        sendRequest(req);
+        return sendRequest(req);
     }
 
     Reply Client::sendRequest(Request &req) {

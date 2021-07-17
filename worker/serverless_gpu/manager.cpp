@@ -38,6 +38,10 @@ int main(int argc, const char *argv[]) {
     port = absl::GetFlag(FLAGS_manager_port);
   }
 
+  std::string mmode = "GPU_MEMORY_MODE=";
+  mmode += absl::GetFlag(FLAGS_gpumemory_mode);
+  worker_env.push_back(mmode);
+
   std::cerr << "Using port " << port << " for AvA" << std::endl;
   SVGPUManager *manager =
       new SVGPUManager(port, absl::GetFlag(FLAGS_worker_port_base), absl::GetFlag(FLAGS_worker_path), worker_argv,
@@ -48,15 +52,14 @@ int main(int argc, const char *argv[]) {
   // normal ava mode
   if (!rm_addr) {
     std::cerr << "Running manager on normal manager mode" << std::endl;
+    manager->LaunchMemoryServers();
     manager->RunServer();
   }
   // gRPC mode
   else {
     //let's just rename this thing since a lot of parts will use it
     setenv("SERVERLESS_MODE", "1", 1);
-    //this will be passed to workers
-    setenv("GPU_MEMORY_MODE", manager->memory_mode.c_str(), 1);
-  
+
     std::string full_addr(rm_addr);
     full_addr += ":";
     full_addr += std::getenv("RESMNGR_PORT");

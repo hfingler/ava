@@ -62,7 +62,7 @@ GLIB2_CFLAGS = pkgconfig.cflags("glib-2.0").split(" ")
 FMT_CFLAGS = ["-I" + os.path.dirname(os.path.realpath(sys.argv[0])) + "/third_party/fmt/include"]
 GSL_CFLAGS = ["-I" + os.path.dirname(os.path.realpath(sys.argv[0])) + "/third_party/GSL/include"]
 ABSL_CFLAGS = ["-I" + os.path.dirname(os.path.realpath(sys.argv[0])) + "/third_party/abseil-cpp"]
-
+ZMQ_CFLAGS = ["-I" + os.path.dirname(os.path.realpath(sys.argv[0])) + "/third_party/deps/include"]
 
 def check_cflags(force_build: bool = False):
     any_warning = False
@@ -91,27 +91,27 @@ SPEC_LIST = {
     "cudadrv": ("samples/cudadrv/cuda_driver.c", [] + CUDA_10_1_CFLAGS),
     "cudart": (
         "samples/cudart/cudart.cpp",
-        ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS + GSL_CFLAGS + ABSL_CFLAGS,
+        ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS + GSL_CFLAGS + ABSL_CFLAGS + ZMQ_CFLAGS,
     ),
     "demo": ("samples/demo/demo.c", ["-Iheaders"]),
     "gti": ("samples/gti/gti.c", []),
     "ncsdk": ("samples/ncsdk/mvnc.c", []),
     "onnx_dump": (
         "samples/onnxruntime/onnx_dump.cpp",
-        ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS + GSL_CFLAGS + ABSL_CFLAGS,
+        ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS + GSL_CFLAGS + ABSL_CFLAGS + ZMQ_CFLAGS,
     ),
     "onnx_opt": (
         "samples/onnxruntime/onnx_opt.cpp",
-        ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS + GSL_CFLAGS + ABSL_CFLAGS,
+        ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS + GSL_CFLAGS + ABSL_CFLAGS + ZMQ_CFLAGS,
     ),
     "opencl": ("samples/opencl/opencl.c", []),
     "pt_dump": (
         "samples/pytorch/pt_dump.cpp",
-        ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS + GSL_CFLAGS + ABSL_CFLAGS,
+        ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS + GSL_CFLAGS + ABSL_CFLAGS + ZMQ_CFLAGS,
     ),
     "pt_opt": (
         "samples/pytorch/pt_opt.cpp",
-        ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS + GSL_CFLAGS + ABSL_CFLAGS,
+        ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS + GSL_CFLAGS + ABSL_CFLAGS + ZMQ_CFLAGS,
     ),
     "qat": (
         "samples/quickassist/qat.c",
@@ -124,11 +124,11 @@ SPEC_LIST = {
     "tf_c": ("samples/tensorflow_c/tf_c.c", []),
     "tf_dump": (
         "samples/tensorflow/tf_dump.cpp",
-        ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS + GSL_CFLAGS + ABSL_CFLAGS,
+        ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS + GSL_CFLAGS + ABSL_CFLAGS + ZMQ_CFLAGS,
     ),
     "tf_opt": (
         "samples/tensorflow/tf_opt.cpp",
-        ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS + GSL_CFLAGS + ABSL_CFLAGS,
+        ["-Iheaders"] + CUDA_10_1_CFLAGS + GLIB2_CFLAGS + FMT_CFLAGS + GSL_CFLAGS + ABSL_CFLAGS + ZMQ_CFLAGS,
     ),
 }
 

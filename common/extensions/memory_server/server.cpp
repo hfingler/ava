@@ -9,6 +9,7 @@
 #include <zmq.h>
 #include "server.hpp"
 #include "common.hpp"
+#include <unistd.h>
 
 namespace GPUMemoryServer {
 
@@ -24,18 +25,21 @@ void Server::run() {
     //create zmq listener
     void *context = zmq_ctx_new();
     void *responder = zmq_socket(context, ZMQ_REP);
-    std::string addr = "ipc://";
-    addr += unix_socket_path;
-    int rc = zmq_bind(responder, addr.c_str());
-
+    //make sure it doesn't exist
+    unlink(unix_socket_path.c_str());
+    int rc = zmq_bind(responder, unix_socket_path.c_str());
+    if (rc == -1) {
+        printf("BIND FAILED\n");
+    }
     //go to our gpu
     checkCudaErrors( cudaSetDevice(gpu) );
 
     char* buffer = new char[BUF_SIZE];
-    printf("Memory server of GPU %d ready\n", gpu);
+    printf("Memory server of GPU %d ready, bound to %s\n", gpu, unix_socket_path.c_str());
     Reply rep;
     while(1) {
         zmq_recv(responder, buffer, BUF_SIZE, 0);
+        printf("got a request on gpu %d!\n", gpu);
         handleRequest(buffer, &rep);
         memcpy(buffer, &rep, sizeof(Reply));
         zmq_send(responder, buffer, sizeof(Reply), 0);
@@ -44,6 +48,7 @@ void Server::run() {
 
 void Server::handleRequest(char* buffer, Reply* rep) {
     Request req;
+    cudaError_t err;
 
     //TODO: better (de)serialization
     memcpy(&req, buffer, sizeof(Request));
@@ -54,22 +59,34 @@ void Server::handleRequest(char* buffer, Reply* rep) {
     if (req.type == RequestType::ALLOC) {
         //allocate and get the ipc handle
         void *ptr;
+        cudaIpcMemHandle_t memHandle;
 
         //TODO: if more than requested, use cudaMallocManaged
         //TODO: we need to check if cudaMallocManaged works with cudaIpcGetMemHandle 
-        checkCudaErrors( cudaMalloc(&ptr, req.data.size) );
-        cudaIpcMemHandle_t memHandle;
-        checkCudaErrors( cudaIpcGetMemHandle(&memHandle, ptr) );
+        err = cudaMalloc(&ptr, req.data.size);
+        if(err) {
+            printf("Something went wrong on malloc, returning err.");
+        }
+        else {
+            checkCudaErrors( cudaIpcGetMemHandle(&memHandle, ptr) );
 
-        //store on our metadata maps
-        uint64_t key = (uint64_t) ptr;
-        allocs[req.worker_id][key] = std::make_unique<Allocation>(req.data.size, ptr);
+            printf("CREATION bytes of memhandle\n");
+            for (int i = 0 ; i < sizeof(cudaIpcMemHandle_t) ; i++) {
+                printf("%#02x ", ((char*)&memHandle)[i]);
+            }
 
-        //c++ wizardy:  https://stackoverflow.com/questions/2667355/mapint-int-default-values
-        used_memory[req.worker_id] += req.data.size;
+            //store on our metadata maps
+            uint64_t key = (uint64_t) ptr;
+            allocs[req.worker_id][key] = std::make_unique<Allocation>(req.data.size, ptr);
+
+            //c++ wizardy:  https://stackoverflow.com/questions/2667355/mapint-int-default-values
+            used_memory[req.worker_id] += req.data.size;
+        }
 
         //construct reply
-        memcpy(&(rep->data.memHandle), &memHandle, sizeof(cudaIpcMemHandle_t));
+        //memcpy(&(rep->data.memHandle), &memHandle, sizeof(cudaIpcMemHandle_t));
+        rep->data.memHandle = memHandle;
+        rep->returnErr = err;
     }
     /*************************
      *       cudaFree
@@ -91,6 +108,7 @@ void Server::handleRequest(char* buffer, Reply* rep) {
 
         //construct reply
         memset(&(rep), 0, sizeof(Reply));
+        rep->returnErr = cudaError::cudaSuccess;
     }
     /*************************
      * worker finished, cleanup

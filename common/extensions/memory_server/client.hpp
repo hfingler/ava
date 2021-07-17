@@ -3,10 +3,20 @@
 
 #include <stdint.h>
 #include <string>
-#include <zmq.h>
 #include "common.hpp"
+#include <zmq.h>
 
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+cudaError_t __internal_cudaMalloc(void **devPtr, size_t size);
+cudaError_t __internal_cudaFree(void *devPtr);
+
+#ifdef __cplusplus
+}
+#endif
 
 namespace GPUMemoryServer {
 
@@ -15,11 +25,15 @@ namespace GPUMemoryServer {
         void* context;
         void* socket;
         char* buffer;
+        bool is_connected;
 
-        void connectToGPU(uint16_t gpuId);
-        void* sendMallocRequest(uint64_t size);
-        void sendFreeRequest(void* devPtr);
-        void sendCleanupRequest();
+        inline bool isConnected() {
+            return is_connected;
+        }
+        int connectToGPU(uint16_t gpuId);
+        Reply sendMallocRequest(uint64_t size);
+        Reply sendFreeRequest(void* devPtr);
+        Reply sendCleanupRequest();
 
         static Client& getInstance() {
             static Client instance;
@@ -31,10 +45,11 @@ namespace GPUMemoryServer {
 
         Client() {
             buffer = new char[BUF_SIZE];
+            is_connected = false;
         }
         ~Client() {
             zmq_close(socket);
-            zmq_ctx_destroy(context);
+            //zmq_ctx_destroy(context);
         }
 
         Client(Client const&)         = delete;

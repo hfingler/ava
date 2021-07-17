@@ -150,10 +150,12 @@ ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::Worker
 
 void SVGPUManager::LaunchMemoryServers() {
   if(memory_mode == "server") {
-    std::cerr << "Using memory server mode " << std::endl;
+    std::cerr << "Using memory server mode " << memory_mode << std::endl;
     std::string base_path = GPUMemoryServer::get_base_socket_path();
 
-    for (int i = gpu_offset ; i < n_gpus ; i++) {
+    std::cerr << "gpu_offset " << gpu_offset << "  ngpus " << n_gpus << std::endl;
+    //TODO: this is totally wrong if we use in non-serverless mode.
+    for (int i = 1 ; i < 4 ; i++) {
       std::ostringstream stringStream;
       stringStream << base_path << i;
       

@@ -10,7 +10,7 @@
 namespace GPUMemoryServer {
 
     inline std::string get_base_socket_path() {
-        return std::string("/tmp/gpumemserver_sock");
+        return std::string("ipc:///tmp/gpumemserver_sock");
     }
 
     enum RequestType { ALLOC, FREE, FINISHED };
@@ -28,10 +28,10 @@ namespace GPUMemoryServer {
 
     union ReplyData {
         cudaIpcMemHandle_t memHandle;
-        void* devPtr;
     };
 
     struct Reply {
+        cudaError_t returnErr;
         ReplyData data;
     };
 }

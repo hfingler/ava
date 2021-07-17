@@ -61,6 +61,7 @@ ava_begin_utility;
 #include "guestlib/cuda/nvvm_helper.h"
 #include "common/support/io.h"
 #include "guestlib/extensions/gpu_address_tracking.h"
+#include "common/extensions/memory_server/client.hpp"
 
 #if !defined(__dv)
 #define __dv(v)
@@ -686,7 +687,9 @@ __host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, 
   }
 }
 
-__host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMalloc(void **devPtr, size_t size) {
+//this is the RPC declaration on guestlib
+//definition will be executed on worker
+cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
   ava_argument(devPtr) {
     ava_out;
     ava_buffer(1);
@@ -696,10 +699,14 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMalloc(void **devPtr, size
   if (ava_is_guest) {
     __helper_save_gpu_address_range(reinterpret_cast<uint64_t>(*devPtr), size, static_cast<void *>(&ret));
   }
-  //if (ava_is_worker) {
-  //  print_test_tracker();
-  //}
 }
+
+ava_begin_replacement;
+EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMalloc(void **devPtr, size_t size) { 
+  printf("in replaced cudaMalloc\n");
+  return __internal_cudaMalloc(devPtr, size);
+}
+ava_end_replacement;
 
 __host__ cudaError_t CUDARTAPI cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind) {
   ava_argument(dst) {
@@ -721,7 +728,9 @@ __host__ cudaError_t CUDARTAPI cudaMemcpy(void *dst, const void *src, size_t cou
   }
 }
 
-__host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFree(void *devPtr) {
+//this is the RPC declaration on guestlib
+//definition will be executed on worker
+cudaError_t __internal_cudaFree(void *devPtr) {
   ava_async;
   ava_argument(devPtr) ava_opaque;
   ava_execute();
@@ -729,6 +738,12 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFree(void *devPtr) {
     __helper_remove_gpu_address_range(reinterpret_cast<uint64_t>(devPtr));
   }
 }
+
+ava_begin_replacement;
+__host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFree(void *devPtr) {
+  __internal_cudaFree(devPtr);
+}
+ava_end_replacement;
 
 /* Rich set of APIs */
 

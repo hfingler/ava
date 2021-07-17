@@ -144,7 +144,17 @@ int main(int argc, char *argv[]) {
     init_internal_command_handler();
 
     char *cmmode = std::getenv("GPU_MEMORY_MODE");
-    std::string mmode = cmmode ? std::string(cmmode) : "default";
+    std::string mmode;
+    if (cmmode == 0) {
+      std::cerr <<  " GPU_MEMORY_MODE not defined\n";
+      mmode = "default";
+    }
+    else {
+      mmode = std::string(cmmode);
+    }
+    //std::string mmode = cmmode ? std::string(cmmode) : "default";
+    
+    std::cerr << "[worker#" << listen_port << "] using memory mode " << mmode  << std::endl;
     //if it's server mode we need to connect to it
     if (mmode == "server") {
       uint16_t gpuid = std::stoi(cuda_uuid);
@@ -152,9 +162,10 @@ int main(int argc, char *argv[]) {
       int rc = 1;
       //we need to loop since it's very likely we are created before the server is
       while (rc != 0) {
-        GPUMemoryServer::Client::getInstance().connectToGPU(gpuid);
+        rc = GPUMemoryServer::Client::getInstance().connectToGPU(gpuid);
+        printf("connect returned %d", rc);
         //be kind
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
       }
       std::cerr << "[worker#" << listen_port << "] connected to memory server at GPU #" << gpuid << "!" << std::endl;
     }
@@ -171,11 +182,12 @@ int main(int argc, char *argv[]) {
       destroy_command_handler(false);
       std::cerr << "[worker#" << listen_port << "] worker is done, looping." << std::endl;
 
-      //if mem server mode, clean up allocations
-      if (mmode == "server") {
-        GPUMemoryServer::Client::getInstance().sendCleanupRequest();
-      }
     } while(std::getenv("SERVERLESS_MODE"));
+
+    //if mem server mode, clean up allocations
+    if (mmode == "server") {
+      GPUMemoryServer::Client::getInstance().sendCleanupRequest();
+    }
 
     std::cerr << "[worker#" << listen_port << "] freeing channel and quiting." << std::endl;
     command_channel_free(chan);
