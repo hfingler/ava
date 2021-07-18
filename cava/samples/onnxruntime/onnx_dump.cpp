@@ -149,7 +149,8 @@ char CUDARTAPI __cudaInitModule(void **fatCubinHandle) {
   }
 }
 
-ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs, int *num_funcs, absl::string_view dump_dir) {
+ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs, int *num_funcs,
+                                      absl::string_view dump_dir) {
   struct fatbin_wrapper *wp = static_cast<struct fatbin_wrapper *>(fatCubin);
   struct fatBinaryHeader *fbh = reinterpret_cast<struct fatBinaryHeader *>(wp->ptr);
   int fd, retval;
@@ -186,8 +187,8 @@ ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs,
   }
 
   /*  Open the command pipe for reading */
-  auto pip_command =
-      fmt::format("/usr/local/cuda-10.1/bin/cuobjdump -elf {}/fatbin-{}.ava", dump_dir, ava_metadata(NULL)->num_fatbins);
+  auto pip_command = fmt::format("/usr/local/cuda-10.1/bin/cuobjdump -elf {}/fatbin-{}.ava", dump_dir,
+                                 ava_metadata(NULL)->num_fatbins);
   fp_pipe = popen(pip_command.c_str(), "r");
   assert(fp_pipe);
 
@@ -414,14 +415,16 @@ void CUDARTAPI __cudaUnregisterFatBinary(void **fatCubinHandle) {
 }
 
 ava_utility void __helper_dump_cuda_function(char *deviceFun, const char *deviceName, int thread_limit, uint3 *tid,
-                                             uint3 *bid, dim3 *bDim, dim3 *gDim, int *wSize, absl::string_view dump_dir) {
+                                             uint3 *bid, dim3 *bDim, dim3 *gDim, int *wSize,
+                                             absl::string_view dump_dir) {
   int fd = ava_metadata(NULL)->fd_functions;
   if (fd == 0) {
     char file_name[148];
     sprintf(file_name, "%s/fatfunction.ava", dump_dir);
     fd = open(file_name, O_WRONLY | O_TRUNC | O_CREAT, 0666);
     if (fd == -1) {
-      ava_fatal("open %s/fatfunction.ava [errno=%d, errstr=%s] at %s:%d", dump_dir, errno, strerror(errno), __FILE__, __LINE__);
+      ava_fatal("open %s/fatfunction.ava [errno=%d, errstr=%s] at %s:%d", dump_dir, errno, strerror(errno), __FILE__,
+                __LINE__);
     }
     ava_metadata(NULL)->fd_functions = fd;
   }
@@ -520,10 +523,10 @@ void CUDARTAPI __cudaRegisterFunction(void **fatCubinHandle, const char *hostFun
   } else {
     AVA_DEBUG << "AVA_DUMP_DIR is not set, using /tmp" << std::endl;
     dump_dir = "/tmp";
-  }  
+  }
 
   if (ava_is_worker)
-    __helper_dump_cuda_function(deviceFun, deviceName, thread_limit, tid, bid, bDim, gDim, wSize, dump_dir); 
+    __helper_dump_cuda_function(deviceFun, deviceName, thread_limit, tid, bid, bDim, gDim, wSize, dump_dir);
 
   ava_debug(
       "Register hostFun=%p, deviceFun=%s, deviceName=%s, thread_limit=%d, tid={%d,%d,%d}, bid={%d,%d,%d}, "
@@ -687,8 +690,8 @@ __host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, 
   }
 }
 
-//this is the RPC declaration on guestlib
-//definition will be executed on worker
+// this is the RPC declaration on guestlib
+// definition will be executed on worker
 cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
   ava_argument(devPtr) {
     ava_out;
@@ -702,7 +705,7 @@ cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
 }
 
 ava_begin_replacement;
-EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMalloc(void **devPtr, size_t size) { 
+EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMalloc(void **devPtr, size_t size) {
   printf("in replaced cudaMalloc\n");
   return __internal_cudaMalloc(devPtr, size);
 }
@@ -728,8 +731,8 @@ __host__ cudaError_t CUDARTAPI cudaMemcpy(void *dst, const void *src, size_t cou
   }
 }
 
-//this is the RPC declaration on guestlib
-//definition will be executed on worker
+// this is the RPC declaration on guestlib
+// definition will be executed on worker
 cudaError_t __internal_cudaFree(void *devPtr) {
   ava_async;
   ava_argument(devPtr) ava_opaque;
@@ -740,9 +743,7 @@ cudaError_t __internal_cudaFree(void *devPtr) {
 }
 
 ava_begin_replacement;
-EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFree(void *devPtr) {
-  __internal_cudaFree(devPtr);
-}
+EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFree(void *devPtr) { __internal_cudaFree(devPtr); }
 ava_end_replacement;
 
 /* Rich set of APIs */

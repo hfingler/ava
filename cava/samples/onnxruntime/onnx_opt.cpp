@@ -934,8 +934,8 @@ EXPORTED __host__ cudaError_t CUDARTAPI cudaFreeHost(void *ptr) {
 }
 ava_end_replacement;
 
-//this is the RPC declaration on guestlib
-//definition will be executed on worker
+// this is the RPC declaration on guestlib
+// definition will be executed on worker
 cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
   ava_argument(devPtr) {
     ava_out;
@@ -949,7 +949,7 @@ cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
 }
 
 ava_begin_replacement;
-EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMalloc(void **devPtr, size_t size) { 
+EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMalloc(void **devPtr, size_t size) {
   printf("in replaced cudaMalloc\n");
   return __internal_cudaMalloc(devPtr, size);
 }
@@ -975,8 +975,8 @@ __host__ cudaError_t CUDARTAPI cudaMemcpy(void *dst, const void *src, size_t cou
   }
 }
 
-//this is the RPC declaration on guestlib
-//definition will be executed on worker
+// this is the RPC declaration on guestlib
+// definition will be executed on worker
 cudaError_t __internal_cudaFree(void *devPtr) {
   ava_async;
   ava_argument(devPtr) ava_opaque;
@@ -987,9 +987,7 @@ cudaError_t __internal_cudaFree(void *devPtr) {
 }
 
 ava_begin_replacement;
-EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFree(void *devPtr) {
-  __internal_cudaFree(devPtr);
-}
+EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFree(void *devPtr) { __internal_cudaFree(devPtr); }
 ava_end_replacement;
 
 /* Rich set of APIs */
@@ -13516,8 +13514,8 @@ void ava_preload_cubin_guestlib() {
   sprintf(file_name, "%s/fatbin-info.ava", dump_dir);
   fd = open(file_name, O_RDONLY, 0666);
   if (fd == -1) {
-    fprintf(stderr, "open %s/fatbin-info.ava [errno=%d, errstr=%s] at %s:%d", dump_dir, errno, strerror(errno), __FILE__,
-            __LINE__);
+    fprintf(stderr, "open %s/fatbin-info.ava [errno=%d, errstr=%s] at %s:%d", dump_dir, errno, strerror(errno),
+            __FILE__, __LINE__);
     exit(EXIT_FAILURE);
   }
   ret = ava::support::ReadData(fd, (char *)&fatbin_num, sizeof(int), nullptr);
