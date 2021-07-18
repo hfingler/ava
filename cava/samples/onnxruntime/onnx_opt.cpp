@@ -7,7 +7,7 @@ ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -
 // To enable stat collecting, use the below line and uncomment the ava_stats definition
 // ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN -D__AVA_ENABLE_STAT);
 ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver zmq);
-ava_guestlib_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/guest_cmd_batching_queue.cpp extensions/extension_api.cpp);
+ava_guestlib_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/guest_cmd_batching_queue.cpp extensions/extension_api.cpp extensions/gpu_address_tracking.cpp);
 ava_worker_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/cmd_batching.cpp extensions/cuda.cpp ../common/extensions/memory_server/client.cpp);
 ava_common_utility_srcs(extensions/cudart_10.1_utilities.cpp);
 ava_export_qualifier();
@@ -987,7 +987,7 @@ cudaError_t __internal_cudaFree(void *devPtr) {
 }
 
 ava_begin_replacement;
-__host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFree(void *devPtr) {
+EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFree(void *devPtr) {
   __internal_cudaFree(devPtr);
 }
 ava_end_replacement;

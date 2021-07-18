@@ -740,7 +740,7 @@ cudaError_t __internal_cudaFree(void *devPtr) {
 }
 
 ava_begin_replacement;
-__host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFree(void *devPtr) {
+EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFree(void *devPtr) {
   __internal_cudaFree(devPtr);
 }
 ava_end_replacement;
