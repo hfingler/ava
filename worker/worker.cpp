@@ -105,7 +105,7 @@ int main(int argc, char *argv[]) {
   absl::InitializeSymbolizer(argv[0]);
 
   char const *cworker_uuid = getenv("AVA_WORKER_UUID");
-  uint64_t worker_uuid = std::strtoul(std::string(cworker_uuid));
+  uint64_t worker_uuid = std::strtoul(cworker_uuid, 0, 10);
   GPUMemoryServer::Client::getInstance().setUuid(worker_uuid);
 
   /* Read GPU provision information. */
@@ -184,7 +184,8 @@ int main(int argc, char *argv[]) {
       //report our max memory requested
       if (mmode == "server") {
         //requested_gpu_mem comes from worker.hpp
-        GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(requested_gpu_mem);
+        //GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(requested_gpu_mem);
+        GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(16);
       }
 
       std::cerr << "[worker#" << listen_port << "] got one, setting up cmd handler" << std::endl;

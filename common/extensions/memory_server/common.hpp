@@ -26,8 +26,12 @@ namespace GPUMemoryServer {
         RequestData data;
     };
 
-    union ReplyData {
-        cudaIpcMemHandle_t memHandle;
+    struct ReplyData {
+        char is_managed;
+        union {
+            cudaIpcMemHandle_t memHandle;
+            void* devPtr;
+        } alloc;
     };
 
     struct Reply {

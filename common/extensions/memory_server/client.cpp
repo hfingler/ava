@@ -23,14 +23,15 @@ cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
     if (rep.returnErr == 0) {
         //mapping
 
-        printf("MAPPING bytes of memhandle\n");
-        for (int i = 0 ; i < sizeof(cudaIpcMemHandle_t) ; i++) {
-            printf("%#02x ", ((char*)&rep.data.memHandle)[i]);
+        if (rep.data.is_managed == 0) {
+            printf("Mapping dev ptr in this process\n");
+            cudaError_t err = cudaIpcOpenMemHandle(&ourDevPtr, rep.data.alloc.memHandle, cudaIpcMemLazyEnablePeerAccess);
+            printf("cudaIpcOpenMemHandle code is %d\n", err);
+            printf("mapped ptr is %p\n", ourDevPtr);
         }
-        printf("Mapping dev ptr in this process\n");
-        cudaError_t err = cudaIpcOpenMemHandle(&ourDevPtr, rep.data.memHandle, cudaIpcMemLazyEnablePeerAccess);
-        printf("cudaIpcOpenMemHandle code is %d\n", err);
-        printf("mapped ptr is %p\n", ourDevPtr);
+        else {
+            ourDevPtr = rep.data.alloc.devPtr;
+        }
     }
 
     //even if the malloc failed, this is fine
@@ -80,15 +81,15 @@ namespace GPUMemoryServer {
         return sendRequest(req);
     }
 
-    Reply sendMemoryRequestedValue(uint64_t mem_mb) {
+    Reply Client::sendMemoryRequestedValue(uint64_t mem_mb) {
         Request req;
         req.type = RequestType::MEMREQUESTED;
-        req.data.size = size;
+        req.data.size = mem_mb;
         return sendRequest(req);
     }
 
     Reply Client::sendRequest(Request &req) {
-        req.worker_id = self->uuid;
+        req.worker_id = this->uuid;
         memcpy(buffer, &req, sizeof(Request));
         zmq_send(socket, buffer, sizeof(Request), 0);
         zmq_recv(socket, buffer, sizeof(Reply), 0);
