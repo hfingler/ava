@@ -184,8 +184,8 @@ int main(int argc, char *argv[]) {
       //report our max memory requested
       if (mmode == "server") {
         //requested_gpu_mem comes from worker.hpp
-        //GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(requested_gpu_mem);
-        GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(16);
+        GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(requested_gpu_mem);
+        //GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(16);
       }
 
       std::cerr << "[worker#" << listen_port << "] got one, setting up cmd handler" << std::endl;
