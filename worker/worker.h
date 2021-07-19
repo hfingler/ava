@@ -16,6 +16,8 @@
 std::string worker_init_log();
 void ava_load_cubin_worker(absl::string_view dump_dir);
 
+extern uint32_t requested_gpu_mem;
+
 extern "C" {
 #endif
 

@@ -13,6 +13,8 @@
 #ifdef __cplusplus
 #include <vector>
 
+#define RESERVED_AREA_SIZE 128
+
 extern "C" {
 #endif
 
@@ -105,7 +107,7 @@ struct command_base {
   /**
    * Reserved region for other purposes, for example, param_block seeker
    * in shared memory implementation. */
-  char reserved_area[128];
+  char reserved_area[RESERVED_AREA_SIZE];
 };
 
 /**
