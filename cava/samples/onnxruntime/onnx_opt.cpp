@@ -778,7 +778,6 @@ EXPORTED void CUDARTAPI __cudaRegisterFatBinaryEnd(void **fatCubinHandle) {
 }
 ava_end_replacement;
 
-/*
 EXPORTED __host__ __device__ unsigned CUDARTAPI
 __cudaPushCallConfiguration(dim3   gridDim,
                             dim3   blockDim,
@@ -812,9 +811,9 @@ __cudaPopCallConfiguration(dim3   *gridDim,
         ava_element { ava_handle; }
     }
 }
-*/
 
 ava_begin_replacement;
+/*
 EXPORTED __host__ __device__ unsigned CUDARTAPI
 __cudaPushCallConfiguration(dim3 gridDim, dim3 blockDim,
                             size_t sharedMem,  // CHECKME: default argument in header
@@ -843,17 +842,22 @@ EXPORTED cudaError_t CUDARTAPI __cudaPopCallConfiguration(dim3 *gridDim, dim3 *b
 #endif
 
   struct call_configuration *cc = static_cast<struct call_configuration *>(g_queue_pop_tail(call_configuration_stack));
-  *gridDim = cc->gridDim;
-  *blockDim = cc->blockDim;
-  *sharedMem = cc->sharedMem;
-  *(CUstream *)stream = (CUstream)cc->stream;
-  g_free(cc);
+  if (cc != NULL) {
+    *gridDim = cc->gridDim;
+    *blockDim = cc->blockDim;
+    *sharedMem = cc->sharedMem;
+    *(CUstream *)stream = (CUstream)cc->stream;
+    g_free(cc);
+  } else {
+    fprintf(stderr, "[WARNING] Try to pop configuration but there's nothing to pop");
+  }
 
 #ifdef __AVA_ENABLE_STAT
   ava::support::stats_end(__FUNCTION__, begin_ts);
 #endif
   return cudaSuccess;
 }
+*/
 
 EXPORTED void CUDARTAPI __cudaRegisterTexture(void **fatCubinHandle,
                                               const void *hostVar,  // struct textureReference *hostVar
