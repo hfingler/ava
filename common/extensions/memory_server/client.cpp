@@ -80,7 +80,15 @@ namespace GPUMemoryServer {
         return sendRequest(req);
     }
 
+    Reply sendMemoryRequestedValue(uint64_t mem_mb) {
+        Request req;
+        req.type = RequestType::MEMREQUESTED;
+        req.data.size = size;
+        return sendRequest(req);
+    }
+
     Reply Client::sendRequest(Request &req) {
+        req.worker_id = self->uuid;
         memcpy(buffer, &req, sizeof(Request));
         zmq_send(socket, buffer, sizeof(Request), 0);
         zmq_recv(socket, buffer, sizeof(Reply), 0);

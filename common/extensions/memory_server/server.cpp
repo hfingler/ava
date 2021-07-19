@@ -61,30 +61,46 @@ void Server::handleRequest(char* buffer, Reply* rep) {
         void *ptr;
         cudaIpcMemHandle_t memHandle;
 
-        //TODO: if more than requested, use cudaMallocManaged
-        //TODO: we need to check if cudaMallocManaged works with cudaIpcGetMemHandle 
-        err = cudaMalloc(&ptr, req.data.size);
-        if(err) {
-            printf("Something went wrong on malloc, returning err.");
+        uint64_t requested_in_mb =  / (1024*1024);
+        uint64_t requested = req.data.size;
+
+        //if user is requesting more than it asked for
+        if (used_memory[req.worker_id] + requested_in_mb > requested_memory[req.worker_id]) {
+            printf("Worker [%lu] requested %lu but is allocating total of %lu, using managed\n", 
+                    req.worker_id, requested_memory[req.worker_id], used_memory[req.worker_id] + requested_in_mb);
+            
+            err = cudaMallocManaged(&ptr, requested);
+            if(err) {
+                printf("Something went wrong on cudaMallocManaged, returning err.");
+                rep->returnErr = err;
+                return;
+            }
         }
         else {
-            checkCudaErrors( cudaIpcGetMemHandle(&memHandle, ptr) );
-
-            printf("CREATION bytes of memhandle\n");
-            for (int i = 0 ; i < sizeof(cudaIpcMemHandle_t) ; i++) {
-                printf("%#02x ", ((char*)&memHandle)[i]);
+            err = cudaMalloc(&ptr, requested);
+            //if malloc fails.. malloc fails
+            if(err) {
+                printf("Something went wrong on malloc, returning err.");
+                rep->returnErr = err;
+                return;
             }
-
-            //store on our metadata maps
-            uint64_t key = (uint64_t) ptr;
-            allocs[req.worker_id][key] = std::make_unique<Allocation>(req.data.size, ptr);
-
-            //c++ wizardy:  https://stackoverflow.com/questions/2667355/mapint-int-default-values
-            used_memory[req.worker_id] += req.data.size;
         }
 
+        //TODO: double check if cudaMallocManaged works with cudaIpcGetMemHandle 
+        checkCudaErrors( cudaIpcGetMemHandle(&memHandle, ptr) );
+        //printf("CREATION bytes of memhandle\n");
+        //for (int i = 0 ; i < sizeof(cudaIpcMemHandle_t) ; i++) {
+        //    printf("%#02x ", ((char*)&memHandle)[i]);
+        //}
+
+        //store on our metadata maps
+        uint64_t key = (uint64_t) ptr;
+        allocs[req.worker_id][key] = std::make_unique<Allocation>(requested, ptr);
+
+        //c++ wizardy:  https://stackoverflow.com/questions/2667355/mapint-int-default-values
+        used_memory[req.worker_id] += requested_in_mb;
+
         //construct reply
-        //memcpy(&(rep->data.memHandle), &memHandle, sizeof(cudaIpcMemHandle_t));
         rep->data.memHandle = memHandle;
         rep->returnErr = err;
     }
@@ -116,6 +132,14 @@ void Server::handleRequest(char* buffer, Reply* rep) {
     else if (req.type == RequestType::FINISHED) {
         used_memory[req.worker_id] = 0;
         allocs[req.worker_id].clear();
+        //construct reply
+        memset(&(rep), 0, sizeof(Reply));
+    }
+    /*************************
+     * store requested amount of memory
+     *************************/
+    else if (req.type == RequestType::MEMREQUESTED) {
+        requested_memory[req.worker_id] = req.data.size;
         //construct reply
         memset(&(rep), 0, sizeof(Reply));
     }

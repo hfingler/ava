@@ -26,14 +26,19 @@ namespace GPUMemoryServer {
         void* socket;
         char* buffer;
         bool is_connected;
+        uint64_t uuid;
 
         inline bool isConnected() {
             return is_connected;
+        }
+        void setUuid(uint64_t id) {
+            uuid = id;
         }
         int connectToGPU(uint16_t gpuId);
         Reply sendMallocRequest(uint64_t size);
         Reply sendFreeRequest(void* devPtr);
         Reply sendCleanupRequest();
+        Reply sendMemoryRequestedValue(uint64_t mem_mb);
 
         static Client& getInstance() {
             static Client instance;
