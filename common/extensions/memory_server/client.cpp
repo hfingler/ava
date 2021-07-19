@@ -21,19 +21,23 @@ cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
 
     void* ourDevPtr;
     if (rep.returnErr == 0) {
-        //mapping
-
+        //if it wasn't managed, it already allocated, so map here
         if (rep.data.is_managed == 0) {
             printf("Mapping dev ptr in this process\n");
             cudaError_t err = cudaIpcOpenMemHandle(&ourDevPtr, rep.data.alloc.memHandle, cudaIpcMemLazyEnablePeerAccess);
-            printf("cudaIpcOpenMemHandle code is %d\n", err);
-            printf("mapped ptr is %p\n", ourDevPtr);
         }
+        //managed doesn't support Ipc, so we do it ourselves
         else {
-            ourDevPtr = rep.data.alloc.devPtr;
+            //update error
+            rep.returnErr = cudaMallocManaged(&ourDevPtr, size);
+            if(rep.returnErr) {
+                printf("Something went wrong on cudaMallocManaged, returning err.");
+                return rep.returnErr;
+            }
+            GPUMemoryServer::Client::getInstance().managed_allocations.push_back(ourDevPtr);
         }
     }
-
+    
     //even if the malloc failed, this is fine
     *devPtr = ourDevPtr;
     return rep.returnErr;
@@ -97,5 +101,14 @@ namespace GPUMemoryServer {
         Reply rep;
         memcpy(&rep, buffer, sizeof(Reply));
         return rep;
+    }
+
+    Client::~Client() {
+        zmq_close(socket);
+        //zmq_ctx_destroy(context);
+
+        for (auto &ptr : managed_allocations) {
+            cudaFree(ptr);
+        }
     }
 }

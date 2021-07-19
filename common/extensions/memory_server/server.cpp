@@ -68,17 +68,8 @@ void Server::handleRequest(char* buffer, Reply* rep) {
         if (used_memory[req.worker_id] + requested_in_mb > requested_memory[req.worker_id]) {
             printf("Worker [%lu] requested %lu but is allocating total of %lu, using managed\n", 
                     req.worker_id, requested_memory[req.worker_id], used_memory[req.worker_id] + requested_in_mb);
-            
-            err = cudaMallocManaged(&ptr, requested);
-            if(err) {
-                printf("Something went wrong on cudaMallocManaged, returning err.");
-                rep->returnErr = err;
-                return;
-            }
 
             rep->data.is_managed = 1;
-            rep->data.alloc.devPtr = ptr;
-            rep->returnErr = err;
         }
         else {
             err = cudaMalloc(&ptr, requested);
@@ -88,16 +79,15 @@ void Server::handleRequest(char* buffer, Reply* rep) {
                 rep->returnErr = err;
                 return;
             }
-            //TODO: double check if cudaMallocManaged works with cudaIpcGetMemHandle 
             checkCudaErrors( cudaIpcGetMemHandle(&memHandle, ptr) );
             rep->data.is_managed = 0;
             rep->data.alloc.memHandle = memHandle;
             rep->returnErr = err;
-        }
 
-        //store on our metadata maps
-        uint64_t key = (uint64_t) ptr;
-        allocs[req.worker_id][key] = std::make_unique<Allocation>(requested, ptr);
+            //store on our metadata maps
+            uint64_t key = (uint64_t) ptr;
+            allocs[req.worker_id][key] = std::make_unique<Allocation>(requested, ptr);
+        }
 
         //c++ wizardy:  https://stackoverflow.com/questions/2667355/mapint-int-default-values
         used_memory[req.worker_id] += requested_in_mb;        
@@ -144,7 +134,10 @@ void Server::handleRequest(char* buffer, Reply* rep) {
 }   
 
 Allocation::~Allocation() {
-    checkCudaErrors( cudaIpcCloseMemHandle(devPtr) );  //TODO: double check if we are opening for all requests
+    cudaError_t err = cudaIpcCloseMemHandle(devPtr);
+    if (err) {
+        printf("CUDA err on cudaIpcCloseMemHandle: %d\n", err);
+    }
     checkCudaErrors( cudaFree(devPtr) );
 }
 

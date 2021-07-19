@@ -30,7 +30,6 @@ namespace GPUMemoryServer {
         char is_managed;
         union {
             cudaIpcMemHandle_t memHandle;
-            void* devPtr;
         } alloc;
     };
 
