@@ -369,9 +369,14 @@ void internal_api_handler(struct command_channel *chan, struct nw_handle_pool *h
   }
 
   case COMMAND_HANDLER_REGISTER_DUMP_DIR: {
-    const char* dump_dir = (const char*)cmd->reserved_area;
-    if (dump_dir) {
-        printf("\n//! sets directory for dump files to %s, pid: %d\n\n", dump_dir, getpid());
+    size_t offset = sizeof(uint32_t) / sizeof(char);
+    const char* dump_dir = (const char*)&cmd->reserved_area[offset];
+    uint32_t requested_gpu_mem;
+    memcpy(&requested_gpu_mem, cmd->reserved_area, sizeof(uint32_t));
+    printf("\n//! Requested GPU memory: %u\n\n", requested_gpu_mem);
+
+    if (strcmp(dump_dir, "") != 0) {
+        printf("\n//! Sets directory for dump files to %s\n\n", dump_dir);
         if (setenv("AVA_DUMP_DIR", dump_dir, 1)) {
           perror("setenv failed for AVA_DUMP_DIR\n");
           exit(0);

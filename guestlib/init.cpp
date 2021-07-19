@@ -73,21 +73,29 @@ EXPORTED_WEAKLY void nw_init_guestlib(intptr_t api_id) {
   api_init_command->pb_info = nw_global_pb_info;
   command_channel_send_command(chan, (struct command_base *)api_init_command);
  
-  /* Send dump directory to worker if env var set*/
-  char* dump_dir = std::getenv("AVA_DUMP_DIR");
-  if (dump_dir) {
-    struct command_base *dump_dir_command = command_channel_new_command(
-          nw_global_command_channel, sizeof(struct command_base), 0);
-    dump_dir_command->api_id = COMMAND_HANDLER_API;
-    dump_dir_command->command_id = COMMAND_HANDLER_REGISTER_DUMP_DIR;
-    dump_dir_command->vm_id = nw_global_vm_id;
-    if (strlen(dump_dir) > 127) {
-      std::cerr << "dump directory name length is greater than reserved_area buffer size" << std::endl;
+  /* Send dump directory and requested GPU memory to worker*/
+  char *dump_dir = std::getenv("AVA_DUMP_DIR");
+
+  uint32_t gpu_mem = 0;
+  if (std::getenv("AVA_REQUESTED_GPU_MEMORY"))
+      gpu_mem = std::stoul(std::getenv("AVA_REQUESTED_GPU_MEMORY"));
+
+  struct command_base *dump_dir_command = command_channel_new_command(
+        nw_global_command_channel, sizeof(struct command_base), 0);
+  dump_dir_command->api_id = COMMAND_HANDLER_API;
+  dump_dir_command->command_id = COMMAND_HANDLER_REGISTER_DUMP_DIR;
+  dump_dir_command->vm_id = nw_global_vm_id;
+
+  if (dump_dir != NULL) {
+    if (strlen(dump_dir) > RESERVED_AREA_SIZE - sizeof(uint32_t) - 1) {
+      std::cerr << "Dump directory name length is greater than reserved_area size" << std::endl;
       exit(1);
     }
-    sprintf(dump_dir_command->reserved_area, "%s", dump_dir);
-    command_channel_send_command(chan, (struct command_base *)dump_dir_command);
+    sprintf(&dump_dir_command->reserved_area[sizeof(uint32_t)/sizeof(char)], "%s", dump_dir);
   }
+
+  memcpy(dump_dir_command->reserved_area, &gpu_mem, sizeof(uint32_t));
+  command_channel_send_command(chan, (struct command_base *)dump_dir_command);
 
 #ifdef AVA_PRINT_TIMESTAMP
   struct timeval ts_end;
