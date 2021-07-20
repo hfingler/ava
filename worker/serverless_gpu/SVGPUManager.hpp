@@ -48,6 +48,7 @@ class SVGPUManager : public ManagerServiceServerBase, public GPU::Service {
   bool serverless_mode;
   std::vector<std::unique_ptr<GPUMemoryServer::Server>> memory_servers;
   std::string memory_mode;
+  uint32_t uuid_counter;
 
   // methods
   SVGPUManager(uint32_t port, uint32_t worker_port_base, std::string worker_path, std::vector<std::string> &worker_argv,
@@ -57,7 +58,7 @@ class SVGPUManager : public ManagerServiceServerBase, public GPU::Service {
       this->n_gpus = ngpus;
       this->gpu_offset = gpu_offset;
       this->memory_mode = memory_mode;
-      
+      this->uuid_counter = 0;
     };
 
   void RegisterSelf(std::string rm_addr);

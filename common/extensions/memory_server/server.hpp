@@ -26,8 +26,10 @@ namespace GPUMemoryServer {
         uint16_t gpu;
         std::string unix_socket_path;
         //map of worker_id to a map of dev_pointers to allocation struct
-        std::map<uint32_t, std::map<uint64_t, std::unique_ptr<Allocation>>> allocs;
-        std::map<uint32_t, uint64_t> used_memory;
+        std::map<uint64_t, std::map<uint64_t, std::unique_ptr<Allocation>>> allocs;
+        //both these maps below are in MB unit
+        std::map<uint64_t, uint64_t> used_memory;
+        std::map<uint64_t, uint64_t> requested_memory;
 
         std::thread self_thread;
 

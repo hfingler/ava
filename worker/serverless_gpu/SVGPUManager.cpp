@@ -182,6 +182,10 @@ uint32_t SVGPUManager::LaunchWorker(uint32_t gpu_id) {
   // Let API server use TCP channel
   environments.push_back("AVA_CHANNEL=TCP");
 
+  std::string worker_uuid = "AVA_WORKER_UUID=" + std::to_string(uuid_counter);
+  environments.push_back(worker_uuid);
+  uuid_counter++;
+
   // Pass port to API server
   auto port = worker_port_base_ + worker_id_.fetch_add(1, std::memory_order_relaxed);
   std::vector<std::string> parameters;

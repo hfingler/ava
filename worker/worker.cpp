@@ -104,6 +104,10 @@ int main(int argc, char *argv[]) {
   }
   absl::InitializeSymbolizer(argv[0]);
 
+  char const *cworker_uuid = getenv("AVA_WORKER_UUID");
+  uint64_t worker_uuid = std::strtoul(cworker_uuid, 0, 10);
+  GPUMemoryServer::Client::getInstance().setUuid(worker_uuid);
+
   /* Read GPU provision information. */
   char const *cuda_uuid_str = getenv("CUDA_VISIBLE_DEVICES");
   std::string cuda_uuid = cuda_uuid_str ? std::string(cuda_uuid_str) : "";
@@ -152,7 +156,6 @@ int main(int argc, char *argv[]) {
     else {
       mmode = std::string(cmmode);
     }
-    //std::string mmode = cmmode ? std::string(cmmode) : "default";
     
     std::cerr << "[worker#" << listen_port << "] using memory mode " << mmode  << std::endl;
     //if it's server mode we need to connect to it
@@ -177,6 +180,14 @@ int main(int argc, char *argv[]) {
       chan = command_channel_listen(chan);
       //this launches the thread that listens for commands
       init_command_handler(channel_create);
+
+      //report our max memory requested
+      if (mmode == "server") {
+        //requested_gpu_mem comes from worker.hpp
+        GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(requested_gpu_mem);
+        //GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(16);
+      }
+
       std::cerr << "[worker#" << listen_port << "] got one, setting up cmd handler" << std::endl;
       wait_for_command_handler();
       destroy_command_handler(false);

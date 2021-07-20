@@ -5,7 +5,7 @@
 #include <string>
 #include "common.hpp"
 #include <zmq.h>
-
+#include <vector>
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,14 +26,20 @@ namespace GPUMemoryServer {
         void* socket;
         char* buffer;
         bool is_connected;
+        uint64_t uuid;
+        std::vector<void*> managed_allocations;
 
         inline bool isConnected() {
             return is_connected;
+        }
+        void setUuid(uint64_t id) {
+            uuid = id;
         }
         int connectToGPU(uint16_t gpuId);
         Reply sendMallocRequest(uint64_t size);
         Reply sendFreeRequest(void* devPtr);
         Reply sendCleanupRequest();
+        Reply sendMemoryRequestedValue(uint64_t mem_mb);
 
         static Client& getInstance() {
             static Client instance;
@@ -47,10 +53,7 @@ namespace GPUMemoryServer {
             buffer = new char[BUF_SIZE];
             is_connected = false;
         }
-        ~Client() {
-            zmq_close(socket);
-            //zmq_ctx_destroy(context);
-        }
+        ~Client();
 
         Client(Client const&)         = delete;
         void operator=(Client const&) = delete;

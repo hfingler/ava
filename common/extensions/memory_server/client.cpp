@@ -21,18 +21,23 @@ cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
 
     void* ourDevPtr;
     if (rep.returnErr == 0) {
-        //mapping
-
-        printf("MAPPING bytes of memhandle\n");
-        for (int i = 0 ; i < sizeof(cudaIpcMemHandle_t) ; i++) {
-            printf("%#02x ", ((char*)&rep.data.memHandle)[i]);
+        //if it wasn't managed, it already allocated, so map here
+        if (rep.data.is_managed == 0) {
+            printf("Mapping dev ptr in this process\n");
+            cudaError_t err = cudaIpcOpenMemHandle(&ourDevPtr, rep.data.alloc.memHandle, cudaIpcMemLazyEnablePeerAccess);
         }
-        printf("Mapping dev ptr in this process\n");
-        cudaError_t err = cudaIpcOpenMemHandle(&ourDevPtr, rep.data.memHandle, cudaIpcMemLazyEnablePeerAccess);
-        printf("cudaIpcOpenMemHandle code is %d\n", err);
-        printf("mapped ptr is %p\n", ourDevPtr);
+        //managed doesn't support Ipc, so we do it ourselves
+        else {
+            //update error
+            rep.returnErr = cudaMallocManaged(&ourDevPtr, size);
+            if(rep.returnErr) {
+                printf("Something went wrong on cudaMallocManaged, returning err.");
+                return rep.returnErr;
+            }
+            GPUMemoryServer::Client::getInstance().managed_allocations.push_back(ourDevPtr);
+        }
     }
-
+    
     //even if the malloc failed, this is fine
     *devPtr = ourDevPtr;
     return rep.returnErr;
@@ -80,7 +85,15 @@ namespace GPUMemoryServer {
         return sendRequest(req);
     }
 
+    Reply Client::sendMemoryRequestedValue(uint64_t mem_mb) {
+        Request req;
+        req.type = RequestType::MEMREQUESTED;
+        req.data.size = mem_mb;
+        return sendRequest(req);
+    }
+
     Reply Client::sendRequest(Request &req) {
+        req.worker_id = this->uuid;
         memcpy(buffer, &req, sizeof(Request));
         zmq_send(socket, buffer, sizeof(Request), 0);
         zmq_recv(socket, buffer, sizeof(Reply), 0);
@@ -88,5 +101,14 @@ namespace GPUMemoryServer {
         Reply rep;
         memcpy(&rep, buffer, sizeof(Reply));
         return rep;
+    }
+
+    Client::~Client() {
+        zmq_close(socket);
+        //zmq_ctx_destroy(context);
+
+        for (auto &ptr : managed_allocations) {
+            cudaFree(ptr);
+        }
     }
 }

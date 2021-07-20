@@ -9,6 +9,7 @@
 #ifdef AVA_WORKER
 #include "worker/worker_context.h"
 #include "worker/worker.h"
+uint32_t requested_gpu_mem;
 #endif
 
 #ifdef __cplusplus
@@ -371,7 +372,6 @@ void internal_api_handler(struct command_channel *chan, struct nw_handle_pool *h
   case COMMAND_HANDLER_REGISTER_DUMP_DIR: {
     size_t offset = sizeof(uint32_t) / sizeof(char);
     const char* dump_dir = (const char*)&cmd->reserved_area[offset];
-    uint32_t requested_gpu_mem;
     memcpy(&requested_gpu_mem, cmd->reserved_area, sizeof(uint32_t));
     printf("\n//! Requested GPU memory: %u\n\n", requested_gpu_mem);
 
