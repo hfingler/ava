@@ -584,10 +584,43 @@ void CUDARTAPI __cudaRegisterFunction(void **fatCubinHandle, const char *hostFun
   }
 }
 
+/*
+void CUDARTAPI __cudaRegisterVar(void **fatCubinHandle, char *hostVar, char *deviceAddress,
+                                 const char *deviceName, int ext, size_t size, int constant, int global) {
+  ava_argument(fatCubinHandle) {
+    ava_in;
+    ava_buffer(__helper_cubin_num(fatCubinHandle) + 1);
+    ava_element {
+      if (fatCubinHandle[ava_index] != NULL) ava_handle;
+    }
+  }
+  ava_argument(deviceAddress) {
+    ava_in;
+    ava_buffer(strlen(deviceAddress)+1);
+  }
+  ava_argument(deviceName) {
+    ava_in;
+    ava_buffer(strlen(deviceName)+1);
+  }
+  ava_argument(hostVar) {
+    ava_in;
+    ava_buffer(size);
+    ava_lifetime_manual;
+    ava_allocates;
+  }
+  if (ava_is_guest) {
+    fprintf(stderr, "__cudaRegisterVar: hostPtr=%p; deviceAddress=%s; deviceName=%s; Registering const memory of %d
+bytes\n", hostVar, deviceAddress, deviceName, size);
+  }
+}
+*/
+
 ava_begin_replacement;
 EXPORTED void CUDARTAPI __cudaRegisterVar(void **fatCubinHandle, char *hostVar, char *deviceAddress,
                                           const char *deviceName, int ext, size_t size, int constant, int global) {
-  fprintf(stderr, "__cudaRegisterVar is a dummpy implementation\n");
+  fprintf(stderr, "__cudaRegisterVar is a dummpy implementation. ");
+  fprintf(stderr, "hostPtr=%p; deviceAddress=%s; deviceName=%s; Registering const memory of %d bytes\n", hostVar,
+          deviceAddress, deviceName, size);
 }
 
 EXPORTED void CUDARTAPI __cudaRegisterFatBinaryEnd(void **fatCubinHandle) {
@@ -598,38 +631,41 @@ EXPORTED void CUDARTAPI __cudaRegisterTexture(void **fatCubinHandle,
                                               const void *hostVar,  // struct textureReference *hostVar
                                               const void **deviceAddress, const char *deviceName, int dim, int norm,
                                               int ext) {
-  fprintf(stderr, "__cudaRegisterTexture is a dummpy implementation\n");
+  fprintf(stderr, "__cudaRegisterTexture is a dummpy implementation. ");
+  fprintf(stderr, "deviceName=%s; dim=%d; norm=%d; ext=%d\n", deviceName, dim, norm, ext);
 }
 ava_end_replacement;
-
-// void CUDARTAPI __cudaRegisterTexture(void **fatCubinHandle,
-//                                      const void *hostVar,  // struct textureReference *hostVar
-//                                      const void **deviceAddress, const char *deviceName, int dim, int norm, int ext)
-//                                      {
-//   ava_argument(fatCubinHandle) {
-//     ava_in;
-//     ava_buffer(1);
-//     ava_element ava_handle;
-//   }
-//
-//   ava_argument(deviceAddress) {
-//     ava_out;
-//     ava_buffer(1);
-//     ava_element ava_opaque;
-//   }
-//
-//   ava_argument(hostVar) {
-//     ava_in;
-//     ava_type_cast(struct textureReference *);
-//     ava_buffer(1);
-//   }
-//
-//   ava_argument(deviceName) {
-//     ava_in;
-//     ava_buffer(strlen(deviceName) + 1);
-//   }
-// }
-
+/*
+void CUDARTAPI __cudaRegisterTexture(void **fatCubinHandle,
+                                     const void *hostVar,  // struct textureReference *hostVar
+                                     const void **deviceAddress, const char *deviceName, int dim, int norm, int ext) {
+  ava_argument(fatCubinHandle) {
+    ava_in;
+    ava_buffer(__helper_cubin_num(fatCubinHandle) + 1);
+    ava_element {
+      if (fatCubinHandle[ava_index] != NULL) ava_handle;
+    }
+  }
+  ava_argument(deviceAddress) {
+    ava_out;
+    ava_buffer(1);
+    ava_element ava_opaque;
+  }
+  ava_argument(hostVar) {
+    ava_in;
+    ava_type_cast(struct textureReference *);
+    ava_buffer(1);
+  }
+  ava_argument(deviceName) {
+    ava_in;
+    ava_buffer(strlen(deviceName) + 1);
+  }
+  if (ava_is_guest) {
+    fprintf(stderr, "__cudaRegisterTexture: deviceName=%s; dim=%d; norm=%d; ext=%d\n",
+            deviceName, dim, norm, ext);
+  }
+}
+*/
 __host__ __device__ unsigned CUDARTAPI
 __cudaPushCallConfiguration(dim3 gridDim, dim3 blockDim,
                             size_t sharedMem,  // CHECKME: default argument in header
@@ -5878,27 +5914,35 @@ curandStatus_t CURANDAPI curandCreateGeneratorHost(curandGenerator_t *generator,
 
 curandStatus_t CURANDAPI curandDestroyGenerator(curandGenerator_t generator) { ava_argument(generator) ava_handle; }
 
-curandStatus_t CURANDAPI curandGetVersion(int *version) { ava_unsupported; }
+curandStatus_t CURANDAPI curandGetVersion(int *version) {
+  ava_argument(version) {
+    ava_out;
+    ava_buffer(1);
+  }
+}
 
 curandStatus_t CURANDAPI curandGetProperty(libraryPropertyType type, int *value) { ava_unsupported; }
 
-curandStatus_t CURANDAPI curandSetStream(curandGenerator_t generator, cudaStream_t stream) { ava_unsupported; }
+curandStatus_t CURANDAPI curandSetStream(curandGenerator_t generator, cudaStream_t stream) {
+  ava_argument(generator) ava_handle;
+  ava_argument(stream) ava_handle;
+}
 
 curandStatus_t CURANDAPI curandSetPseudoRandomGeneratorSeed(curandGenerator_t generator, unsigned long long seed) {
-  ava_unsupported;
+  ava_argument(generator) ava_handle;
 }
 
 curandStatus_t CURANDAPI curandSetGeneratorOffset(curandGenerator_t generator, unsigned long long offset) {
-  ava_unsupported;
+  ava_argument(generator) ava_handle;
 }
 
 curandStatus_t CURANDAPI curandSetGeneratorOrdering(curandGenerator_t generator, curandOrdering_t order) {
-  ava_unsupported;
+  ava_argument(generator) ava_handle;
 }
 
 curandStatus_t CURANDAPI curandSetQuasiRandomGeneratorDimensions(curandGenerator_t generator,
                                                                  unsigned int num_dimensions) {
-  ava_unsupported;
+  ava_argument(generator) ava_handle;
 }
 
 curandStatus_t CURANDAPI curandGenerate(curandGenerator_t generator, unsigned int *outputPtr, size_t num) {
@@ -5907,49 +5951,85 @@ curandStatus_t CURANDAPI curandGenerate(curandGenerator_t generator, unsigned in
 
 curandStatus_t CURANDAPI curandGenerateLongLong(curandGenerator_t generator, unsigned long long *outputPtr,
                                                 size_t num) {
-  ava_unsupported;
+  ava_argument(generator) ava_handle;
+  ava_argument(outputPtr) {
+    ava_out;
+    ava_buffer(1);
+  }
 }
 
 curandStatus_t CURANDAPI curandGenerateUniform(curandGenerator_t generator, float *outputPtr, size_t num) {
-  ava_unsupported;
+  ava_argument(generator) ava_handle;
+  ava_argument(outputPtr) {
+    ava_out;
+    ava_buffer(1);
+  }
 }
 
 curandStatus_t CURANDAPI curandGenerateUniformDouble(curandGenerator_t generator, double *outputPtr, size_t num) {
-  ava_unsupported;
+  ava_argument(generator) ava_handle;
+  ava_argument(outputPtr) {
+    ava_out;
+    ava_buffer(1);
+  }
 }
 
 curandStatus_t CURANDAPI curandGenerateNormal(curandGenerator_t generator, float *outputPtr, size_t n, float mean,
                                               float stddev) {
-  ava_unsupported;
+  ava_argument(generator) ava_handle;
+  ava_argument(outputPtr) {
+    ava_out;
+    ava_buffer(1);
+  }
 }
 
 curandStatus_t CURANDAPI curandGenerateNormalDouble(curandGenerator_t generator, double *outputPtr, size_t n,
                                                     double mean, double stddev) {
-  ava_unsupported;
+  ava_argument(generator) ava_handle;
+  ava_argument(outputPtr) {
+    ava_out;
+    ava_buffer(1);
+  }
 }
 
 curandStatus_t CURANDAPI curandGenerateLogNormal(curandGenerator_t generator, float *outputPtr, size_t n, float mean,
                                                  float stddev) {
-  ava_unsupported;
+  ava_argument(generator) ava_handle;
+  ava_argument(outputPtr) {
+    ava_out;
+    ava_buffer(1);
+  }
 }
 
 curandStatus_t CURANDAPI curandGenerateLogNormalDouble(curandGenerator_t generator, double *outputPtr, size_t n,
                                                        double mean, double stddev) {
-  ava_unsupported;
+  ava_argument(generator) ava_handle;
+  ava_argument(outputPtr) {
+    ava_out;
+    ava_buffer(1);
+  }
 }
 
 curandStatus_t CURANDAPI curandCreatePoissonDistribution(double lambda,
                                                          curandDiscreteDistribution_t *discrete_distribution) {
-  ava_unsupported;
+  ava_argument(discrete_distribution) {
+    ava_out;
+    ava_buffer(1);
+    ava_element ava_handle;
+  }
 }
 
 curandStatus_t CURANDAPI curandDestroyDistribution(curandDiscreteDistribution_t discrete_distribution) {
-  ava_unsupported;
+  ava_argument(discrete_distribution) ava_handle;
 }
 
 curandStatus_t CURANDAPI curandGeneratePoisson(curandGenerator_t generator, unsigned int *outputPtr, size_t n,
                                                double lambda) {
-  ava_unsupported;
+  ava_argument(generator) ava_handle;
+  ava_argument(outputPtr) {
+    ava_out;
+    ava_buffer(1);
+  }
 }
 
 // just for internal usage
