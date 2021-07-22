@@ -74,7 +74,7 @@ EXPORTED_WEAKLY void nw_init_guestlib(intptr_t api_id) {
   command_channel_send_command(chan, (struct command_base *)api_init_command);
  
   /* Send dump directory and requested GPU memory to worker*/
-  char *dump_dir = std::getenv("AVA_DUMP_DIR");
+  char *dump_dir = std::getenv("AVA_WORKER_DUMP_DIR");
 
   uint32_t gpu_mem = 0;
   if (std::getenv("AVA_REQUESTED_GPU_MEMORY"))

@@ -13503,11 +13503,11 @@ ava_begin_replacement;
 void ava_preload_cubin_guestlib() {
   /* Preload CUDA fat binaries */
   const char *dump_dir;
-  if (std::getenv("AVA_DUMP_DIR")) {
-    dump_dir = std::getenv("AVA_DUMP_DIR");
+  if (std::getenv("AVA_GUEST_DUMP_DIR")) {
+    dump_dir = std::getenv("AVA_GUEST_DUMP_DIR");
     AVA_DEBUG << "Setting dump directory to " << dump_dir << std::endl;
   } else {
-    AVA_DEBUG << "AVA_DUMP_DIR is not set, using /cuda_dumps" << std::endl;
+    AVA_DEBUG << "AVA_GUEST_DUMP_DIR is not set, using /cuda_dumps" << std::endl;
     dump_dir = "/cuda_dumps";
   }
   /* Read cubin number */
@@ -13534,6 +13534,7 @@ void ava_preload_cubin_guestlib() {
     __helper_load_function_arg_info(dump_dir);
   }
 }
+
 ava_end_replacement;
 
 ava_begin_worker_replacement;
@@ -13571,17 +13572,20 @@ void ava_load_cubin_worker(absl::string_view dump_dir) {
 }
 
 void __helper_worker_init_epilogue() {
+// this prevents ava_load_cubin_worker from being called twice if a dump dir is specified
+#ifndef AVA_RECV_DUMP_FROM_GUESTLIB
   // the internal_api_handler usually calls ava_load_cubin_worker if DUMP_DIR is set,
-  // but leaving the env var check here in case it's set when the worker is ran
+  // but leaving the env var check here in case it's set on the worker side
   const char *dump_dir;
-  if (std::getenv("AVA_DUMP_DIR") != NULL) {
-    dump_dir = std::getenv("AVA_DUMP_DIR");
+  if (std::getenv("AVA_WORKER_DUMP_DIR") != NULL) {
+    dump_dir = std::getenv("AVA_WORKER_DUMP_DIR");
     AVA_DEBUG << "setting dump directory to " << dump_dir << std::endl;
   } else {
-    AVA_DEBUG << "AVA_DUMP_DIR is not set, using /cuda_dumps" << std::endl;
+    AVA_DEBUG << "AVA_WORKER_DUMP_DIR is not set, using /cuda_dumps" << std::endl;
     dump_dir = "/cuda_dumps";
   }
   ava_load_cubin_worker(dump_dir);
+#endif
   worker_tf_opt_init();
 }
 ava_end_worker_replacement;

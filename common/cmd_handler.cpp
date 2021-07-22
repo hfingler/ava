@@ -377,11 +377,12 @@ void internal_api_handler(struct command_channel *chan, struct nw_handle_pool *h
 
     if (strcmp(dump_dir, "") != 0) {
         printf("\n//! Sets directory for dump files to %s\n\n", dump_dir);
-        if (setenv("AVA_DUMP_DIR", dump_dir, 1)) {
-          perror("setenv failed for AVA_DUMP_DIR\n");
+        if (setenv("AVA_WORKER_DUMP_DIR", dump_dir, 1)) {
+          perror("setenv failed for AVA_WORKER_DUMP_DIR\n");
           exit(0);
         }
 #ifdef AVA_PRELOAD_CUBIN
+        fprintf(stderr, "\nLOAD CUBIN WORKER\n");
         ava_load_cubin_worker(dump_dir);
 #endif
     }
