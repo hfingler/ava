@@ -382,7 +382,6 @@ void internal_api_handler(struct command_channel *chan, struct nw_handle_pool *h
           exit(0);
         }
 #ifdef AVA_PRELOAD_CUBIN
-        fprintf(stderr, "\nLOAD CUBIN WORKER\n");
         ava_load_cubin_worker(dump_dir);
 #endif
     }
