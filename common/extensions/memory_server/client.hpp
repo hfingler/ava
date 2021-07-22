@@ -26,15 +26,19 @@ namespace GPUMemoryServer {
         void* socket;
         char* buffer;
         bool is_connected;
-        uint64_t uuid;
-        std::vector<void*> managed_allocations;
+        int current_device, og_device;
+        std::string uuid;
 
         inline bool isConnected() {
             return is_connected;
         }
-        void setUuid(uint64_t id) {
+        void setUuid(std::string id) {
             uuid = id;
         }
+        void kernelIn();
+        void kernelOut();
+        void setOriginalGPU();
+        void setCurrentGPU(int id);
         int connectToGPU(uint16_t gpuId);
         Reply sendMallocRequest(uint64_t size);
         Reply sendFreeRequest(void* devPtr);
@@ -52,6 +56,7 @@ namespace GPUMemoryServer {
         Client() {
             buffer = new char[BUF_SIZE];
             is_connected = false;
+            og_device = -1;
         }
         ~Client();
 

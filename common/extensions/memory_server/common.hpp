@@ -13,7 +13,8 @@ namespace GPUMemoryServer {
         return std::string("ipc:///tmp/gpumemserver_sock");
     }
 
-    enum RequestType { ALLOC, FREE, FINISHED, MEMREQUESTED };
+    enum RequestType { ALLOC, FREE, FINISHED, MEMREQUESTED,
+        KERNEL_IN, KERNEL_OUT };
 
     union RequestData {
         uint64_t size;
@@ -22,15 +23,13 @@ namespace GPUMemoryServer {
 
     struct Request {
         RequestType type;
-        uint64_t worker_id;
         RequestData data;
+        char worker_id[40]; //36 is the size of a uuid v4
     };
 
-    struct ReplyData {
-        char is_managed;
-        union {
-            cudaIpcMemHandle_t memHandle;
-        } alloc;
+    union ReplyData {
+        cudaIpcMemHandle_t memHandle;
+        char migrate;
     };
 
     struct Reply {

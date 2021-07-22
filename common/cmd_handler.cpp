@@ -10,6 +10,7 @@
 #include "worker/worker_context.h"
 #include "worker/worker.h"
 uint32_t requested_gpu_mem;
+std::string svless_vmid;
 #endif
 
 #ifdef __cplusplus
@@ -366,6 +367,12 @@ void internal_api_handler(struct command_channel *chan, struct nw_handle_pool *h
     // Replay the commands.
     replay_command(chan, common_context->nw_global_handle_pool, (struct command_channel *)nw_record_command_channel,
                    call_cmd, ret_cmd);
+    break;
+  }
+
+  case COMMAND_HANDLER_REGISTER_VMID: {
+    svless_vmid = std::string(cmd->reserved_area);
+    printf("\n Setting vmid of this worker to: %s\n", svless_vmid.c_str());
     break;
   }
 

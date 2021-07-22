@@ -176,7 +176,7 @@ uint32_t SVGPUManager::LaunchWorker(uint32_t gpu_id) {
   // Start from input environment variables
   std::vector<std::string> environments(worker_env_);
 
-  std::string visible_devices = "CUDA_VISIBLE_DEVICES=" + std::to_string(gpu_id);
+  std::string visible_devices = "GPU_DEVICE=" + std::to_string(gpu_id);
   environments.push_back(visible_devices);
 
   // Let API server use TCP channel

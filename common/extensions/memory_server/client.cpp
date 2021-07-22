@@ -8,6 +8,13 @@
 #include <zmq.h>
 #include <errno.h>
 
+//for migration we might need
+// cudaMemcpyPeer or cudaMemcpyPeerAsync 
+// https://stackoverflow.com/questions/31628041/how-to-copy-memory-between-different-gpus-in-cuda
+
+//  GPUMemoryServer::Client::getInstance().kernelIn();
+//   GPUMemoryServer::Client::getInstance().kernelOut();
+
 //I'll just dumpt it here so I don't have to link yet another .cpp
 cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
     //if we are not connected, use normal cudaMalloc
@@ -17,25 +24,11 @@ cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
 
     GPUMemoryServer::Reply rep =
             GPUMemoryServer::Client::getInstance().sendMallocRequest(size); 
-    printf("Done, err code is %d\n", rep.returnErr);
-
     void* ourDevPtr;
     if (rep.returnErr == 0) {
         //if it wasn't managed, it already allocated, so map here
-        if (rep.data.is_managed == 0) {
-            printf("Mapping dev ptr in this process\n");
-            cudaError_t err = cudaIpcOpenMemHandle(&ourDevPtr, rep.data.alloc.memHandle, cudaIpcMemLazyEnablePeerAccess);
-        }
-        //managed doesn't support Ipc, so we do it ourselves
-        else {
-            //update error
-            rep.returnErr = cudaMallocManaged(&ourDevPtr, size);
-            if(rep.returnErr) {
-                printf("Something went wrong on cudaMallocManaged, returning err.");
-                return rep.returnErr;
-            }
-            GPUMemoryServer::Client::getInstance().managed_allocations.push_back(ourDevPtr);
-        }
+        //printf("Mapping dev ptr in this process\n");
+        cudaError_t err = cudaIpcOpenMemHandle(&ourDevPtr, rep.data.memHandle, cudaIpcMemLazyEnablePeerAccess);
     }
     
     //even if the malloc failed, this is fine
@@ -50,7 +43,6 @@ cudaError_t __internal_cudaFree(void *devPtr) {
 }
 
 namespace GPUMemoryServer {
-
     int Client::connectToGPU(uint16_t gpuId) {
         context = zmq_ctx_new();
         socket = zmq_socket(context, ZMQ_REQ);
@@ -93,7 +85,7 @@ namespace GPUMemoryServer {
     }
 
     Reply Client::sendRequest(Request &req) {
-        req.worker_id = this->uuid;
+        strcpy(req.worker_id, uuid.c_str());
         memcpy(buffer, &req, sizeof(Request));
         zmq_send(socket, buffer, sizeof(Request), 0);
         zmq_recv(socket, buffer, sizeof(Reply), 0);
@@ -106,9 +98,38 @@ namespace GPUMemoryServer {
     Client::~Client() {
         zmq_close(socket);
         //zmq_ctx_destroy(context);
+    }
 
-        for (auto &ptr : managed_allocations) {
-            cudaFree(ptr);
+    void Client::setCurrentGPU(int id) {
+        cudaError_t err = cudaSetDevice(id);
+        if (err) {
+            printf("CUDA err on cudaSetDevice(%d): %d\n", id, err);
+            exit(1);
         }
+        printf("Worker [%s] setting current device to %d\n", uuid.c_str(), id);
+        if (og_device == -1) 
+            og_device = id;
+        current_device = id;
+    }
+
+    void Client::setOriginalGPU() {
+        if (og_device != current_device)
+            setCurrentGPU(og_device);
+    }
+
+    void Client::kernelIn() {
+        Request req;
+        req.type = RequestType::KERNEL_IN;
+        Reply rep = sendRequest(req);
+        
+        if (rep.data.migrate == 1) {
+            printf("Worker [%s] talked to GPU server and it told us to ask for migration\n");
+        }
+    }
+    
+    void Client::kernelOut() {
+        Request req;
+        req.type = RequestType::KERNEL_OUT;
+        sendRequest(req);
     }
 }

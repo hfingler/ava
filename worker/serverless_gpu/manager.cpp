@@ -22,6 +22,7 @@ ABSL_FLAG(std::string, resmngr_addr, "",
 ABSL_FLAG(std::string, gpumemory_mode, "default",
           "(OPTIONAL) GPU memory mode, default means all guestlib do their own, server means we use memory servers.");
 
+ABSL_FLAG(std::string, debug_migration, "no", "(OPTIONAL) turn on debug migration");
 
 int main(int argc, const char *argv[]) {
   absl::ParseCommandLine(argc, const_cast<char **>(argv));
@@ -41,6 +42,12 @@ int main(int argc, const char *argv[]) {
   std::string mmode = "GPU_MEMORY_MODE=";
   mmode += absl::GetFlag(FLAGS_gpumemory_mode);
   worker_env.push_back(mmode);
+
+  //check for debug flag
+  if (absl::GetFlag(FLAGS_debug_migration) != "no") {
+    std::string kmd = "SG_DEBUG_MIGRATION=1";
+    worker_env.push_back(kmd);
+  }
 
   std::cerr << "Using port " << port << " for AvA" << std::endl;
   SVGPUManager *manager =

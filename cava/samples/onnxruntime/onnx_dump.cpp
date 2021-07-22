@@ -726,6 +726,48 @@ __host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, 
   }
 }
 
+/*
+cudaError_t __internal_cudaLaunchKernel(const void *func, dim3 gridDim, dim3 blockDim, void **args,
+                                                size_t sharedMem, cudaStream_t stream) {
+  ava_disable_native_call;
+
+  ava_argument(func) { ava_opaque; }
+
+  ava_argument(args) {
+    ava_in;
+    ava_buffer(ava_metadata(func)->func->argc);
+    ava_element {
+      // FIXME: use the generated index name in the spec to
+      // reference the outer loop's loop index at this moment.
+      if (ava_metadata(func)->func->args[__args_index_0].is_handle) {
+        ava_type_cast(void *);
+        ava_buffer(ava_metadata(func)->func->args[__args_index_0].size);
+        // ava_element ava_handle;
+      } else {
+        ava_type_cast(void *);
+        ava_buffer(ava_metadata(func)->func->args[__args_index_0].size);
+      }
+    }
+  }
+
+  ava_argument(stream) { ava_handle; }
+
+  // cudaError_t ret;
+  // if (ava_is_worker) {
+  //   ret = __helper_launch_kernel(ava_metadata(func)->func, func, gridDim, blockDim, args, sharedMem, stream);
+  //   return ret;
+  // }
+}
+
+ava_begin_replacement;
+__host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, dim3 blockDim, void **args,
+                                                size_t sharedMem, cudaStream_t stream) {
+  return __internal_cudaLaunchKernel(func, gridDim, blockDim, args, sharedMem, stream);
+}
+ava_end_replacement;
+
+*/
+
 // this is the RPC declaration on guestlib
 // definition will be executed on worker
 cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {

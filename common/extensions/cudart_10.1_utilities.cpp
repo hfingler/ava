@@ -4,8 +4,8 @@
 #include <fatbinary.h>
 #include <plog/Log.h>
 #include <stdlib.h>
-
 #include <stdexcept>
+#include <deque>
 
 int deference_int_pointer(int *p) {
   if (p)
@@ -47,7 +47,6 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   __helper_print_kernel_info(func, args);
   ret = (cudaError_t)cuLaunchKernel(func->cufunc, gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y, blockDim.z,
                                     sharedMem, (CUstream)stream, args, NULL);
-
   return ret;
 }
 

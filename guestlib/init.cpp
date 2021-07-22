@@ -97,6 +97,23 @@ EXPORTED_WEAKLY void nw_init_guestlib(intptr_t api_id) {
   memcpy(dump_dir_command->reserved_area, &gpu_mem, sizeof(uint32_t));
   command_channel_send_command(chan, (struct command_base *)dump_dir_command);
 
+  /* Send VMID*/
+  char default_vmid[] = "NO_VMID";
+  char* vmid = default_vmid;
+  //this will always be true when running serverless
+  if (std::getenv("VMID")) {
+      vmid = std::getenv("VMID");
+  }
+
+  struct command_base *set_vmid_command = command_channel_new_command(
+        nw_global_command_channel, sizeof(struct command_base), 0);
+  set_vmid_command->api_id = COMMAND_HANDLER_API;
+  set_vmid_command->command_id = COMMAND_HANDLER_REGISTER_VMID;
+  set_vmid_command->vm_id = nw_global_vm_id;
+  strcpy(set_vmid_command->reserved_area, vmid);
+  command_channel_send_command(chan, (struct command_base *)set_vmid_command);
+
+
 #ifdef AVA_PRINT_TIMESTAMP
   struct timeval ts_end;
   gettimeofday(&ts_end, NULL);

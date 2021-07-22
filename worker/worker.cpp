@@ -29,7 +29,6 @@
 #include "common/socket.hpp"
 #include "common/linkage.h"
 #include "plog/Initializers/RollingFileInitializer.h"
-#include "provision_gpu.h"
 #include "worker_context.h"
 
 #include "extensions/memory_server/client.hpp"
@@ -104,22 +103,31 @@ int main(int argc, char *argv[]) {
   }
   absl::InitializeSymbolizer(argv[0]);
 
-  char const *cworker_uuid = getenv("AVA_WORKER_UUID");
-  uint64_t worker_uuid = std::strtoul(cworker_uuid, 0, 10);
-  GPUMemoryServer::Client::getInstance().setUuid(worker_uuid);
-
+  //let's not use this
   /* Read GPU provision information. */
-  char const *cuda_uuid_str = getenv("CUDA_VISIBLE_DEVICES");
-  std::string cuda_uuid = cuda_uuid_str ? std::string(cuda_uuid_str) : "";
-  char const *gpu_uuid_str = getenv("AVA_GPU_UUID");
-  std::string gpu_uuid = gpu_uuid_str ? std::string(gpu_uuid_str) : "";
-  char const *gpu_mem_str = getenv("AVA_GPU_MEMORY");
-  std::string gpu_mem = gpu_mem_str ? std::string(gpu_mem_str) : "";
-  provision_gpu = new ProvisionGpu(cuda_uuid, gpu_uuid, gpu_mem);
+  //char const *cuda_uuid_str = getenv("CUDA_VISIBLE_DEVICES");
+  //std::string cuda_uuid = cuda_uuid_str ? std::string(cuda_uuid_str) : "";
+  //char const *gpu_uuid_str = getenv("AVA_GPU_UUID");
+  //std::string gpu_uuid = gpu_uuid_str ? std::string(gpu_uuid_str) : "";
+  //char const *gpu_mem_str = getenv("AVA_GPU_MEMORY");
+  //std::string gpu_mem = gpu_mem_str ? std::string(gpu_mem_str) : "";
+  //provision_gpu = new ProvisionGpu(cuda_uuid, gpu_uuid, gpu_mem);
+
+  char const *gpu_device_str = getenv("GPU_DEVICE");
+  std::string gpu_device = std::string(gpu_device_str);
+
+  //AVA_WORKER_UUID is a unique, starting at 0, id we can use
+  char const *cworker_uuid = getenv("AVA_WORKER_UUID");
+  std::string worker_uuid = std::string(cworker_uuid);
+
+  char *cmmode = std::getenv("GPU_MEMORY_MODE");
+  std::string mmode = cmmode ? std::string(cmmode) : "default";
+  
+  /* set current device*/
+  GPUMemoryServer::Client::getInstance().setCurrentGPU( std::stoi(gpu_device) );
 
   /* setup signal handler */
   if ((original_sigint_handler = signal(SIGINT, sigint_handler)) == SIG_ERR) printf("failed to catch SIGINT\n");
-
   if ((original_sigsegv_handler = signal(SIGSEGV, sigsegv_handler)) == SIG_ERR) printf("failed to catch SIGSEGV\n");
 
   absl::FailureSignalHandlerOptions options;
@@ -139,28 +147,15 @@ int main(int argc, char *argv[]) {
 
   if (!getenv("AVA_CHANNEL") || !strcmp(getenv("AVA_CHANNEL"), "TCP")) {
     chan_hv = NULL;
-    //create tcp socket
     chan = command_channel_socket_tcp_worker_new(listen_port);
-    //create log file
     nw_record_command_channel = command_channel_log_new(listen_port);
-
     //this sets API id and other stuff
     init_internal_command_handler();
 
-    char *cmmode = std::getenv("GPU_MEMORY_MODE");
-    std::string mmode;
-    if (cmmode == 0) {
-      std::cerr <<  " GPU_MEMORY_MODE not defined\n";
-      mmode = "default";
-    }
-    else {
-      mmode = std::string(cmmode);
-    }
-    
     std::cerr << "[worker#" << listen_port << "] using memory mode " << mmode  << std::endl;
     //if it's server mode we need to connect to it
     if (mmode == "server") {
-      uint16_t gpuid = std::stoi(cuda_uuid);
+      uint16_t gpuid = std::stoi(gpu_device);
       std::cerr << "[worker#" << listen_port << "] connecting to memory server at GPU #" << gpuid << ". if it loops here we couldn't connect" << std::endl;
       int rc = 1;
       //we need to loop since it's very likely we are created before the server is
@@ -186,6 +181,16 @@ int main(int argc, char *argv[]) {
         //requested_gpu_mem comes from worker.hpp
         GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(requested_gpu_mem);
         //GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(16);
+
+        //if this is serverless, we need to update our id
+        if (svless_vmid == "NO_VMID") {
+          printf("svless_vmid is default, using %s\n", worker_uuid.c_str());
+          GPUMemoryServer::Client::getInstance().setUuid(worker_uuid);
+        }
+        else {
+          printf("got vmid from cmd channel: %s\n", svless_vmid.c_str());
+          GPUMemoryServer::Client::getInstance().setUuid(svless_vmid);
+        }
       }
 
       std::cerr << "[worker#" << listen_port << "] got one, setting up cmd handler" << std::endl;
@@ -199,6 +204,8 @@ int main(int argc, char *argv[]) {
     if (mmode == "server") {
       GPUMemoryServer::Client::getInstance().sendCleanupRequest();
     }
+    //go back to original GPU
+    GPUMemoryServer::Client::getInstance().setOriginalGPU();
 
     std::cerr << "[worker#" << listen_port << "] freeing channel and quiting." << std::endl;
     command_channel_free(chan);
