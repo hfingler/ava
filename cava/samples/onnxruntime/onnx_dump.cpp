@@ -784,7 +784,6 @@ cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
 
 ava_begin_replacement;
 EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMalloc(void **devPtr, size_t size) {
-  printf("in replaced cudaMalloc\n");
   return __internal_cudaMalloc(devPtr, size);
 }
 ava_end_replacement;

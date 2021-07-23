@@ -6,6 +6,8 @@
 #include "common.hpp"
 #include <zmq.h>
 #include <vector>
+#include <cuda_runtime_api.h>
+#include <memory>
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,6 +30,15 @@ namespace GPUMemoryServer {
         bool is_connected;
         int current_device, og_device;
         std::string uuid;
+        //for local mallocs
+        struct LocalAlloc {
+            void* devPtr;
+            LocalAlloc(void* ptr) : devPtr(ptr) {}
+            ~LocalAlloc() {
+                cudaFree(devPtr);
+            }
+        };
+        std::vector<std::unique_ptr<LocalAlloc>> local_allocs;
 
         inline bool isConnected() {
             return is_connected;
@@ -35,6 +46,8 @@ namespace GPUMemoryServer {
         void setUuid(std::string id) {
             uuid = id;
         }
+        cudaError_t localMalloc(void** devPtr, size_t size);
+        void cleanup();
         void kernelIn();
         void kernelOut();
         void setOriginalGPU();

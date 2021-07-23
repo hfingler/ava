@@ -200,10 +200,8 @@ int main(int argc, char *argv[]) {
 
     } while(std::getenv("SERVERLESS_MODE"));
 
-    //if mem server mode, clean up allocations
-    if (mmode == "server") {
-      GPUMemoryServer::Client::getInstance().sendCleanupRequest();
-    }
+    //clean up allocations, local and remote
+    GPUMemoryServer::Client::getInstance().cleanup();
     //go back to original GPU
     GPUMemoryServer::Client::getInstance().setOriginalGPU();
 

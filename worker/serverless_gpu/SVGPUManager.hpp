@@ -52,15 +52,9 @@ class SVGPUManager : public ManagerServiceServerBase, public GPU::Service {
 
   // methods
   SVGPUManager(uint32_t port, uint32_t worker_port_base, std::string worker_path, std::vector<std::string> &worker_argv,
-            std::vector<std::string> &worker_env, uint16_t ngpus, uint16_t gpu_offset, std::string memory_mode)
-    : ManagerServiceServerBase(port, worker_port_base, worker_path, worker_argv, worker_env) {
-      this->scheduler = new RoundRobin(ngpus, gpu_offset);
-      this->n_gpus = ngpus;
-      this->gpu_offset = gpu_offset;
-      this->memory_mode = memory_mode;
-      this->uuid_counter = 0;
-    };
+            std::vector<std::string> &worker_env, uint16_t ngpus, uint16_t gpu_offset, std::string memory_mode);
 
+  void setRealGPUOffsetCount();
   void RegisterSelf(std::string rm_addr);
   void LaunchService();
   void LaunchMemoryServers();

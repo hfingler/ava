@@ -56,11 +56,9 @@ void SVGPUManager::LaunchService() {
   std::cout << "Server listening on " << server_address << std::endl;
 }
 
-void SVGPUManager::ResMngrClient::RegisterSelf(uint32_t& gpu_offset, uint32_t& n_gpus) {
-  RegisterGPUNodeRequest request;
+void SVGPUManager::setRealGPUOffsetCount() {
   nvmlReturn_t result;
   uint32_t device_count;
-
   result = nvmlInit();
   if (result != NVML_SUCCESS) {
     std::cerr << "Failed to initialize NVML: " << nvmlErrorString(result) << std::endl;
@@ -73,17 +71,35 @@ void SVGPUManager::ResMngrClient::RegisterSelf(uint32_t& gpu_offset, uint32_t& n
     std::exit(1);
   }
 
+  result = nvmlShutdown();
+  if (result != NVML_SUCCESS) {
+    std::cerr << "Failed to shutdown NVML: " << nvmlErrorString(result) << std::endl;
+    std::exit(1);
+  }
+
   // bounds check requested gpus, use all gpus if n_gpus == 0
   uint32_t start_gpu = gpu_offset >= device_count ? 0 : gpu_offset;
   uint32_t requested_gpu_max = n_gpus == 0 ? device_count : start_gpu + n_gpus;
   device_count = std::min(device_count, requested_gpu_max);
 
-  //update real values
+  //update values
   gpu_offset = start_gpu;
   n_gpus = device_count;
+}
+
+
+void SVGPUManager::ResMngrClient::RegisterSelf(uint32_t& gpu_offset, uint32_t& n_gpus) {
+  RegisterGPUNodeRequest request;
+  nvmlReturn_t result;
+
+  result = nvmlInit();
+  if (result != NVML_SUCCESS) {
+    std::cerr << "Failed to initialize NVML: " << nvmlErrorString(result) << std::endl;
+    std::exit(1);
+  }
 
   // register each gpu with its available memory
-  for (unsigned int i = start_gpu; i < device_count; i++) {
+  for (unsigned int i = gpu_offset; i < gpu_offset+n_gpus; i++) {
     nvmlDevice_t device;
     nvmlMemory_t memory;
 
@@ -148,6 +164,18 @@ ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::Worker
  *
  *************************************/
 
+SVGPUManager::SVGPUManager(uint32_t port, uint32_t worker_port_base, std::string worker_path, std::vector<std::string> &worker_argv,
+            std::vector<std::string> &worker_env, uint16_t ngpus, uint16_t gpu_offset, std::string memory_mode)
+    : ManagerServiceServerBase(port, worker_port_base, worker_path, worker_argv, worker_env) {
+  this->scheduler = new RoundRobin(ngpus, gpu_offset);
+  this->n_gpus = ngpus;
+  this->gpu_offset = gpu_offset;
+  this->memory_mode = memory_mode;
+  this->uuid_counter = 0;
+  //already update to real values using nvml
+  setRealGPUOffsetCount();
+};
+
 void SVGPUManager::LaunchMemoryServers() {
   if(memory_mode == "server") {
     std::cerr << "Using memory server mode " << memory_mode << std::endl;
@@ -155,7 +183,7 @@ void SVGPUManager::LaunchMemoryServers() {
 
     std::cerr << "gpu_offset " << gpu_offset << "  ngpus " << n_gpus << std::endl;
     //TODO: this is totally wrong if we use in non-serverless mode.
-    for (int i = 1 ; i < 4 ; i++) {
+    for (unsigned int i = gpu_offset; i < gpu_offset+n_gpus; i++) {
       std::ostringstream stringStream;
       stringStream << base_path << i;
       

@@ -7,6 +7,7 @@
 #include "client.hpp"
 #include <zmq.h>
 #include <errno.h>
+#include <memory>
 
 //for migration we might need
 // cudaMemcpyPeer or cudaMemcpyPeerAsync 
@@ -19,7 +20,10 @@
 cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
     //if we are not connected, use normal cudaMalloc
     if(!GPUMemoryServer::Client::getInstance().isConnected()) {
-        return cudaMalloc(devPtr, size);
+        void *ptr;
+        cudaError_t err = GPUMemoryServer::Client::getInstance().localMalloc(&ptr, size);
+        *devPtr = ptr;
+        return err;
     }
 
     GPUMemoryServer::Reply rep =
@@ -132,4 +136,21 @@ namespace GPUMemoryServer {
         req.type = RequestType::KERNEL_OUT;
         sendRequest(req);
     }
+
+    cudaError_t Client::localMalloc(void** devPtr, size_t size) {
+        cudaError_t err = cudaMalloc(devPtr, size);
+        local_allocs.push_back(std::make_unique<Client::LocalAlloc>(*devPtr));
+        return err;
+    }
+
+    void Client::cleanup() {
+        //if we are connected to server, inform it that we are done
+        if (isConnected()) {
+            sendCleanupRequest();
+        }
+
+        //free all local mallocs
+        local_allocs.clear();
+    }
+
 }
