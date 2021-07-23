@@ -84,13 +84,13 @@ void Server::handleRequest(char* buffer, Reply* rep) {
      * kernel asking to run
      *************************/
     else if (req.type == RequestType::KERNEL_IN) {
-
+        handleKernelIn(req, rep);
     }
     /*************************
      * kernel done
      *************************/
     else if (req.type == RequestType::KERNEL_OUT) {
-
+        handleKernelOut(req, rep);
     }
 }   
 
@@ -120,7 +120,6 @@ void Server::handleMalloc(Request& req, Reply* rep) {
     //c++ wizardy:  https://stackoverflow.com/questions/2667355/mapint-int-default-values
     used_memory[worker_id] += requested_in_mb;        
 }
-
 
 void Server::handleFree(Request& req, Reply* rep) {
     std::string worker_id(req.worker_id);
@@ -152,6 +151,7 @@ void Server::handleFinish(Request& req, Reply* rep) {
 }
 
 void Server::handleKernelIn(Request& req, Reply* rep) {
+    printf("   handleKernelIn %s\n", std::getenv("SG_DEBUG_MIGRATION"));
     //check if we are just debugging
     if (std::getenv("SG_DEBUG_MIGRATION")) {
         debug_kernel_count += 1;

@@ -45,6 +45,7 @@ int main(int argc, const char *argv[]) {
 
   //check for debug flag
   if (absl::GetFlag(FLAGS_debug_migration) != "no") {
+    printf(">>> Setting SG_DEBUG_MIGRATION \n");
     std::string kmd = "SG_DEBUG_MIGRATION=1";
     worker_env.push_back(kmd);
   }

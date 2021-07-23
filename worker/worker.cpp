@@ -152,7 +152,6 @@ int main(int argc, char *argv[]) {
     //this sets API id and other stuff
     init_internal_command_handler();
 
-
     std::cerr << "[worker#" << listen_port << "] using memory mode " << mmode  << std::endl;
     GPUMemoryServer::Client::getInstance().setMemoryServerMode(mmode == "server");
     

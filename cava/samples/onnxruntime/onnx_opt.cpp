@@ -963,9 +963,11 @@ __host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, 
 
   cudaError_t ret;
   if (ava_is_worker) {
+    __internal_kernelIn();
     ret = __helper_launch_kernel(
         ((struct fatbin_function *)g_ptr_array_index(ava_metadata((void *)0)->fatbin_funcs, (intptr_t)func_id)),
         func_id, gridDim, blockDim, args, sharedMem, stream);
+    __internal_kernelOut();
 #warning This will bypass the resource reporting routine.
     return ret;
   }
@@ -1391,7 +1393,7 @@ CUresult CUDAAPI cuModuleLoadFatBinary(CUmodule *module, const void *fatCubin) {
   }
 }
 
-CUresult CUDAAPI cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
+CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
                                 unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
                                 unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
   ava_argument(hStream) ava_handle;
@@ -1420,6 +1422,15 @@ CUresult CUDAAPI cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned in
     ava_element ava_buffer(1);
   }
 }
+
+ava_begin_replacement;
+CUresult CUDAAPI cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
+                                unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
+                                unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
+  return __internal_cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
+                                sharedMemBytes, hStream, kernelParams, extra);
+}
+ava_end_replacement;
 
 CUresult CUDAAPI cuDeviceGetCount(int *count) {
   ava_argument(count) {

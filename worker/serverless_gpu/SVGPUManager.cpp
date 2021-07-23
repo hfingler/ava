@@ -78,15 +78,13 @@ void SVGPUManager::setRealGPUOffsetCount() {
   }
 
   // bounds check requested gpus, use all gpus if n_gpus == 0
-  uint32_t start_gpu = gpu_offset >= device_count ? 0 : gpu_offset;
-  uint32_t requested_gpu_max = n_gpus == 0 ? device_count : start_gpu + n_gpus;
-  device_count = std::min(device_count, requested_gpu_max);
-
-  //update values
-  gpu_offset = start_gpu;
-  n_gpus = device_count;
+  if (n_gpus == 0) {
+    device_count = device_count - gpu_offset;
+  } 
+  else {
+    device_count = gpu_offset + n_gpus;
+  }
 }
-
 
 void SVGPUManager::ResMngrClient::RegisterSelf(uint32_t& gpu_offset, uint32_t& n_gpus) {
   RegisterGPUNodeRequest request;
@@ -177,32 +175,29 @@ SVGPUManager::SVGPUManager(uint32_t port, uint32_t worker_port_base, std::string
 };
 
 void SVGPUManager::LaunchMemoryServers() {
-  if(memory_mode == "server") {
-    std::cerr << "Using memory server mode " << memory_mode << std::endl;
-    std::string base_path = GPUMemoryServer::get_base_socket_path();
+  std::cerr << "Using memory server mode " << memory_mode << std::endl;
+  std::string base_path = GPUMemoryServer::get_base_socket_path();
 
-    std::cerr << "gpu_offset " << gpu_offset << "  ngpus " << n_gpus << std::endl;
-    //TODO: this is totally wrong if we use in non-serverless mode.
-    for (unsigned int i = gpu_offset; i < gpu_offset+n_gpus; i++) {
-      std::ostringstream stringStream;
-      stringStream << base_path << i;
-      
-      std::cerr << "Launching GPU memory server for GPU " << i << " at socket "
-            << stringStream.str() << std::endl;
-      
-      auto sv = std::make_unique<GPUMemoryServer::Server>(i, stringStream.str());
-      sv.get()->start();
-      memory_servers.push_back(std::move(sv));
-    }
-  }
-  else {
-    std::cerr << "Using other memory mode: " << memory_mode << std::endl;
+  for (unsigned int i = gpu_offset; i < gpu_offset+n_gpus; i++) {
+    std::ostringstream stringStream;
+    stringStream << base_path << i;
+    
+    std::cerr << "Launching GPU memory server for GPU " << i << " at socket "
+          << stringStream.str() << std::endl;
+    
+    auto sv = std::make_unique<GPUMemoryServer::Server>(i, stringStream.str());
+    sv.get()->start();
+    memory_servers.push_back(std::move(sv));
   }
 }
 
 uint32_t SVGPUManager::LaunchWorker(uint32_t gpu_id) {
   // Start from input environment variables
   std::vector<std::string> environments(worker_env_);
+
+  for (std::string &e : environments) {
+    printf("   %s", e.c_str());
+  }
 
   std::string visible_devices = "GPU_DEVICE=" + std::to_string(gpu_id);
   environments.push_back(visible_devices);

@@ -694,10 +694,10 @@ cudaError_t CUDARTAPI __cudaPopCallConfiguration(dim3 *gridDim, dim3 *blockDim, 
   }
 }
 
+//ZZ: cudaPointerGetAttributes to check or use is_gpu_address
 __host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, dim3 blockDim, void **args,
                                                 size_t sharedMem, cudaStream_t stream) {
   ava_disable_native_call;
-
   ava_argument(func) { ava_opaque; }
 
   ava_argument(args) {
@@ -721,52 +721,83 @@ __host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, 
 
   cudaError_t ret;
   if (ava_is_worker) {
+    __internal_kernelIn();
     ret = __helper_launch_kernel(ava_metadata(func)->func, func, gridDim, blockDim, args, sharedMem, stream);
+    __internal_kernelOut();
     return ret;
   }
 }
 
 /*
-cudaError_t __internal_cudaLaunchKernel(const void *func, dim3 gridDim, dim3 blockDim, void **args,
-                                                size_t sharedMem, cudaStream_t stream) {
-  ava_disable_native_call;
+CUresult CUDAAPI cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
+                                unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
+                                unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
+  ava_argument(hStream) ava_handle;
 
-  ava_argument(func) { ava_opaque; }
-
-  ava_argument(args) {
+  ava_argument(kernelParams) {
     ava_in;
-    ava_buffer(ava_metadata(func)->func->argc);
+    ava_buffer(ava_metadata(f)->func->argc);
     ava_element {
       // FIXME: use the generated index name in the spec to
       // reference the outer loop's loop index at this moment.
-      if (ava_metadata(func)->func->args[__args_index_0].is_handle) {
+      if (ava_metadata(f)->func->args[__kernelParams_index_0].is_handle) {
         ava_type_cast(void *);
-        ava_buffer(ava_metadata(func)->func->args[__args_index_0].size);
-        // ava_element ava_handle;
+        ava_buffer(ava_metadata(f)->func->args[__kernelParams_index_0].size);
+        ava_element ava_opaque;
       } else {
         ava_type_cast(void *);
-        ava_buffer(ava_metadata(func)->func->args[__args_index_0].size);
+        ava_buffer(ava_metadata(f)->func->args[__kernelParams_index_0].size);
       }
     }
   }
 
-  ava_argument(stream) { ava_handle; }
+  ava_argument(extra) {
+    ava_in;
+    ava_buffer(__helper_launch_extra_size(extra));
+#warning The buffer size below states that every kernelParams[i] is 1 byte long.
+    ava_element ava_buffer(1);
+  }
+}
+*/
 
-  // cudaError_t ret;
-  // if (ava_is_worker) {
-  //   ret = __helper_launch_kernel(ava_metadata(func)->func, func, gridDim, blockDim, args, sharedMem, stream);
-  //   return ret;
-  // }
+CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
+                                unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
+                                unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
+  ava_argument(hStream) ava_handle;
+
+  ava_argument(kernelParams) {
+    ava_in;
+    ava_buffer(ava_metadata(f)->func->argc);
+    ava_element {
+      // FIXME: use the generated index name in the spec to
+      // reference the outer loop's loop index at this moment.
+      if (ava_metadata(f)->func->args[__kernelParams_index_0].is_handle) {
+        ava_type_cast(void *);
+        ava_buffer(ava_metadata(f)->func->args[__kernelParams_index_0].size);
+        ava_element ava_opaque;
+      } else {
+        ava_type_cast(void *);
+        ava_buffer(ava_metadata(f)->func->args[__kernelParams_index_0].size);
+      }
+    }
+  }
+
+  ava_argument(extra) {
+    ava_in;
+    ava_buffer(__helper_launch_extra_size(extra));
+#warning The buffer size below states that every kernelParams[i] is 1 byte long.
+    ava_element ava_buffer(1);
+  }
 }
 
 ava_begin_replacement;
-__host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, dim3 blockDim, void **args,
-                                                size_t sharedMem, cudaStream_t stream) {
-  return __internal_cudaLaunchKernel(func, gridDim, blockDim, args, sharedMem, stream);
+CUresult CUDAAPI cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
+                                unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
+                                unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
+  return __internal_cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
+                                sharedMemBytes, hStream, kernelParams, extra);
 }
 ava_end_replacement;
-
-*/
 
 // this is the RPC declaration on guestlib
 // definition will be executed on worker
@@ -1006,7 +1037,15 @@ __host__ cudaError_t CUDARTAPI cudaPointerGetAttributes(struct cudaPointerAttrib
   }
 }
 
-__host__ cudaError_t CUDARTAPI cudaMemset(void *devPtr, int value, size_t count) { ava_argument(devPtr) ava_opaque; }
+__host__ cudaError_t CUDARTAPI cudaMemset(void *devPtr, int value, size_t count) { 
+  ava_disable_native_call;
+  ava_argument(devPtr) ava_opaque; 
+
+  if (ava_is_worker) {
+    cudaMemset(devPtr, value, count);
+  }
+  
+}
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaDeviceSynchronize(void);
 
@@ -1112,36 +1151,6 @@ CUresult CUDAAPI cuModuleLoadFatBinary(CUmodule *module, const void *fatCubin) {
   ava_argument(module) {
     ava_out;
     ava_buffer(1);
-  }
-}
-
-CUresult CUDAAPI cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
-                                unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
-                                unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
-  ava_argument(hStream) ava_handle;
-
-  ava_argument(kernelParams) {
-    ava_in;
-    ava_buffer(ava_metadata(f)->func->argc);
-    ava_element {
-      // FIXME: use the generated index name in the spec to
-      // reference the outer loop's loop index at this moment.
-      if (ava_metadata(f)->func->args[__kernelParams_index_0].is_handle) {
-        ava_type_cast(void *);
-        ava_buffer(ava_metadata(f)->func->args[__kernelParams_index_0].size);
-        ava_element ava_opaque;
-      } else {
-        ava_type_cast(void *);
-        ava_buffer(ava_metadata(f)->func->args[__kernelParams_index_0].size);
-      }
-    }
-  }
-
-  ava_argument(extra) {
-    ava_in;
-    ava_buffer(__helper_launch_extra_size(extra));
-#warning The buffer size below states that every kernelParams[i] is 1 byte long.
-    ava_element ava_buffer(1);
   }
 }
 

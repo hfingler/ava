@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <string>
 #include <sstream>
+#include <iostream>
 #include <string.h>
 #include <stdlib.h>
 #include "common.hpp"
@@ -8,10 +9,32 @@
 #include <zmq.h>
 #include <errno.h>
 #include <memory>
+#include "common/extensions/cudart_10.1_utilities.hpp"
 
 //for migration we might need
 // cudaMemcpyPeer or cudaMemcpyPeerAsync 
 // https://stackoverflow.com/questions/31628041/how-to-copy-memory-between-different-gpus-in-cuda
+
+void __internal_kernelIn() {
+    printf("__internal_kernelIn\n");
+    GPUMemoryServer::Client::getInstance().kernelIn();
+}
+
+void __internal_kernelOut() {
+    printf("__internal_kernelOut\n");
+    GPUMemoryServer::Client::getInstance().kernelOut();
+}
+
+CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
+                                unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
+                                unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
+    CUresult cur;
+    GPUMemoryServer::Client::getInstance().kernelIn();
+    cur = cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
+                sharedMemBytes, hStream, kernelParams, extra);
+    GPUMemoryServer::Client::getInstance().kernelOut();
+    return cur;
+}
 
 cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
     //if we are not in mem server mode, use normal cudaMalloc
@@ -37,6 +60,8 @@ cudaError_t __internal_cudaFree(void *devPtr) {
             GPUMemoryServer::Client::getInstance().sendFreeRequest(devPtr); 
     return rep.returnErr;
 }
+
+
 namespace GPUMemoryServer {
     int Client::connectToGPU(uint16_t gpuId) {
         context = zmq_ctx_new();
@@ -138,9 +163,7 @@ namespace GPUMemoryServer {
         if (isMemoryServerMode()) {
             sendCleanupRequest();
         }
-
         //free all local mallocs
         local_allocs.clear();
     }
-
 }
