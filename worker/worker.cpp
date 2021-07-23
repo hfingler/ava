@@ -152,21 +152,21 @@ int main(int argc, char *argv[]) {
     //this sets API id and other stuff
     init_internal_command_handler();
 
+
     std::cerr << "[worker#" << listen_port << "] using memory mode " << mmode  << std::endl;
-    //if it's server mode we need to connect to it
-    if (mmode == "server") {
-      uint16_t gpuid = std::stoi(gpu_device);
-      std::cerr << "[worker#" << listen_port << "] connecting to memory server at GPU #" << gpuid << ". if it loops here we couldn't connect" << std::endl;
-      int rc = 1;
-      //we need to loop since it's very likely we are created before the server is
-      while (rc != 0) {
-        rc = GPUMemoryServer::Client::getInstance().connectToGPU(gpuid);
-        printf("connect returned %d", rc);
-        //be kind
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-      }
-      std::cerr << "[worker#" << listen_port << "] connected to memory server at GPU #" << gpuid << "!" << std::endl;
+    GPUMemoryServer::Client::getInstance().setMemoryServerMode(mmode == "server");
+    
+    uint16_t gpuid = std::stoi(gpu_device);
+    std::cerr << "[worker#" << listen_port << "] connecting to memory server at GPU #" << gpuid << ". if it loops here we couldn't connect" << std::endl;
+    int rc = 1;
+    //we need to loop since it's very likely we are created before the server is
+    while (rc != 0) {
+      rc = GPUMemoryServer::Client::getInstance().connectToGPU(gpuid);
+      printf("connect returned %d", rc);
+      //be kind
+      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
+    std::cerr << "[worker#" << listen_port << "] connected to memory server at GPU #" << gpuid << "!" << std::endl;
 
     //only loop if we are in serverless mode
     do {

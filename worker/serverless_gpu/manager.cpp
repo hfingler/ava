@@ -55,11 +55,12 @@ int main(int argc, const char *argv[]) {
                        worker_env, absl::GetFlag(FLAGS_ngpus), absl::GetFlag(FLAGS_gpuoffset),
                        absl::GetFlag(FLAGS_gpumemory_mode));
 
+  manager->LaunchMemoryServers();
+  
   char *rm_addr = std::getenv("RESMNGR_ADDR");
   // normal ava mode
   if (!rm_addr) {
     std::cerr << "Running manager on normal manager mode" << std::endl;
-    manager->LaunchMemoryServers();
     manager->RunServer();
   }
   // gRPC mode

@@ -27,7 +27,8 @@ namespace GPUMemoryServer {
         void* context;
         void* socket;
         char* buffer;
-        bool is_connected;
+        bool memoryserver_mode;
+
         int current_device, og_device;
         std::string uuid;
         //for local mallocs
@@ -40,8 +41,11 @@ namespace GPUMemoryServer {
         };
         std::vector<std::unique_ptr<LocalAlloc>> local_allocs;
 
-        inline bool isConnected() {
-            return is_connected;
+        void setMemoryServerMode(bool f) {
+            memoryserver_mode = f;
+        }
+        bool isMemoryServerMode() {
+            return memoryserver_mode;
         }
         void setUuid(std::string id) {
             uuid = id;
@@ -68,7 +72,7 @@ namespace GPUMemoryServer {
 
         Client() {
             buffer = new char[BUF_SIZE];
-            is_connected = false;
+            memoryserver_mode = false;
             og_device = -1;
         }
         ~Client();

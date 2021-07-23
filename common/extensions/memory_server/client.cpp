@@ -13,16 +13,10 @@
 // cudaMemcpyPeer or cudaMemcpyPeerAsync 
 // https://stackoverflow.com/questions/31628041/how-to-copy-memory-between-different-gpus-in-cuda
 
-//  GPUMemoryServer::Client::getInstance().kernelIn();
-//   GPUMemoryServer::Client::getInstance().kernelOut();
-
-//I'll just dumpt it here so I don't have to link yet another .cpp
 cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
-    //if we are not connected, use normal cudaMalloc
-    if(!GPUMemoryServer::Client::getInstance().isConnected()) {
-        void *ptr;
-        cudaError_t err = GPUMemoryServer::Client::getInstance().localMalloc(&ptr, size);
-        *devPtr = ptr;
+    //if we are not in mem server mode, use normal cudaMalloc
+    if(!GPUMemoryServer::Client::getInstance().isMemoryServerMode()) {
+        cudaError_t err = GPUMemoryServer::Client::getInstance().localMalloc(devPtr, size);
         return err;
     }
 
@@ -31,10 +25,8 @@ cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
     void* ourDevPtr;
     if (rep.returnErr == 0) {
         //if it wasn't managed, it already allocated, so map here
-        //printf("Mapping dev ptr in this process\n");
         cudaError_t err = cudaIpcOpenMemHandle(&ourDevPtr, rep.data.memHandle, cudaIpcMemLazyEnablePeerAccess);
     }
-    
     //even if the malloc failed, this is fine
     *devPtr = ourDevPtr;
     return rep.returnErr;
@@ -45,14 +37,12 @@ cudaError_t __internal_cudaFree(void *devPtr) {
             GPUMemoryServer::Client::getInstance().sendFreeRequest(devPtr); 
     return rep.returnErr;
 }
-
 namespace GPUMemoryServer {
     int Client::connectToGPU(uint16_t gpuId) {
         context = zmq_ctx_new();
         socket = zmq_socket(context, ZMQ_REQ);
         std::ostringstream stringStream;
         stringStream << get_base_socket_path() << gpuId;
-        is_connected = true;
         int ret = zmq_connect(socket, stringStream.str().c_str());
         if (ret == -1) {
             printf("connect failed, errno: %d\n", errno);
@@ -145,7 +135,7 @@ namespace GPUMemoryServer {
 
     void Client::cleanup() {
         //if we are connected to server, inform it that we are done
-        if (isConnected()) {
+        if (isMemoryServerMode()) {
             sendCleanupRequest();
         }
 
