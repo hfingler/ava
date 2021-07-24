@@ -15,6 +15,11 @@
 // cudaMemcpyPeer or cudaMemcpyPeerAsync 
 // https://stackoverflow.com/questions/31628041/how-to-copy-memory-between-different-gpus-in-cuda
 
+
+void* __translate_ptr(void* ptr) {
+    return GPUMemoryServer::Client::getInstance().translate_ptr(ptr);
+}
+
 void __internal_kernelIn() {
     printf("__internal_kernelIn\n");
     GPUMemoryServer::Client::getInstance().kernelIn();
@@ -43,22 +48,23 @@ cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
         return err;
     }
 
-    GPUMemoryServer::Reply rep =
-            GPUMemoryServer::Client::getInstance().sendMallocRequest(size); 
+    GPUMemoryServer::Client::getInstance().sendMallocRequest(size); 
+    GPUMemoryServer::Reply* rep = GPUMemoryServer::Client::getInstance().getReply(); 
+
     void* ourDevPtr;
-    if (rep.returnErr == 0) {
+    if (rep->returnErr == 0) {
         //if it wasn't managed, it already allocated, so map here
-        cudaError_t err = cudaIpcOpenMemHandle(&ourDevPtr, rep.data.memHandle, cudaIpcMemLazyEnablePeerAccess);
+        cudaError_t err = cudaIpcOpenMemHandle(&ourDevPtr, rep->data.memHandle, cudaIpcMemLazyEnablePeerAccess);
     }
     //even if the malloc failed, this is fine
     *devPtr = ourDevPtr;
-    return rep.returnErr;
+    return rep->returnErr;
 }
 
 cudaError_t __internal_cudaFree(void *devPtr) {
-    GPUMemoryServer::Reply rep =
-            GPUMemoryServer::Client::getInstance().sendFreeRequest(devPtr); 
-    return rep.returnErr;
+    GPUMemoryServer::Client::getInstance().sendFreeRequest(devPtr); 
+    GPUMemoryServer::Reply* rep = GPUMemoryServer::Client::getInstance().getReply();
+    return rep->returnErr;
 }
 
 
@@ -75,43 +81,42 @@ namespace GPUMemoryServer {
         return ret;
     }
 
-    Reply Client::sendMallocRequest(uint64_t size) {
-        Request req;
+    void Client::sendMallocRequest(uint64_t size) {
         req.type = RequestType::ALLOC;
         req.data.size = size;
-        return sendRequest(req);
+        sendRequest(req);
     }
     
-    Reply Client::sendFreeRequest(void* devPtr) {
-        Request req;
+    void Client::sendFreeRequest(void* devPtr) {
         req.type = RequestType::FREE;
         req.data.devPtr = devPtr;
-        return sendRequest(req);
+        sendRequest(req);
     }
     
     //this is called when we are done, so cleanup too
-    Reply Client::sendCleanupRequest() {
-        Request req;
+    void Client::sendCleanupRequest() {
         req.type = RequestType::FINISHED;
-        return sendRequest(req);
+        sendRequest(req);
     }
 
-    Reply Client::sendMemoryRequestedValue(uint64_t mem_mb) {
-        Request req;
+    void Client::sendMemoryRequestedValue(uint64_t mem_mb) {
         req.type = RequestType::MEMREQUESTED;
         req.data.size = mem_mb;
-        return sendRequest(req);
+        sendRequest(req);
     }
 
-    Reply Client::sendRequest(Request &req) {
-        strcpy(req.worker_id, uuid.c_str());
-        memcpy(buffer, &req, sizeof(Request));
-        zmq_send(socket, buffer, sizeof(Request), 0);
-        zmq_recv(socket, buffer, sizeof(Reply), 0);
+    void Client::sendRequest(Request &req, uint32_t size, void* sock) {
+        void* socket;
+        if (sock == 0)
+            socket = this->socket;
+        else
+            socket = sock;
 
-        Reply rep;
-        memcpy(&rep, buffer, sizeof(Reply));
-        return rep;
+        strcpy(req.worker_id, uuid.c_str());
+        zmq_send(socket, (char*)&req, size, 0);
+
+        zmq_recv(socket, buffer, sizeof(Reply), 0);
+        memcpy(&reply, buffer, sizeof(Reply));
     }
 
     Client::~Client() {
@@ -137,17 +142,15 @@ namespace GPUMemoryServer {
     }
 
     void Client::kernelIn() {
-        Request req;
         req.type = RequestType::KERNEL_IN;
-        Reply rep = sendRequest(req);
+        sendRequest(req);
         
-        if (rep.data.migrate == 1) {
+        if (reply.data.migrate == 1) {
             printf("Worker [%s] talked to GPU server and it told us to ask for migration\n");
         }
     }
     
     void Client::kernelOut() {
-        Request req;
         req.type = RequestType::KERNEL_OUT;
         sendRequest(req);
     }
@@ -165,5 +168,50 @@ namespace GPUMemoryServer {
         }
         //free all local mallocs
         local_allocs.clear();
+    }
+
+    void* Client::translate_ptr(void* ptr) {
+        auto it = pointer_map.find((uint64_t)ptr);
+
+        if (it == pointer_map.end())
+            return ptr;
+        else {
+            printf("**pointer found in map, translating: %p  ->  %p\n", ptr, it->second);
+            return it->second;
+        }
+    }
+
+    void Client::sendGetAllPointersRequest() {
+        req.type = RequestType::FETCH_ALL_PTRS;
+        sendRequest(req);
+    }
+
+    void Client::migrateToGPU(uint32_t new_gpuid) {
+        //first we need to get all information of our memory
+        char* buf = reply.piggyback;
+        MigrationHeader* header = (MigrationHeader*) buf;
+        PointerPair* pps = (PointerPair*) buf+sizeof(MigrationHeader);
+
+        uint32_t size = sizeof(MigrationHeader) + (header->n_buffers * sizeof(PointerPair));
+
+        //let's connect to the new GPU server
+        void* new_socket = zmq_socket(context, ZMQ_REQ);
+        std::ostringstream stringStream;
+        stringStream << get_base_socket_path() << new_gpuid;
+        int ret = zmq_connect(new_socket, stringStream.str().c_str());
+        if (ret == -1) {
+            printf("connect to new gpu failed, errno: %d\n", errno);
+        }
+
+        req.type = RequestType::MIGRATE;
+        memcpy(req.piggyback, buf, size);
+        size += offsetof(Request, guard); //add the request size to the piggyback size
+        sendRequest(req, size, new_socket);
+
+        //TODO:
+        //cleanup on previous gpu
+        //switch connection
+        //make sure we will switch back when done
+
     }
 }

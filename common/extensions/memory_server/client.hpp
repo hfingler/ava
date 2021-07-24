@@ -8,7 +8,8 @@
 #include <cuda_runtime_api.h>
 #include <cuda.h>
 #include <memory>
-#include <absl/containers/flat_hash_map.h>
+//#include <absl/containers/flat_hash_map.h>
+#include <unordered_map>
 #include "common.hpp"
 
 #ifdef __cplusplus
@@ -22,6 +23,7 @@ cudaError_t __internal_cudaMalloc(void **devPtr, size_t size);
 cudaError_t __internal_cudaFree(void *devPtr);
 void __internal_kernelIn();
 void __internal_kernelOut();
+void* __translate_ptr(void*);
 
 #ifdef __cplusplus
 }
@@ -37,6 +39,16 @@ namespace GPUMemoryServer {
         char* buffer;
         bool memoryserver_mode;
 
+        //let's keep one Reply here since we can always reuse it
+        //it's 16K so we dont wanna keep creating these
+        Reply reply;
+        Request req;
+
+        //this sucks
+        Reply* getReply() {
+            return &reply;
+        }
+
         //device management
         int current_device, og_device;
         std::string uuid;
@@ -51,7 +63,13 @@ namespace GPUMemoryServer {
         std::vector<std::unique_ptr<LocalAlloc>> local_allocs;
         
         //pointer translation
-        absl::flat_hash_map<uint64_t, uint64_t> pointer_map;
+        //absl::flat_hash_map<uint64_t, void*> pointer_map;
+        std::unordered_map<uint64_t, void*> pointer_map;
+        void* translate_ptr(void* ptr);
+
+        //migration
+        void sendGetAllPointersRequest();
+        void migrateToGPU(uint32_t new_gpuid);
 
         //simple functions
         void setMemoryServerMode(bool f) {
@@ -70,10 +88,10 @@ namespace GPUMemoryServer {
         void setOriginalGPU();
         void setCurrentGPU(int id);
         int connectToGPU(uint16_t gpuId);
-        Reply sendMallocRequest(uint64_t size);
-        Reply sendFreeRequest(void* devPtr);
-        Reply sendCleanupRequest();
-        Reply sendMemoryRequestedValue(uint64_t mem_mb);
+        void sendMallocRequest(uint64_t size);
+        void sendFreeRequest(void* devPtr);
+        void sendCleanupRequest();
+        void sendMemoryRequestedValue(uint64_t mem_mb);
 
         static Client& getInstance() {
             static Client instance;
@@ -81,7 +99,7 @@ namespace GPUMemoryServer {
         }
 
         private:
-        Reply sendRequest(Request &req);
+        void sendRequest(Request &req, uint32_t size = offsetof(Request, guard), void* sock = 0);
 
         Client() {
             buffer = new char[BUF_SIZE];

@@ -31,12 +31,14 @@ namespace GPUMemoryServer {
         std::thread self_thread;
 
         Server(uint16_t gpu, std::string unix_socket_path) : gpu(gpu), unix_socket_path(unix_socket_path){}
-        void handleRequest(char* buffer, Reply* rep);
-        void handleMalloc(Request& req, Reply* rep);
-        void handleFree(Request& req, Reply* rep);
-        void handleFinish(Request& req, Reply* rep);
-        void handleKernelIn(Request& req, Reply* rep);
-        void handleKernelOut(Request& req, Reply* rep);
+        void handleRequest(char* buffer, void *responder);
+        uint32_t handleMalloc(Request& req, Reply& rep);
+        uint32_t handleFree(Request& req, Reply& rep);
+        uint32_t handleFinish(Request& req, Reply& rep);
+        uint32_t handleKernelIn(Request& req, Reply& rep);
+        uint32_t handleKernelOut(Request& req, Reply& rep);
+        uint32_t handleGetAllPointers(Request& req, Reply& rep);
+        uint32_t handleMigrate(Request& req, Reply& rep);
         void run();
         void start() {
             self_thread = std::thread(&Server::run, this);

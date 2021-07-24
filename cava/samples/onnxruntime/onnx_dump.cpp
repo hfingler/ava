@@ -1042,9 +1042,9 @@ __host__ cudaError_t CUDARTAPI cudaMemset(void *devPtr, int value, size_t count)
   ava_argument(devPtr) ava_opaque; 
 
   if (ava_is_worker) {
-    cudaMemset(devPtr, value, count);
+    //everything that takes a device pointer must go through __translate_ptr
+    cudaMemset(__translate_ptr(devPtr), value, count);
   }
-  
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaDeviceSynchronize(void);
