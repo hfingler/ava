@@ -1,11 +1,12 @@
 #include "cudart_10.1_utilities.hpp"
-
 #include <cuda_runtime_api.h>
 #include <fatbinary.h>
 #include <plog/Log.h>
 #include <stdlib.h>
 #include <stdexcept>
 #include <deque>
+#include "memory_server/client.hpp"
+#include <iostream>
 
 int deference_int_pointer(int *p) {
   if (p)
@@ -45,6 +46,18 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
     LOG_DEBUG << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc;
   }
   __helper_print_kernel_info(func, args);
+
+  //possibly translate pointers
+  for (int i = 0; i < func->argc; i++) {
+    //TODO: I'm just throwing pointers at the dict. there is a probability that pointers collide and we mess up
+    //printf("  arg %d is handle? %d   size %d\n", i, func->args[i].is_handle, func->args[i].size);
+    //std::cout << "  content:  " << *((void **)args[i]) << std::endl;
+    //if (func->args[i].is_handle) {
+    //  args[i] = __translate_ptr(args[i]);
+    //}
+    *((char*)args[i]) = (char*)__translate_ptr(*((void **)args[i]));
+  }
+
   ret = (cudaError_t)cuLaunchKernel(func->cufunc, gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y, blockDim.z,
                                     sharedMem, (CUstream)stream, args, NULL);
   return ret;

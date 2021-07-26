@@ -30,6 +30,7 @@
 #include "common/linkage.h"
 #include "plog/Initializers/RollingFileInitializer.h"
 #include "worker_context.h"
+#include "common/common_context.h"
 
 #include "extensions/memory_server/client.hpp"
 
@@ -124,7 +125,9 @@ int main(int argc, char *argv[]) {
   std::string mmode = cmmode ? std::string(cmmode) : "default";
   
   /* set current device*/
-  GPUMemoryServer::Client::getInstance().setCurrentGPU( std::stoi(gpu_device) );
+  GPUMemoryServer::Client::getInstance().setCurrentGPU(std::stoi(gpu_device));
+  auto ccontext = ava::CommonContext::instance();
+  ccontext->current_device = std::stoi(gpu_device);
 
   /* setup signal handler */
   if ((original_sigint_handler = signal(SIGINT, sigint_handler)) == SIG_ERR) printf("failed to catch SIGINT\n");
@@ -161,7 +164,6 @@ int main(int argc, char *argv[]) {
     //we need to loop since it's very likely we are created before the server is
     while (rc != 0) {
       rc = GPUMemoryServer::Client::getInstance().connectToGPU(gpuid);
-      printf("connect returned %d", rc);
       //be kind
       std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
@@ -180,16 +182,16 @@ int main(int argc, char *argv[]) {
         //requested_gpu_mem comes from worker.hpp
         GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(requested_gpu_mem);
         //GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(16);
+      }
 
-        //if this is serverless, we need to update our id
-        if (svless_vmid == "NO_VMID") {
-          printf("svless_vmid is default, using %s\n", worker_uuid.c_str());
-          GPUMemoryServer::Client::getInstance().setUuid(worker_uuid);
-        }
-        else {
-          printf("got vmid from cmd channel: %s\n", svless_vmid.c_str());
-          GPUMemoryServer::Client::getInstance().setUuid(svless_vmid);
-        }
+      //if this is serverless, we need to update our id
+      if (svless_vmid == "NO_VMID" || svless_vmid == "") {
+        printf("svless_vmid is default, using %s\n", worker_uuid.c_str());
+        GPUMemoryServer::Client::getInstance().setUuid(worker_uuid);
+      }
+      else {
+        printf("got vmid from cmd channel: %s\n", svless_vmid.c_str());
+        GPUMemoryServer::Client::getInstance().setUuid(svless_vmid);
       }
 
       std::cerr << "[worker#" << listen_port << "] got one, setting up cmd handler" << std::endl;

@@ -203,12 +203,14 @@ uint32_t Server::handleGetAllPointers(Request& req, Reply& rep) {
     MigrationHeader* header = (MigrationHeader*) buffer;
     PointerPair* pps = (PointerPair*) buffer+sizeof(MigrationHeader);
 
+    printf("Worker %s requested all ptrs: %u of them\n", req.worker_id, allocs[worker_id].size());
+
     header->n_buffers = allocs[worker_id].size();
 
     uint32_t count = 0;
     for (auto &al : allocs[worker_id]) {
         pps[count].ptr = (uint64_t)al.second->devPtr;
-        pps[count].data = al.second->size;
+        pps[count].size = al.second->size;
         count++;
     }
 
@@ -221,7 +223,7 @@ uint32_t Server::handleMigrate(Request& req, Reply& rep) {
     MigrationHeader* header = (MigrationHeader*) buf;
     PointerPair* pps = (PointerPair*) buf+sizeof(MigrationHeader);
 
-    //TODO: migrate.. duh
+    
 
     return offsetof(Reply, guard);
 }

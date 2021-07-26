@@ -48,6 +48,15 @@ int main(int argc, const char *argv[]) {
     printf(">>> Setting SG_DEBUG_MIGRATION \n");
     std::string kmd = "SG_DEBUG_MIGRATION=1";
     worker_env.push_back(kmd);
+    setenv("SG_DEBUG_MIGRATION", "1", 1);
+  }
+
+  char *rm_addr = std::getenv("RESMNGR_ADDR");
+  if (rm_addr) {
+    //let's just rename this thing since a lot of parts will use it
+    setenv("SERVERLESS_MODE", "1", 1);
+    std::string kmd = "SERVERLESS_MODE=1";
+    worker_env.push_back(kmd);
   }
 
   std::cerr << "Using port " << port << " for AvA" << std::endl;
@@ -58,7 +67,6 @@ int main(int argc, const char *argv[]) {
 
   manager->LaunchMemoryServers();
   
-  char *rm_addr = std::getenv("RESMNGR_ADDR");
   // normal ava mode
   if (!rm_addr) {
     std::cerr << "Running manager on normal manager mode" << std::endl;
@@ -66,9 +74,6 @@ int main(int argc, const char *argv[]) {
   }
   // gRPC mode
   else {
-    //let's just rename this thing since a lot of parts will use it
-    setenv("SERVERLESS_MODE", "1", 1);
-
     std::string full_addr(rm_addr);
     full_addr += ":";
     full_addr += std::getenv("RESMNGR_PORT");

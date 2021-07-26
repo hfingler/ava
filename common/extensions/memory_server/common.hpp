@@ -27,11 +27,7 @@ namespace GPUMemoryServer {
         RequestType type;
         RequestData data;
         char worker_id[40]; //36 is the size of a uuid v4
-        char guard;
-        //pad until BUF_SIZE, maybe offsetof works here?
-        char piggyback[BUF_SIZE-sizeof(RequestType)-sizeof(RequestData)-42];
     };
-
     union ReplyData {
         cudaIpcMemHandle_t memHandle;
         char migrate;
@@ -51,7 +47,7 @@ namespace GPUMemoryServer {
 
     struct PointerPair {
         uint64_t ptr;
-        uint64_t data; //data could be a pointer or a size, depending where we use it
+        uint64_t size;
     };
 }
 

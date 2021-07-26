@@ -18,6 +18,8 @@ class EXPORTED CommonContext final : public ava::support::Singleton<CommonContex
 
   pthread_mutex_t nw_global_metadata_map_mutex;
   GHashTable *nw_global_metadata_map;  // guarded by nw_global_metadata_map_mutex
+  
+  uint32_t current_device;
 
  private:
   CommonContext();

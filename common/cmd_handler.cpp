@@ -6,6 +6,7 @@
 #include "common/endpoint_lib.hpp"
 #include "common/linkage.h"
 #include "common/shadow_thread_pool.hpp"
+#include <cuda_runtime_api.h>
 #ifdef AVA_WORKER
 #include "worker/worker_context.h"
 #include "worker/worker.h"
@@ -108,6 +109,14 @@ static void _handle_commands_loop(struct command_channel *chan) {
 
 void handle_command_and_notify(struct command_channel *chan, struct command_base *cmd) {
   auto context = ava::CommonContext::instance();
+
+  int current_gpu;
+  cudaGetDevice(&current_gpu);
+
+  if (current_gpu != context->current_device) {
+
+  }
+
   handle_command(chan, context->nw_global_handle_pool, (struct command_channel *)nw_record_command_channel, cmd);
 }
 
@@ -372,7 +381,7 @@ void internal_api_handler(struct command_channel *chan, struct nw_handle_pool *h
 
   case COMMAND_HANDLER_REGISTER_VMID: {
     svless_vmid = std::string(cmd->reserved_area);
-    printf("\n Setting vmid of this worker to: %s\n", svless_vmid.c_str());
+    //printf("\n COMMAND_HANDLER_REGISTER_VMID vmid of this worker to: %s\n", svless_vmid.c_str());
     break;
   }
 

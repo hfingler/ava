@@ -820,6 +820,8 @@ EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMalloc(void **dev
 ava_end_replacement;
 
 __host__ cudaError_t CUDARTAPI cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind) {
+  ava_disable_native_call;
+  
   ava_argument(dst) {
     if (kind == cudaMemcpyHostToDevice) {
       ava_opaque;
@@ -836,6 +838,15 @@ __host__ cudaError_t CUDARTAPI cudaMemcpy(void *dst, const void *src, size_t cou
     } else if (kind == cudaMemcpyDeviceToHost) {
       ava_opaque;
     }
+  }
+
+  if (ava_is_worker) {
+    //everything that takes a device pointer must go through __translate_ptr
+    //TODO:  cudaMemcpyDefault 
+    return cudaMemcpy(
+      (kind == cudaMemcpyHostToDevice || kind ==  cudaMemcpyDeviceToDevice) ? __translate_ptr(dst) : dst, 
+      (kind == cudaMemcpyDeviceToHost || kind ==  cudaMemcpyDeviceToDevice) ? __translate_ptr(src) : src, 
+      count, kind);
   }
 }
 

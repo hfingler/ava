@@ -219,6 +219,10 @@ uint32_t SVGPUManager::LaunchWorker(uint32_t gpu_id) {
     parameters.push_back(argv);
   }
 
+  for (auto& element : environments) {
+    printf("  > %s\n", element.c_str());
+}
+
   std::cerr << "Spawn API server at 0.0.0.0:" << port << " (cmdline=\"" << boost::algorithm::join(environments, " ")
             << " " << boost::algorithm::join(parameters, " ") << "\")" << std::endl;
 

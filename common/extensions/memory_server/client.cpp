@@ -2,6 +2,7 @@
 #include <string>
 #include <sstream>
 #include <iostream>
+#include <map>
 #include <string.h>
 #include <stdlib.h>
 #include "common.hpp"
@@ -15,9 +16,13 @@
 // cudaMemcpyPeer or cudaMemcpyPeerAsync 
 // https://stackoverflow.com/questions/31628041/how-to-copy-memory-between-different-gpus-in-cuda
 
-
 void* __translate_ptr(void* ptr) {
     return GPUMemoryServer::Client::getInstance().translate_ptr(ptr);
+}
+
+const void* __translate_ptr(const void* ptr) {
+    return 
+        const_cast<const void*>(GPUMemoryServer::Client::getInstance().translate_ptr(ptr));
 }
 
 void __internal_kernelIn() {
@@ -105,7 +110,7 @@ namespace GPUMemoryServer {
         sendRequest(req);
     }
 
-    void Client::sendRequest(Request &req, uint32_t size, void* sock) {
+    void Client::sendRequest(Request &req, void* sock) {
         void* socket;
         if (sock == 0)
             socket = this->socket;
@@ -113,7 +118,7 @@ namespace GPUMemoryServer {
             socket = sock;
 
         strcpy(req.worker_id, uuid.c_str());
-        zmq_send(socket, (char*)&req, size, 0);
+        zmq_send(socket, (char*)&req, sizeof(Request), 0);
 
         zmq_recv(socket, buffer, sizeof(Reply), 0);
         memcpy(&reply, buffer, sizeof(Reply));
@@ -147,6 +152,9 @@ namespace GPUMemoryServer {
         
         if (reply.data.migrate == 1) {
             printf("Worker [%s] talked to GPU server and it told us to ask for migration\n");
+
+    
+        migrateToGPU(current_device == 2 ? 3 : 2);
         }
     }
     
@@ -157,7 +165,7 @@ namespace GPUMemoryServer {
 
     cudaError_t Client::localMalloc(void** devPtr, size_t size) {
         cudaError_t err = cudaMalloc(devPtr, size);
-        local_allocs.push_back(std::make_unique<Client::LocalAlloc>(*devPtr));
+        local_allocs.push_back(std::make_unique<Client::LocalAlloc>(*devPtr, size));
         return err;
     }
 
@@ -173,8 +181,10 @@ namespace GPUMemoryServer {
     void* Client::translate_ptr(void* ptr) {
         auto it = pointer_map.find((uint64_t)ptr);
 
-        if (it == pointer_map.end())
+        if (it == pointer_map.end()) {
+            printf("**pointer NOt found in map, returning  %p\n", ptr);
             return ptr;
+        }
         else {
             printf("**pointer found in map, translating: %p  ->  %p\n", ptr, it->second);
             return it->second;
@@ -187,31 +197,82 @@ namespace GPUMemoryServer {
     }
 
     void Client::migrateToGPU(uint32_t new_gpuid) {
-        //first we need to get all information of our memory
-        char* buf = reply.piggyback;
-        MigrationHeader* header = (MigrationHeader*) buf;
-        PointerPair* pps = (PointerPair*) buf+sizeof(MigrationHeader);
+        std::map<uint64_t, uint64_t> current_allocs;
 
-        uint32_t size = sizeof(MigrationHeader) + (header->n_buffers * sizeof(PointerPair));
+        //on server mode the server knows our allocations
+        if (isMemoryServerMode()) {
+            //first we need to get all information of our memory
+            sendGetAllPointersRequest();
+            char* buf = reply.piggyback;
+            MigrationHeader* header = (MigrationHeader*) buf;
+            PointerPair* pps = (PointerPair*) buf+sizeof(MigrationHeader);
+
+            for (int i = 0 ; i < header->n_buffers ; i++) {
+                current_allocs[pps[i].ptr] = pps[i].size;
+            }
+        }
+        //on normal mode we have all the allocs
+        else {
+            for (auto& al : local_allocs) {
+                current_allocs[(uint64_t)al->devPtr] = al->size;
+            }
+        }
 
         //let's connect to the new GPU server
+        void* old_socket = socket;
         void* new_socket = zmq_socket(context, ZMQ_REQ);
         std::ostringstream stringStream;
         stringStream << get_base_socket_path() << new_gpuid;
         int ret = zmq_connect(new_socket, stringStream.str().c_str());
+        printf("migration: connected to new worker on gpu %d\n", new_gpuid);
         if (ret == -1) {
             printf("connect to new gpu failed, errno: %d\n", errno);
         }
 
-        req.type = RequestType::MIGRATE;
-        memcpy(req.piggyback, buf, size);
-        size += offsetof(Request, guard); //add the request size to the piggyback size
-        sendRequest(req, size, new_socket);
+        //switch connection to new one
+        socket = new_socket;
+        if (!isMemoryServerMode()) {
+            printf("Migration on local mode, changing device to [%d] temporarily\n", new_gpuid);
+            setCurrentGPU(new_gpuid);
+        }
 
-        //TODO:
-        //cleanup on previous gpu
-        //switch connection
-        //make sure we will switch back when done
+        for (auto const& al : current_allocs) {
+            void* devPtr;
+            //malloc on new device
+            __internal_cudaMalloc(&devPtr, al.second);
+            //update map
+            pointer_map[al.first] = devPtr;
+            //async might not help much since they are not parallel
+            cudaMemcpyPeer(devPtr, new_gpuid, al.first, og_device, al.second);
+            printf("  [%s] copying %d bytes GPUs [%d]  ->  [%d]\n", uuid.c_str(), al.second, og_device, new_gpuid);
+            printf("      [%p] -> %p\n", al.first, devPtr);
+            char b[8];
+            cudaMemcpy((void*)b, devPtr, 8, cudaMemcpyDeviceToHost);
+            printf("first 8 bytes of %p on new device\n      ", devPtr);
+            for (int i = 0 ; i < 8 ; i++) {
+                printf("%#02x ", b[i]);
+            }
+            printf("\n");
+        }
+
+        //set information to old so we can cleanup
+        if (isMemoryServerMode()) {
+            socket = old_socket;
+            cleanup();
+        }
+        else {
+            setOriginalGPU();
+            cleanup();
+            printf("Local migration: cleaned up data on old GPU\n");
+            printf("Migration on local mode, changing device to [%d] until finish\n", new_gpuid);
+            setCurrentGPU(new_gpuid);
+            //add to our map
+        }
+
+        //update socket
+        socket = new_socket;
+        zmq_close(old_socket);
+
 
     }
 }

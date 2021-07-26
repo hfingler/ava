@@ -23,11 +23,13 @@ cudaError_t __internal_cudaMalloc(void **devPtr, size_t size);
 cudaError_t __internal_cudaFree(void *devPtr);
 void __internal_kernelIn();
 void __internal_kernelOut();
-void* __translate_ptr(void*);
 
 #ifdef __cplusplus
 }
 #endif
+
+void* __translate_ptr(void*);
+const void* __translate_ptr(const void*);
 
 namespace GPUMemoryServer {
 
@@ -55,7 +57,9 @@ namespace GPUMemoryServer {
         //local mallocs
         struct LocalAlloc {
             void* devPtr;
-            LocalAlloc(void* ptr) : devPtr(ptr) {}
+            uint64_t size;
+            LocalAlloc(void* ptr, uint64_t sz) 
+                : devPtr(ptr), size(sz) {}
             ~LocalAlloc() {
                 cudaFree(devPtr);
             }
@@ -99,7 +103,7 @@ namespace GPUMemoryServer {
         }
 
         private:
-        void sendRequest(Request &req, uint32_t size = offsetof(Request, guard), void* sock = 0);
+        void sendRequest(Request &req, void* sock = 0);
 
         Client() {
             buffer = new char[BUF_SIZE];
