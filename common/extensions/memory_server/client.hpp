@@ -58,9 +58,11 @@ namespace GPUMemoryServer {
         struct LocalAlloc {
             void* devPtr;
             uint64_t size;
-            LocalAlloc(void* ptr, uint64_t sz) 
-                : devPtr(ptr), size(sz) {}
+            uint32_t device_id;
+            LocalAlloc(void* ptr, uint64_t sz, uint32_t gpu) 
+                : devPtr(ptr), size(sz), device_id(gpu) {}
             ~LocalAlloc() {
+                printf("cudaFree on GPU [%u]  %p\n", device_id, devPtr);
                 cudaFree(devPtr);
             }
         };

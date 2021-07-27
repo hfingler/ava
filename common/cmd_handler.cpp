@@ -110,12 +110,16 @@ static void _handle_commands_loop(struct command_channel *chan) {
 void handle_command_and_notify(struct command_channel *chan, struct command_base *cmd) {
   auto context = ava::CommonContext::instance();
 
+#ifdef AVA_WORKER
   int current_gpu;
   cudaGetDevice(&current_gpu);
+  printf(">>> shadow thread running on GPU [%d]\n", current_gpu);
 
   if (current_gpu != context->current_device) {
-
+    printf(">>> shadow thread detected change of device, changing..  [%d] -> [%d]\n", current_gpu, context->current_device);
+    cudaSetDevice(context->current_device);
   }
+#endif
 
   handle_command(chan, context->nw_global_handle_pool, (struct command_channel *)nw_record_command_channel, cmd);
 }

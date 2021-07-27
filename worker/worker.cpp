@@ -139,8 +139,8 @@ int main(int argc, char *argv[]) {
 
   /* define arguments */
   auto wctx = ava::WorkerContext::instance();
-  nw_worker_id = 0;
   unsigned int listen_port;
+  nw_worker_id = 0;
 
   /* parse arguments */
   listen_port = (unsigned int)atoi(argv[1]);

@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <memory>
 #include "common/extensions/cudart_10.1_utilities.hpp"
+#include "common/common_context.h"
 
 //for migration we might need
 // cudaMemcpyPeer or cudaMemcpyPeerAsync 
@@ -139,6 +140,9 @@ namespace GPUMemoryServer {
         if (og_device == -1) 
             og_device = id;
         current_device = id;
+
+        auto ccontext = ava::CommonContext::instance();
+        ccontext->current_device = id;
     }
 
     void Client::setOriginalGPU() {
@@ -165,17 +169,29 @@ namespace GPUMemoryServer {
 
     cudaError_t Client::localMalloc(void** devPtr, size_t size) {
         cudaError_t err = cudaMalloc(devPtr, size);
-        local_allocs.push_back(std::make_unique<Client::LocalAlloc>(*devPtr, size));
+        local_allocs.push_back(std::make_unique<Client::LocalAlloc>(*devPtr, size, current_device));
         return err;
     }
 
+    //clean up all memorys that are in current_device ONLY
     void Client::cleanup() {
         //if we are connected to server, inform it that we are done
         if (isMemoryServerMode()) {
             sendCleanupRequest();
         }
-        //free all local mallocs
-        local_allocs.clear();
+        else {
+            //erase only memory in GPU current_device
+            uint32_t cd = current_device;
+            local_allocs.erase(
+                std::remove_if(
+                    local_allocs.begin(), 
+                    local_allocs.end(),
+                    [cd](auto const& al)-> bool
+                        { return al->device_id == cd; }
+                ), 
+                local_allocs.end()
+            ); 
+        }
     }
 
     void* Client::translate_ptr(void* ptr) {
@@ -256,6 +272,7 @@ namespace GPUMemoryServer {
         }
 
         //set information to old so we can cleanup
+        //TODO: cleanup deletes EVERYTHING, including what we just did, so fix it.
         if (isMemoryServerMode()) {
             socket = old_socket;
             cleanup();

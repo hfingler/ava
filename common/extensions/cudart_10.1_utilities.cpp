@@ -58,8 +58,17 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
     *((char*)args[i]) = (char*)__translate_ptr(*((void **)args[i]));
   }
 
+  //BIG TODOs: need to map streams on new GPU when migrating
+  //      need to figure out the replay mechanism so we actually have the kernel in the new GPU
+  int current_gpu;
+  cudaGetDevice(&current_gpu);
+  printf(">>> __helper_launch_kernel on GPU [%d]\n", current_gpu);
+
   ret = (cudaError_t)cuLaunchKernel(func->cufunc, gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y, blockDim.z,
-                                    sharedMem, (CUstream)stream, args, NULL);
+                                    sharedMem, NULL, args, NULL);
+                                    //sharedMem, (CUstream)stream, args, NULL);
+
+  printf(">>> cuLaunchKernel returned %d\n", ret);
   return ret;
 }
 
