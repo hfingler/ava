@@ -4,12 +4,12 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <cuda_runtime_api.h>
-#include "cuda_helper.hpp"
-#include <zmq.h>
-#include "server.hpp"
-#include "common.hpp"
 #include <unistd.h>
+#include <cuda_runtime_api.h>
+#include <zmq.h>
+#include "common/extensions/memory_server/common.hpp"
+#include "cuda_helper.hpp"
+#include "server.hpp"
 
 namespace GPUMemoryServer {
 //The default value for flags is cudaMemAttachGlobal. If cudaMemAttachGlobal is specified, then this memory is accessible from any stream on any device.

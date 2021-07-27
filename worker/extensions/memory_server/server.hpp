@@ -7,7 +7,7 @@
 #include <memory>
 #include <thread>
 #include <cuda_runtime_api.h>
-#include "common.hpp"
+#include "common/extensions/memory_server/common.hpp"
 
 namespace GPUMemoryServer {
     struct Allocation {

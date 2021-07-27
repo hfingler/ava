@@ -8,7 +8,7 @@ ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -
 // ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN -D__AVA_ENABLE_STAT);
 ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver zmq);
 ava_guestlib_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/guest_cmd_batching_queue.cpp extensions/extension_api.cpp extensions/gpu_address_tracking.cpp);
-ava_worker_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/cmd_batching.cpp extensions/cuda.cpp ../common/extensions/memory_server/client.cpp);
+ava_worker_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/cmd_batching.cpp extensions/cudart_10.1_utilities.cpp extensions/memory_server/client.cpp);
 ava_common_utility_srcs(extensions/cudart_10.1_utilities.cpp);
 ava_export_qualifier();
 ava_soname(libcuda.so libcuda.so.1 libcudart.so.10 libcudart.so.10.1 libcublas.so.10 libcublasLt.so.10 libcudnn.so.7 libcufft.so.10 libcurand.so.10 libcusolver.so.10 libcusparse.so.10);
@@ -62,8 +62,8 @@ ava_begin_utility;
 #include "common/extensions/cmd_batching.h"
 #include "common/linkage.h"
 #include "common/logging.h"
-#include "common/extensions/cuda.h"
 #include "common/extensions/cudart_10.1_utilities.hpp"
+#include "common/extensions/memory_server/client.hpp"
 #include "common/support/time_util.h"
 #include "common/support/gen_stat.h"
 #include "common/support/io.h"
@@ -72,7 +72,6 @@ ava_begin_utility;
 #include "guestlib/extensions/guest_cmd_batching_queue.h"
 #include "guestlib/extensions/gpu_address_tracking.h"
 #include <absl/strings/string_view.h>
-#include "common/extensions/memory_server/client.hpp"
 
 #if !defined(__dv)
 #define __dv(v)

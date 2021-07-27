@@ -67,7 +67,7 @@ namespace GPUMemoryServer {
             }
         };
         std::vector<std::unique_ptr<LocalAlloc>> local_allocs;
-        
+
         //pointer translation
         //absl::flat_hash_map<uint64_t, void*> pointer_map;
         std::unordered_map<uint64_t, void*> pointer_map;

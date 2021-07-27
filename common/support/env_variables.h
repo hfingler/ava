@@ -12,6 +12,20 @@ inline absl::string_view GetEnvVariable(absl::string_view name, absl::string_vie
   return value != nullptr ? value : default_value;
 }
 
+template<class IntType = int>
+IntType GetEnvVariableAsInt(std::string_view name,
+                            IntType default_value = 0) {
+    char* value = getenv(std::string(name).c_str());
+    if (value == nullptr) {
+        return default_value;
+    }
+    IntType result;
+    if (!absl::SimpleAtoi(value, &result)) {
+        return default_value;
+    }
+    return result;
+}
+
 }  // namespace support
 }  // namespace ava
 

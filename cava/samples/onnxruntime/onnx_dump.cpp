@@ -5,8 +5,9 @@ ava_identifier(ONNX_DUMP);
 ava_number(10);
 ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -I/usr/local/cuda-10.1/nvvm/include);
 ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver -L/usr/local/cuda-10.1/nvvm/lib64 -lnvvm zmq);
-ava_guestlib_srcs(../common/extensions/cudart_10.1_utilities.cpp cuda/nvvm_helper.cpp extensions/gpu_address_tracking.cpp);
-ava_worker_srcs(../common/extensions/cudart_10.1_utilities.cpp extensions/cuda.cpp ../common/extensions/memory_server/client.cpp);
+ava_guestlib_srcs(cuda/nvvm_helper.cpp extensions/gpu_address_tracking.cpp);
+ava_worker_srcs(extensions/cudart_10.1_utilities.cpp extensions/memory_server/client.cpp);
+ava_common_utility_srcs(extensions/cudart_10.1_utilities.cpp);
 ava_export_qualifier();
 ava_soname(libcuda.so libcuda.so.1 libcudart.so.10 libcudart.so.10.1 libcublas.so.10 libcublasLt.so.10 libcudnn.so.7 libcufft.so.10 libcurand.so.10 libcusolver.so.10 libcusparse.so.10);
 // clang-format on
@@ -55,13 +56,12 @@ ava_begin_utility;
 #include "cudart_nw_internal.h"
 #include "common/linkage.h"
 #include "common/logging.h"
-#include "common/extensions/cuda.h"
-#include "common/support/fmt.h"
 #include "common/extensions/cudart_10.1_utilities.hpp"
-#include "guestlib/cuda/nvvm_helper.h"
-#include "common/support/io.h"
-#include "guestlib/extensions/gpu_address_tracking.h"
 #include "common/extensions/memory_server/client.hpp"
+#include "common/support/fmt.h"
+#include "common/support/io.h"
+#include "guestlib/cuda/nvvm_helper.h"
+#include "guestlib/extensions/gpu_address_tracking.h"
 
 #if !defined(__dv)
 #define __dv(v)

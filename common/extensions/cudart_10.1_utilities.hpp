@@ -106,6 +106,17 @@ cudaError_t __helper_occupancy_max_active_blocks_per_multiprocessor_with_flags(i
 
 void __helper_print_pointer_attributes(const struct cudaPointerAttributes *attributes, const void *ptr);
 
+cudaError_t __helper_cuda_memcpy_async_host_to_host(void *dst, const void *src,
+    size_t count, cudaStream_t stream);
+cudaError_t __helper_cuda_memcpy_async_host_to_device(void *dst, const void *src,
+    size_t count, cudaStream_t stream);
+cudaError_t __helper_cuda_memcpy_async_device_to_host(void *dst, const void *src,
+    size_t count, cudaStream_t stream);
+cudaError_t __helper_cuda_memcpy_async_device_to_device(void *dst, const void *src,
+    size_t count, cudaStream_t stream);
+cudaError_t __helper_cuda_memcpy_async_default(void *dst, const void *src,
+    size_t count, cudaStream_t stream, bool dst_is_gpu, bool src_is_gpu);
+
 #if defined(__cplusplus)
 }
 #endif /* __cplusplus */

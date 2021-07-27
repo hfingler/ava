@@ -5,12 +5,12 @@
 #include <map>
 #include <string.h>
 #include <stdlib.h>
-#include "common.hpp"
-#include "client.hpp"
 #include <zmq.h>
 #include <errno.h>
 #include <memory>
 #include "common/extensions/cudart_10.1_utilities.hpp"
+#include "common/extensions/memory_server/common.hpp"
+#include "common/extensions/memory_server/client.hpp"
 #include "common/common_context.h"
 
 //for migration we might need
