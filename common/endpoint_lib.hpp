@@ -261,6 +261,13 @@ extern struct ava_endpoint __ava_endpoint;
 __attribute__((pure)) struct ava_metadata_base *ava_internal_metadata(struct ava_endpoint *endpoint, const void *p);
 
 /**
+ * Reallocate the metadata for an object.
+ * @param endpoint
+ * @param ptr the handle with which that returned metadata is associated
+ */
+void ava_metadata_reset(struct ava_endpoint *endpoint, const void *ptr);
+
+/**
  * Get the next call ID.
  * @param endpoint The endpoint structure.
  * @return A new call ID.
