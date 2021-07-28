@@ -445,7 +445,17 @@ struct ava_metadata_base *ava_internal_metadata(struct ava_endpoint *endpoint, c
   pthread_mutex_unlock(&metadata_map_mutex);
   return ret;
 }
-
+ 
+void ava_metadata_reset(struct ava_endpoint *endpoint, const void *ptr) {
+  auto metadata_map_mutex = ava::CommonContext::instance()->nw_global_metadata_map_mutex;
+  pthread_mutex_lock(&metadata_map_mutex);
+  auto metadata_map = ava::CommonContext::instance()->nw_global_metadata_map;
+  g_hash_table_remove(metadata_map, ptr);
+  void *metadata = calloc(1, endpoint->metadata_size);
+  g_hash_table_insert(metadata_map, (void *)ptr, metadata);
+  pthread_mutex_unlock(&metadata_map_mutex);
+}
+ 
 struct ava_metadata_base *ava_internal_metadata_no_create(struct ava_endpoint *AVA_UNUSED(endpoint), const void *ptr) {
   auto metadata_map = ava::CommonContext::instance()->nw_global_metadata_map;
   auto metadata_map_mutex = ava::CommonContext::instance()->nw_global_metadata_map_mutex;
