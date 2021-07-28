@@ -2,6 +2,8 @@
 #include "common/logging.h"
 #include "common/extensions/cudart_10.1_utilities.hpp"
 #include "common/extensions/memory_server/client.hpp"
+#include <iostream>
+
 
 cudaError_t __helper_cuda_memcpy_async_host_to_host(void *dst, const void *src,
     size_t count, cudaStream_t stream) {
@@ -42,7 +44,7 @@ cudaError_t __helper_cuda_memcpy_async_default(void *dst, const void *src,
 }
 
 void __helper_print_kernel_info(struct fatbin_function *func, void **args) {
-  LOG_DEBUG << "function metadata (" << (void *)func << ") for local " << func->hostfunc << ", cufunc "
+  std::cerr << "function metadata (" << (void *)func << ") for local " << func->hostfunc << ", cufunc "
             << (void *)func->cufunc << ", argc " << func->argc;
   int i;
   for (i = 0; i < func->argc; i++) {
@@ -62,13 +64,19 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   }
 
   if (func->hostfunc != hostFun) {
-    LOG_ERROR << "search host func " << hostFun << " -> stored " << (void *)func->hostfunc << " (device func "
+    std::cerr << "search host func " << hostFun << " -> stored " << (void *)func->hostfunc << " (device func "
               << (void *)func->cufunc << ")";
   } else {
-    LOG_DEBUG << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc;
+    std::cerr << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc;
   }
   __helper_print_kernel_info(func, args);
 
+  //this is the default stuff
+  ret = (cudaError_t)cuLaunchKernel(func->cufunc, gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y, blockDim.z,
+                                    sharedMem, (CUstream)stream, args, NULL);
+  return ret;
+
+/*
   //possibly translate pointers
   for (int i = 0; i < func->argc; i++) {
     //TODO: I'm just throwing pointers at the dict. there is a probability that pointers collide and we mess up
@@ -81,15 +89,32 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   }
 
   //BIG TODOs: need to map streams on new GPU when migrating
-  //      need to figure out the replay mechanism so we actually have the kernel in the new GPU
+  //      (maybe) need to figure out the replay mechanism so we actually have the kernel in the new GPU
+  cudaFree(0);
   int current_gpu;
   cudaGetDevice(&current_gpu);
   printf(">>> __helper_launch_kernel on GPU [%d]\n", current_gpu);
 
-  ret = (cudaError_t)cuLaunchKernel(func->cufunc, gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y, blockDim.z,
-                                    sharedMem, NULL, args, NULL);
+  cudaStream_t s2;
+  ret = cudaStreamCreate(&s2);
+  printf(">>> cudaStreamCreate returned %d\n", ret);
+
+  CUcontext cuctx1, cuctx2;
+  cuStreamGetCtx(s2, &cuctx1); 
+  cuCtxGetCurrent(&cuctx2);
+
+
+  printf("%p == %p ?  %d\n", (void*)cuctx1, (void*)cuctx2, cuctx1==cuctx2);
+
+  cudaDeviceSynchronize();
+  //ret = (cudaError_t)cuLaunchKernel(func->cufunc, 1, 1, 1, 1, 1, 1,
+  //                                  0, 0, 0, NULL);
                                     //sharedMem, (CUstream)stream, args, NULL);
+
+  ret = cudaLaunchKernel((void *)func->cufunc, gridDim, blockDim, 0, 0, 0);
 
   printf(">>> cuLaunchKernel returned %d\n", ret);
   return ret;
+*/
+
 }

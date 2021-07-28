@@ -88,6 +88,7 @@ namespace GPUMemoryServer {
             uuid = id;
         }
         cudaError_t localMalloc(void** devPtr, size_t size);
+        cudaError_t localFree(void* devPtr);
         void cleanup();
         void kernelIn();
         void kernelOut();

@@ -528,7 +528,7 @@ void CUDARTAPI __cudaRegisterFunction(void **fatCubinHandle, const char *hostFun
   if (ava_is_worker)
     __helper_dump_cuda_function(deviceFun, deviceName, thread_limit, tid, bid, bDim, gDim, wSize, dump_dir);
 
-  ava_debug(
+  printf(
       "Register hostFun=%p, deviceFun=%s, deviceName=%s, thread_limit=%d, tid={%d,%d,%d}, bid={%d,%d,%d}, "
       "bDim={%d,%d,%d}, gDim={%d,%d,%d}",
       (void *)hostFun, deviceFun, deviceName, thread_limit, tid ? tid->x : 0, tid ? tid->y : 0, tid ? tid->z : 0,

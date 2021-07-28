@@ -172,7 +172,8 @@ void __helper_register_function(struct fatbin_function *func, const char *hostFu
     LOG_ERROR << "cuModuleGetFunction fail with " << ret;
     throw std::runtime_error("failed to get module function");
   }
-  LOG_DEBUG << "register host func " << std::hex << (uintptr_t)hostFun << " -> device func " << (uintptr_t)func->cufunc;
+  std::cerr << "register host func " << std::hex << (uintptr_t)hostFun << " -> device func " << (uintptr_t)func->cufunc 
+    << " deviceName " << deviceName << std::endl;
   func->hostfunc = (void *)hostFun;
   func->module = module;
 }

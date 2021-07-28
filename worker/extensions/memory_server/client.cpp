@@ -17,6 +17,10 @@
 // cudaMemcpyPeer or cudaMemcpyPeerAsync 
 // https://stackoverflow.com/questions/31628041/how-to-copy-memory-between-different-gpus-in-cuda
 
+int32_t __internal_getCurrentGPU() {
+    return GPUMemoryServer::Client::getInstance().current_device;
+}
+
 void* __translate_ptr(void* ptr) {
     return GPUMemoryServer::Client::getInstance().translate_ptr(ptr);
 }
@@ -68,6 +72,10 @@ cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
 }
 
 cudaError_t __internal_cudaFree(void *devPtr) {
+    if(!GPUMemoryServer::Client::getInstance().isMemoryServerMode()) {
+        return GPUMemoryServer::Client::getInstance().localFree(devPtr);
+    }
+
     GPUMemoryServer::Client::getInstance().sendFreeRequest(devPtr); 
     GPUMemoryServer::Reply* rep = GPUMemoryServer::Client::getInstance().getReply();
     return rep->returnErr;
@@ -136,6 +144,7 @@ namespace GPUMemoryServer {
             printf("CUDA err on cudaSetDevice(%d): %d\n", id, err);
             exit(1);
         }
+        cudaFree(0);
         printf("Worker [%s] setting current device to %d\n", uuid.c_str(), id);
         if (og_device == -1) 
             og_device = id;
@@ -171,6 +180,17 @@ namespace GPUMemoryServer {
         cudaError_t err = cudaMalloc(devPtr, size);
         local_allocs.push_back(std::make_unique<Client::LocalAlloc>(*devPtr, size, current_device));
         return err;
+    }
+
+    cudaError_t Client::localFree(void* devPtr) {
+        //TODO: crap.. this should've been a map
+        for (auto it = local_allocs.begin() ; it != local_allocs.end(); ++it) {
+            if((*it)->devPtr == devPtr) {
+                local_allocs.erase(it);
+                return (cudaError_t)0;
+            }
+        }
+        return cudaFree(devPtr);
     }
 
     //clean up all memorys that are in current_device ONLY
