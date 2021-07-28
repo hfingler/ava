@@ -10,10 +10,13 @@
 #include "common/cmd_handler.hpp"
 #include "common/endpoint_lib.hpp"
 #include "common/linkage.h"
+#include "common/support/env_variables.h"
 #include "guest_config.h"
 #include "guestlib.h"
 #include "guestlib/guest_thread.h"
-#include "plog/Initializers/RollingFileInitializer.h"
+#include <plog/Initializers/RollingFileInitializer.h>
+#include <plog/Appenders/ConsoleAppender.h>
+#include <plog/Formatters/TxtFormatter.h>
 struct command_channel *chan;
 
 struct param_block_info nw_global_pb_info = {0, 0};
@@ -29,9 +32,16 @@ EXPORTED_WEAKLY void nw_init_log() {
   guestconfig::config->print();
 #endif
   // Initialize logger
-  std::string log_file = std::tmpnam(nullptr);
-  plog::init(guestconfig::config->logger_severity_, log_file.c_str());
-  std::cerr << "To check the state of AvA remoting progress, use `tail -f " << log_file << "`" << std::endl;
+  int use_console = ava::support::GetEnvVariableAsInt("AVA_LOG_CONSOLE", 0);
+  if (use_console == 1) {
+    static plog::ConsoleAppender<plog::TxtFormatter> consoleAppender;
+    plog::init(guestconfig::config->logger_severity_, &consoleAppender);
+    std::cerr << "AvA log to console" << std::endl;
+  } else {
+    std::string log_file = std::tmpnam(nullptr);
+    plog::init(guestconfig::config->logger_severity_, log_file.c_str());
+    std::cerr << "To check the state of AvA remoting progress, use `tail -f " << log_file << "`" << std::endl;
+  }
 }
 
 EXPORTED_WEAKLY void nw_init_guestlib(intptr_t api_id) {
