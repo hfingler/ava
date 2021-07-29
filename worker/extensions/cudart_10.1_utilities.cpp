@@ -44,8 +44,8 @@ cudaError_t __helper_cuda_memcpy_async_default(void *dst, const void *src,
 }
 
 void __helper_print_kernel_info(struct fatbin_function *func, void **args) {
-  std::cerr << "function metadata (" << (void *)func << ") for local " << func->hostfunc << ", cufunc "
-            << (void *)func->cufunc << ", argc " << func->argc;
+  std::cerr << "function metadata (" << (void *)func << ") for local " << func->hostfunc[0] << ", cufunc "
+            << (void *)func->cufunc[0] << ", argc " << func->argc;
   int i;
   for (i = 0; i < func->argc; i++) {
     LOG_DEBUG << "arg[" << i << "] is " << (func->args[i].is_handle ? "" : "not ")
@@ -59,62 +59,57 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
                                    void **args, size_t sharedMem, cudaStream_t stream) {
   cudaError_t ret = (cudaError_t)CUDA_ERROR_PROFILER_ALREADY_STOPPED;
 
+  uint32_t cur_dvc = __internal_getCurrentDevice();
+
   if (func == NULL) {
     return (cudaError_t)CUDA_ERROR_INVALID_PTX;
   }
 
-  if (func->hostfunc != hostFun) {
-    std::cerr << "search host func " << hostFun << " -> stored " << (void *)func->hostfunc << " (device func "
-              << (void *)func->cufunc << ")";
+  if (func->hostfunc[cur_dvc] != hostFun) {
+    std::cerr << "search host func " << hostFun << " -> stored " << (void *)func->hostfunc[cur_dvc] << " (device func "
+              << (void *)func->cufunc[cur_dvc] << ")";
   } else {
-    std::cerr << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc;
+    std::cerr << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc[cur_dvc] << std::endl;
   }
-  __helper_print_kernel_info(func, args);
+  //__helper_print_kernel_info(func, args);
 
+  std::cerr << "function metadata (" << (void *)func << ") for local " << func->hostfunc[cur_dvc] << ", cufunc "
+            << (void *)func->cufunc[cur_dvc] << ", argc " << func->argc << std::endl;
+
+  /*
   //this is the default stuff
   ret = (cudaError_t)cuLaunchKernel(func->cufunc, gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y, blockDim.z,
                                     sharedMem, (CUstream)stream, args, NULL);
   return ret;
+  */
 
-/*
-  //possibly translate pointers
   for (int i = 0; i < func->argc; i++) {
     //TODO: I'm just throwing pointers at the dict. there is a probability that pointers collide and we mess up
-    //printf("  arg %d is handle? %d   size %d\n", i, func->args[i].is_handle, func->args[i].size);
-    //std::cout << "  content:  " << *((void **)args[i]) << std::endl;
-    //if (func->args[i].is_handle) {
-    //  args[i] = __translate_ptr(args[i]);
-    //}
-    *((char*)args[i]) = (char*)__translate_ptr(*((void **)args[i]));
+    printf("  arg %d is handle? %d   size %d\n", i, func->args[i].is_handle, func->args[i].size);
+    printf("p1 %p   p2 %p \n", args[i], *((void **)args[i]));
+    
+    //TODO: we need something that says if something is a pointer or not
+    //if (func->args[i].is_handle) {    
+    if (func->args[i].size == 8) {
+      *((void**)args[i]) = __translate_ptr(*((void **)args[i]));
+    }
+  }
+
+  for (int i = 0; i < func->argc; i++) {
+    printf("    arg [%d]:  %p\n", i, *((void **)args[i]));
   }
 
   //BIG TODOs: need to map streams on new GPU when migrating
   //      (maybe) need to figure out the replay mechanism so we actually have the kernel in the new GPU
-  cudaFree(0);
   int current_gpu;
   cudaGetDevice(&current_gpu);
-  printf(">>> __helper_launch_kernel on GPU [%d]\n", current_gpu);
+  printf(">>> __helper_launch_kernel on GPU [%d], current device: %d\n", current_gpu, cur_dvc);
 
-  cudaStream_t s2;
-  ret = cudaStreamCreate(&s2);
-  printf(">>> cudaStreamCreate returned %d\n", ret);
-
-  CUcontext cuctx1, cuctx2;
-  cuStreamGetCtx(s2, &cuctx1); 
-  cuCtxGetCurrent(&cuctx2);
-
-
-  printf("%p == %p ?  %d\n", (void*)cuctx1, (void*)cuctx2, cuctx1==cuctx2);
-
-  cudaDeviceSynchronize();
-  //ret = (cudaError_t)cuLaunchKernel(func->cufunc, 1, 1, 1, 1, 1, 1,
-  //                                  0, 0, 0, NULL);
+  ret = (cudaError_t)cuLaunchKernel(func->cufunc[cur_dvc], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y, blockDim.z,
+                                    0, 0, args, NULL);
                                     //sharedMem, (CUstream)stream, args, NULL);
-
-  ret = cudaLaunchKernel((void *)func->cufunc, gridDim, blockDim, 0, 0, 0);
 
   printf(">>> cuLaunchKernel returned %d\n", ret);
   return ret;
-*/
 
 }

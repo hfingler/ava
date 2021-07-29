@@ -13,11 +13,24 @@
 #include "common/extensions/memory_server/client.hpp"
 #include "common/common_context.h"
 
-//for migration we might need
-// cudaMemcpyPeer or cudaMemcpyPeerAsync 
-// https://stackoverflow.com/questions/31628041/how-to-copy-memory-between-different-gpus-in-cuda
+/**************************************
+ * 
+ *    Global functions, used by spec and helper functions. Mostly translate a global call to a client call
+ * 
+ * ************************************/
 
-int32_t __internal_getCurrentGPU() {
+static uint32_t device_count;
+
+int32_t __internal_getDeviceCount() {
+    return device_count;
+}
+
+void __internal_setDeviceCount(uint32_t dc) {
+    printf("set device count %d\n", dc);
+    device_count = dc;
+}
+
+uint32_t __internal_getCurrentDevice() {
     return GPUMemoryServer::Client::getInstance().current_device;
 }
 
@@ -81,6 +94,11 @@ cudaError_t __internal_cudaFree(void *devPtr) {
     return rep->returnErr;
 }
 
+/**************************************
+ * 
+ *    Functions for GPUMemoryServer namespace, Client class
+ * 
+ * ************************************/
 
 namespace GPUMemoryServer {
     int Client::connectToGPU(uint16_t gpuId) {
@@ -270,8 +288,12 @@ namespace GPUMemoryServer {
         if (!isMemoryServerMode()) {
             printf("Migration on local mode, changing device to [%d] temporarily\n", new_gpuid);
             setCurrentGPU(new_gpuid);
+
+            printf("cudaDeviceEnablePeerAccess: device [%d] can access memory on [%d]\n", new_gpuid, og_device);
+            cudaDeviceEnablePeerAccess(og_device, 0);
         }
 
+        /*
         for (auto const& al : current_allocs) {
             void* devPtr;
             //malloc on new device
@@ -303,8 +325,8 @@ namespace GPUMemoryServer {
             printf("Local migration: cleaned up data on old GPU\n");
             printf("Migration on local mode, changing device to [%d] until finish\n", new_gpuid);
             setCurrentGPU(new_gpuid);
-            //add to our map
         }
+        */
 
         //update socket
         socket = new_socket;

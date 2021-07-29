@@ -6,7 +6,7 @@ ava_number(10);
 ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN);
 // To enable stat collecting, use the below line and uncomment the ava_stats definition
 // ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN -D__AVA_ENABLE_STAT);
-ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver zmq);
+ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver zmq nvidia-ml);
 ava_guestlib_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/guest_cmd_batching_queue.cpp extensions/extension_api.cpp extensions/gpu_address_tracking.cpp);
 ava_worker_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/cmd_batching.cpp extensions/cudart_10.1_utilities.cpp extensions/memory_server/client.cpp);
 ava_common_utility_srcs(extensions/cudart_10.1_utilities.cpp);
@@ -143,8 +143,10 @@ typedef struct {
   int num_funcs;
   struct fatbin_function *func; /* for functions */
 
+  CUmodule cur_module[4];
+
   /* global states */
-  int cuinit_called;
+  //int cuinit_called;
 
   /* memory flags */
   int is_pinned;
@@ -336,9 +338,9 @@ char CUDARTAPI __cudaInitModule(void **fatCubinHandle) {
   }
 }
 
-ava_utility CUmodule __helper_init_module(struct fatbin_wrapper *fatCubin, void **handle) {
-  CUmodule mod = NULL;
+ava_utility void __helper_init_module(struct fatbin_wrapper *fatCubin, void **handle) {
   int ret;
+  /*
   if (ava_metadata(NULL)->cuinit_called == 0) {
     ret = cuInit(0);
     if (ret != CUDA_SUCCESS) {
@@ -348,12 +350,18 @@ ava_utility CUmodule __helper_init_module(struct fatbin_wrapper *fatCubin, void 
     assert(ret == CUDA_SUCCESS && "CUDA driver init failed");
     (void)ret;
   }
-  __cudaInitModule(handle);
-  ret = cuModuleLoadData(&mod, (void *)fatCubin->ptr);
-  assert((ret == CUDA_SUCCESS || ret == CUDA_ERROR_NO_BINARY_FOR_GPU) && "Module load failed");
-  (void)ret;
+  */
+  for (int i = 0 ; i < __internal_getDeviceCount() ; i++) {
+    cudaSetDevice(i);
+    __cudaInitModule(handle);
+    ret = cuModuleLoadData(&ava_metadata(NULL)->cur_module[i], (void *)fatCubin->ptr);
+    assert((ret == CUDA_SUCCESS || ret == CUDA_ERROR_NO_BINARY_FOR_GPU) && "Module load failed");
+    (void)ret;
+  }
+  //reset back
+  printf("resetting device to %d\n", __internal_getCurrentDevice());
+  cudaSetDevice(__internal_getCurrentDevice());
 
-  return mod;
 }
 
 ava_utility void __helper_load_function_arg_info(absl::string_view dump_dir) {
@@ -462,7 +470,7 @@ ava_utility void **__helper_load_and_register_fatbin(void *fatCubin, absl::strin
 
   void **fatbin_handle = __cudaRegisterFatBinary(wrapper);
   //__helper_print_fatcubin_info(fatCubin, fatbin_handle);
-  CUmodule mod = __helper_init_module(wrapper, fatbin_handle);
+  __helper_init_module(wrapper, fatbin_handle);
 
   /* Load function argument information */
   // GHashTable *ht = __helper_load_function_arg_info(dump_dir);
@@ -622,7 +630,7 @@ ava_utility void **__helper_load_and_register_fatbin(void *fatCubin, absl::strin
     func_id = (void *)g_hash_table_lookup(ht, deviceName);
     assert(func_id != NULL && "func_id should not be NULL");
     func = static_cast<struct fatbin_function *>(g_ptr_array_index(fatbin_funcs, (intptr_t)func_id));
-    __helper_register_function(func, (const char *)func_id, mod, deviceName);
+    __helper_register_function(func, (const char *)func_id, ava_metadata(NULL)->cur_module, deviceName);
 
     free(deviceFun);
     free(deviceName);
@@ -1344,7 +1352,8 @@ __host__ cudaError_t CUDARTAPI cudaMemGetInfo(size_t *_free, size_t *total) {
 
 CUresult CUDAAPI cuInit(unsigned int Flags) {
   ava_disable_native_call;
-
+  return CUDA_SUCCESS;
+  /*
   if (ava_is_worker) {
     CUresult ret = CUDA_SUCCESS;
     if (ava_metadata(NULL)->cuinit_called == 0) {
@@ -1353,6 +1362,7 @@ CUresult CUDAAPI cuInit(unsigned int Flags) {
     }
     return ret;
   }
+  */
 }
 
 CUresult CUDAAPI cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const char *name) {

@@ -23,6 +23,7 @@
 #include <thread>
 
 #include <zmq.h>
+#include <nvml.h>
 
 #include "common/cmd_channel_impl.hpp"
 #include "common/cmd_handler.hpp"
@@ -94,6 +95,37 @@ EXPORTED_WEAKLY std::string worker_init_log() {
   return log_file;
 }
 
+static void create_cuda_contexts() {
+  nvmlReturn_t result;
+  uint32_t device_count;
+  result = nvmlInit();
+  if (result != NVML_SUCCESS) {
+    std::cerr << "Failed to initialize NVML: " << nvmlErrorString(result) << std::endl;
+    std::exit(1);
+  }
+
+  result = nvmlDeviceGetCount(&device_count);
+  if (result != NVML_SUCCESS) {
+    std::cerr << "Failed to query device count NVML: " << nvmlErrorString(result) << std::endl;
+    std::exit(1);
+  }
+
+  result = nvmlShutdown();
+  if (result != NVML_SUCCESS) {
+    std::cerr << "Failed to shutdown NVML: " << nvmlErrorString(result) << std::endl;
+    std::exit(1);
+  }
+
+  __internal_setDeviceCount(device_count);
+
+  for (int i = 0 ; i < device_count ; i++) {
+    cudaSetDevice(i);
+    //this forcibly creates a primary context, which is lazily-created
+    cudaFree(0);
+    std::cerr << "Created CUDA context on device [" << i << "]" << std::endl;
+  }
+}
+
 int main(int argc, char *argv[]) {
   if (!(argc == 3 && !strcmp(argv[1], "migrate")) && (argc != 2)) {
     printf(
@@ -124,6 +156,9 @@ int main(int argc, char *argv[]) {
   char *cmmode = std::getenv("GPU_MEMORY_MODE");
   std::string mmode = cmmode ? std::string(cmmode) : "default";
   
+  // preemptively create context on all GPUs
+  create_cuda_contexts();
+
   /* set current device*/
   GPUMemoryServer::Client::getInstance().setCurrentGPU(std::stoi(gpu_device));
   auto ccontext = ava::CommonContext::instance();
