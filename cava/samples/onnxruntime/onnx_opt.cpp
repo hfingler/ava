@@ -6,7 +6,7 @@ ava_number(10);
 ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN);
 // To enable stat collecting, use the below line and uncomment the ava_stats definition
 // ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN -D__AVA_ENABLE_STAT);
-ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver zmq);
+ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver zmq absl::flat_hash_map);
 ava_guestlib_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/guest_cmd_batching_queue.cpp extensions/extension_api.cpp extensions/gpu_address_tracking.cpp);
 ava_worker_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/cmd_batching.cpp extensions/cudart_10.1_utilities.cpp extensions/memory_server/client.cpp);
 ava_common_utility_srcs(extensions/cudart_10.1_utilities.cpp);
@@ -40,6 +40,7 @@ ava_begin_utility;
 #include <errno.h>
 #include <glib.h>
 #include <algorithm>
+#include <iostream>
 
 #include <cuda.h>
 #include <cuda_runtime_api.h>
@@ -1366,7 +1367,8 @@ CUresult CUDAAPI cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const cha
   }
 
   ava_execute();
-  __helper_parse_function_args(name, ava_metadata(*hfunc)->func->args);
+  // __helper_parse_function_args(name, ava_metadata(*hfunc)->func->args);
+  __helper_parse_module_function_args(hmod, name, &ava_metadata(*hfunc)->func);
 }
 
 CUresult CUDAAPI cuModuleLoadData(CUmodule *module, const void *image) {
@@ -1949,7 +1951,7 @@ CUresult CUDAAPI cuModuleLoadDataEx(CUmodule *module, const void *image, unsigne
   ava_unsupported;
 }
 
-CUresult CUDAAPI cuModuleUnload(CUmodule hmod) { ava_unsupported; }
+CUresult CUDAAPI cuModuleUnload(CUmodule hmod);
 
 CUresult CUDAAPI cuModuleGetGlobal(CUdeviceptr *dptr, size_t *bytes, CUmodule hmod, const char *name) {
   ava_unsupported;
@@ -2100,7 +2102,18 @@ CUresult CUDAAPI cuFuncSetAttribute(CUfunction hfunc, CUfunction_attribute attri
 
 CUresult CUDAAPI cuFuncSetSharedMemConfig(CUfunction hfunc, CUsharedconfig config) { ava_unsupported; }
 
-CUresult CUDAAPI cuModuleLoad(CUmodule *module, const char *fname) { ava_unsupported; }
+CUresult CUDAAPI cuModuleLoad(CUmodule *module, const char *fname) {
+  ava_argument(module) {
+    ava_out;
+    ava_buffer(1);
+  }
+  ava_argument(fname) {
+    ava_in;
+    ava_buffer(strlen(fname) + 1);
+  }
+  ava_execute();
+  __helper_record_module_path(*module, fname);
+}
 
 /* CUDABLAS API */
 CUBLASAPI cublasStatus_t CUBLASWINAPI cublasGetStream(cublasHandle_t handle, cudaStream_t *streamId) {

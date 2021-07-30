@@ -7,6 +7,7 @@
 #include <glib.h>
 
 #include <algorithm>
+#include <absl/container/flat_hash_map.h>
 
 #define MAX_KERNEL_ARG 30
 #define MAX_KERNEL_NAME_LEN 1024
@@ -116,6 +117,9 @@ cudaError_t __helper_cuda_memcpy_async_device_to_device(void *dst, const void *s
     size_t count, cudaStream_t stream);
 cudaError_t __helper_cuda_memcpy_async_default(void *dst, const void *src,
     size_t count, cudaStream_t stream, bool dst_is_gpu, bool src_is_gpu);
+
+void __helper_record_module_path(CUmodule module, const char* fname);
+void __helper_parse_module_function_args(CUmodule module, const char *name, struct fatbin_function **func);
 
 #if defined(__cplusplus)
 }

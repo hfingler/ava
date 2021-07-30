@@ -7,6 +7,10 @@
 #include <deque>
 #include "memory_server/client.hpp"
 #include <iostream>
+#include <fmt/core.h>
+#include "common/logging.h"
+
+absl::flat_hash_map<CUmodule, std::string> module_path_map = {};
 
 int deference_int_pointer(int *p) {
   if (p)
@@ -119,6 +123,89 @@ void __helper_parse_function_args(const char *name, struct kernel_arg *args) {
 
   for (i = 0; i < argc; i++) {
     LOG_DEBUG << "function arg[" << i << "] is " << (args[i].is_handle == 1 ? "" : "not ") << "a handle";
+  }
+}
+
+void __helper_record_module_path(CUmodule module, const char* fname) {
+  module_path_map[module] = std::string(fname);
+}
+
+void __helper_parse_module_function_args(CUmodule module, const char *name, struct fatbin_function **func) {
+  auto fname = module_path_map[module];
+  fprintf(stderr, "fname %s\n", fname.c_str());
+  FILE *fp_pipe;
+  char line[2048];
+  unsigned int i, ordinal;
+  size_t size;
+  char kern_name[MAX_KERNEL_NAME_LEN]; /* mangled name */
+
+  auto pip_cmd = fmt::format("/usr/local/cuda/bin/cuobjdump -elf {}", fname);
+  fp_pipe = popen(pip_cmd.c_str(), "r");
+  if (fp_pipe == nullptr) {
+    SYSCALL_FAILURE_PRINT("popen");
+  }
+  while (fgets(line, sizeof(line), fp_pipe) != nullptr) {
+    if (strncmp(line, ".nv.info.", 9) == 0) {
+      sprintf(kern_name, line + 9, strlen(line) - 10);
+      assert(strlen(line) - 10 < MAX_KERNEL_NAME_LEN);
+      kern_name[strlen(line) - 10] = '\0';
+      auto kern_name_length = strlen(kern_name);
+      if (strncmp(kern_name, name, kern_name_length) == 0) {
+        ava_debug("%s@", name);
+        if (*func == nullptr) {
+          *func = (struct fatbin_function *)g_malloc(sizeof(struct fatbin_function));
+          memset(*func, 0, sizeof(struct fatbin_function));
+        }
+
+        /* Search parameters */
+        (*func)->argc = 0;
+        char* fgets_ret;
+        while (fgets(line, sizeof(line), fp_pipe) != nullptr) {
+          i = 0;
+          while (i < strlen(line) && isspace(line[i])) i++;
+          /* Empty line means reaching the end of the function info */
+          if (i == strlen(line)) break;
+
+          if (strncmp(&line[i], "Attribute:", 10) == 0) {
+            i += 10;
+            while (i < strlen(line) && isspace(line[i])) i++;
+            if (strncmp(&line[i], "EIATTR_KPARAM_INFO", 18) == 0) {
+              /* Skip the format line */
+              fgets_ret = fgets(line, sizeof(line), fp_pipe);
+              if (fgets_ret == NULL) {
+                if (feof(fp_pipe)) {
+                  fprintf(stderr, "End of file");
+                } else if (ferror(fp_pipe)) {
+                  SYSCALL_FAILURE_PRINT("fgets");
+                }
+              }
+              fgets_ret = fgets(line, sizeof(line), fp_pipe);
+              if (fgets_ret == NULL) {
+                if (feof(fp_pipe)) {
+                  fprintf(stderr, "End of file");
+                } else if (ferror(fp_pipe)) {
+                  SYSCALL_FAILURE_PRINT("fgets");
+                }
+              }
+              /* Get ordinal and size */
+              i = 0;
+              while (i < strlen(line) && line[i] != 'O') i++;
+              sscanf(&line[i], "Ordinal\t: 0x%x", (unsigned int *)&ordinal);
+              while (i < strlen(line) && line[i] != 'S') i++;
+              sscanf(&line[i], "Size\t: 0x%lx", &size);
+
+              i = (*func)->argc;
+              AVA_DEBUG << "ordinal=" << ordinal << ", size=" << size;
+              assert(ordinal < MAX_KERNEL_ARG);
+              (*func)->args[ordinal].size = size;
+              (*func)->argc += 1;
+            }
+          }
+        }
+      } else {
+        continue;
+      }
+    }
   }
 }
 
