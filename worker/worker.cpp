@@ -19,10 +19,9 @@
 #include <gsl/gsl>
 #include <iostream>
 #include <string>
-#include <chrono>
-#include <thread>
 
 #include <zmq.h>
+#include <nvml.h>
 
 #include "common/cmd_channel_impl.hpp"
 #include "common/cmd_handler.hpp"
@@ -94,6 +93,37 @@ EXPORTED_WEAKLY std::string worker_init_log() {
   return log_file;
 }
 
+static void create_cuda_contexts() {
+  nvmlReturn_t result;
+  uint32_t device_count;
+  result = nvmlInit();
+  if (result != NVML_SUCCESS) {
+    std::cerr << "Failed to initialize NVML: " << nvmlErrorString(result) << std::endl;
+    std::exit(1);
+  }
+
+  result = nvmlDeviceGetCount(&device_count);
+  if (result != NVML_SUCCESS) {
+    std::cerr << "Failed to query device count NVML: " << nvmlErrorString(result) << std::endl;
+    std::exit(1);
+  }
+
+  result = nvmlShutdown();
+  if (result != NVML_SUCCESS) {
+    std::cerr << "Failed to shutdown NVML: " << nvmlErrorString(result) << std::endl;
+    std::exit(1);
+  }
+
+  __internal_setDeviceCount(device_count);
+
+  for (int i = 0 ; i < device_count ; i++) {
+    cudaSetDevice(i);
+    //this forcibly creates a primary context, which is lazily-created
+    cudaFree(0);
+    std::cerr << "Created CUDA context on device [" << i << "]" << std::endl;
+  }
+}
+
 int main(int argc, char *argv[]) {
   if (!(argc == 3 && !strcmp(argv[1], "migrate")) && (argc != 2)) {
     printf(
@@ -103,16 +133,6 @@ int main(int argc, char *argv[]) {
     return 0;
   }
   absl::InitializeSymbolizer(argv[0]);
-
-  //let's not use this
-  /* Read GPU provision information. */
-  //char const *cuda_uuid_str = getenv("CUDA_VISIBLE_DEVICES");
-  //std::string cuda_uuid = cuda_uuid_str ? std::string(cuda_uuid_str) : "";
-  //char const *gpu_uuid_str = getenv("AVA_GPU_UUID");
-  //std::string gpu_uuid = gpu_uuid_str ? std::string(gpu_uuid_str) : "";
-  //char const *gpu_mem_str = getenv("AVA_GPU_MEMORY");
-  //std::string gpu_mem = gpu_mem_str ? std::string(gpu_mem_str) : "";
-  //provision_gpu = new ProvisionGpu(cuda_uuid, gpu_uuid, gpu_mem);
 
   char const *gpu_device_str = getenv("GPU_DEVICE");
   std::string gpu_device = std::string(gpu_device_str);
@@ -124,6 +144,9 @@ int main(int argc, char *argv[]) {
   char *cmmode = std::getenv("GPU_MEMORY_MODE");
   std::string mmode = cmmode ? std::string(cmmode) : "default";
   
+  // preemptively create context on all GPUs
+  create_cuda_contexts();
+
   /* set current device*/
   GPUMemoryServer::Client::getInstance().setCurrentGPU(std::stoi(gpu_device));
   auto ccontext = ava::CommonContext::instance();
@@ -148,26 +171,14 @@ int main(int argc, char *argv[]) {
   std::cerr << "[worker#" << listen_port << "] To check the state of AvA remoting progress, use `tail -f " << wctx->log_file
             << "`" << std::endl;
 
+  GPUMemoryServer::Client::getInstance().connectToGPUs();
+
   if (!getenv("AVA_CHANNEL") || !strcmp(getenv("AVA_CHANNEL"), "TCP")) {
     chan_hv = NULL;
     chan = command_channel_socket_tcp_worker_new(listen_port);
     nw_record_command_channel = command_channel_log_new(listen_port);
     //this sets API id and other stuff
     init_internal_command_handler();
-
-    std::cerr << "[worker#" << listen_port << "] using memory mode " << mmode  << std::endl;
-    GPUMemoryServer::Client::getInstance().setMemoryServerMode(mmode == "server");
-    
-    uint16_t gpuid = std::stoi(gpu_device);
-    std::cerr << "[worker#" << listen_port << "] connecting to memory server at GPU #" << gpuid << ". if it loops here we couldn't connect" << std::endl;
-    int rc = 1;
-    //we need to loop since it's very likely we are created before the server is
-    while (rc != 0) {
-      rc = GPUMemoryServer::Client::getInstance().connectToGPU(gpuid);
-      //be kind
-      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    }
-    std::cerr << "[worker#" << listen_port << "] connected to memory server at GPU #" << gpuid << "!" << std::endl;
 
     //only loop if we are in serverless mode
     do {
@@ -177,12 +188,7 @@ int main(int argc, char *argv[]) {
       //this launches the thread that listens for commands
       init_command_handler(channel_create);
 
-      //report our max memory requested
-      if (mmode == "server") {
-        //requested_gpu_mem comes from worker.hpp
-        GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(requested_gpu_mem);
-        //GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(16);
-      }
+      //TODO: I can see a race condition with init_command_handler and commands below, need to be sure and fix
 
       //if this is serverless, we need to update our id
       if (svless_vmid == "NO_VMID" || svless_vmid == "") {
@@ -194,17 +200,21 @@ int main(int argc, char *argv[]) {
         GPUMemoryServer::Client::getInstance().setUuid(svless_vmid);
       }
 
+      //report our max memory requested
+      //GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(requested_gpu_mem);
+      //this might be failing due to race condition
+      //GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(16);
+
       std::cerr << "[worker#" << listen_port << "] got one, setting up cmd handler" << std::endl;
       wait_for_command_handler();
       destroy_command_handler(false);
       std::cerr << "[worker#" << listen_port << "] worker is done, looping." << std::endl;
 
+      //clean up allocations, local and remote
+      GPUMemoryServer::Client::getInstance().cleanup();
+      //go back to original GPU
+      GPUMemoryServer::Client::getInstance().setOriginalGPU();
     } while(std::getenv("SERVERLESS_MODE"));
-
-    //clean up allocations, local and remote
-    GPUMemoryServer::Client::getInstance().cleanup();
-    //go back to original GPU
-    GPUMemoryServer::Client::getInstance().setOriginalGPU();
 
     std::cerr << "[worker#" << listen_port << "] freeing channel and quiting." << std::endl;
     command_channel_free(chan);
