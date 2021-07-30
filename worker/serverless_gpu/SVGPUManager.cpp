@@ -186,6 +186,7 @@ void SVGPUManager::LaunchMemoryServers() {
     stringStream << base_path << i;
     std::cerr << "Launching GPU memory server for GPU " << i << " at socket "
           << stringStream.str() << std::endl;
+
     auto sv = std::make_unique<GPUMemoryServer::Server>
         (i, gpu_memory[i], stringStream.str(), resmngr_address);
     sv->start();
