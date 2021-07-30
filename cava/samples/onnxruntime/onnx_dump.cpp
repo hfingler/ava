@@ -4,7 +4,7 @@ ava_version("10.1.0");
 ava_identifier(ONNX_DUMP);
 ava_number(10);
 ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -I/usr/local/cuda-10.1/nvvm/include);
-ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver -L/usr/local/cuda-10.1/nvvm/lib64 -lnvvm zmq absl::flat_hash_map);
+ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver -L/usr/local/cuda-10.1/nvvm/lib64 -lnvvm zmq nvidia-ml absl::flat_hash_map);
 ava_guestlib_srcs(cuda/nvvm_helper.cpp extensions/gpu_address_tracking.cpp);
 ava_worker_srcs(extensions/cudart_10.1_utilities.cpp extensions/memory_server/client.cpp);
 ava_common_utility_srcs(extensions/cudart_10.1_utilities.cpp);
@@ -106,8 +106,8 @@ typedef struct {
   struct fatbin_function *func; /* for functions */
 
   /* global states */
-  CUmodule cur_module;
-  int cuinit_called;
+  CUmodule cur_module[4];
+  //int cuinit_called;
 
   /* memory flags */
   int is_pinned;
@@ -349,17 +349,31 @@ ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs,
 
 ava_utility void __helper_init_module(struct fatbin_wrapper *fatCubin, void **handle) {
   int ret;
+  //we dont need cuInit anymore
+  /*
   if (ava_metadata(NULL)->cuinit_called == 0) {
     ret = cuInit(0);
     AVA_DEBUG << "cuInit in " << __func__ << " ret=" << ret;
     assert(ret == CUDA_SUCCESS && "CUDA driver init failed");
     ava_metadata(NULL)->cuinit_called = 1;
   }
-  __cudaInitModule(handle);
-  ava_metadata(NULL)->cur_module = NULL;
-  ret = cuModuleLoadData(&ava_metadata(NULL)->cur_module, (void *)fatCubin->ptr);
-  (void)ret;
-  assert((ret == CUDA_SUCCESS || ret == CUDA_ERROR_NO_BINARY_FOR_GPU) && "Module load failed");
+  */
+  //if (ava_is_worker) {
+    for (int i = 0 ; i < __internal_getDeviceCount() ; i++) {
+      printf("setting device to %d\n", i);
+      cudaSetDevice(i);
+
+      __cudaInitModule(handle);
+      ava_metadata(NULL)->cur_module[i] = NULL;
+      ret = cuModuleLoadData(&ava_metadata(NULL)->cur_module[i], (void *)fatCubin->ptr);
+      printf("loaded module data into ctx %d : %p\n", i, ava_metadata(NULL)->cur_module[i]);
+      (void)ret;
+      assert((ret == CUDA_SUCCESS || ret == CUDA_ERROR_NO_BINARY_FOR_GPU) && "Module load failed");
+    }
+  //}
+    //reset back
+    printf("resetting device to %d\n", __internal_getCurrentDevice());
+    cudaSetDevice(__internal_getCurrentDevice());
 }
 
 void **CUDARTAPI __cudaRegisterFatBinary(void *fatCubin) {
@@ -531,7 +545,7 @@ void CUDARTAPI __cudaRegisterFunction(void **fatCubinHandle, const char *hostFun
 
   printf(
       "Register hostFun=%p, deviceFun=%s, deviceName=%s, thread_limit=%d, tid={%d,%d,%d}, bid={%d,%d,%d}, "
-      "bDim={%d,%d,%d}, gDim={%d,%d,%d}",
+      "bDim={%d,%d,%d}, gDim={%d,%d,%d}\n",
       (void *)hostFun, deviceFun, deviceName, thread_limit, tid ? tid->x : 0, tid ? tid->y : 0, tid ? tid->z : 0,
       bid ? bid->x : 0, bid ? bid->y : 0, bid ? bid->z : 0, bDim ? bDim->x : 0, bDim ? bDim->y : 0, bDim ? bDim->z : 0,
       gDim ? gDim->x : 0, gDim ? gDim->y : 0, gDim ? gDim->z : 0);

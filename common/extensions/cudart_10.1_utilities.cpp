@@ -238,31 +238,49 @@ void __helper_assosiate_function_dump(GHashTable *funcs, struct fatbin_function 
 /**
  * Look up the CUDA kernel function and save it in the list.
  */
-void __helper_register_function(struct fatbin_function *func, const char *hostFun, CUmodule module,
+void __helper_register_function(struct fatbin_function *func, const char *hostFun, CUmodule* module,
                                 const char *deviceName) {
-  // Empty fatbinary
-  if (!module) {
-    LOG_DEBUG << "Register a fat binary from a empty module";
-    return;
+  
+  for (int i = 0 ; i < __internal_getDeviceCount() ; i++) {
+    // Empty fatbinary
+    if (!module[i]) {
+      LOG_DEBUG << "Register a fat binary from a empty module";
+      return;
+    }
+
+    if (func == NULL) {
+      LOG_FATAL << "fatbin_function is NULL";
+      throw std::invalid_argument("received empty fatbin_function");
+    }
+
+    // Only register the first host function
+    //if (func->hostfunc != NULL) return;
+    if (func->hostfunc[i] != NULL) continue;
+
+    //this call needs to be done in each context
+    printf("setting device to %d\n", i);
+    cudaSetDevice(i);
+    
+    CUcontext cuCtx;
+    cuCtxGetCurrent(&cuCtx);
+    CUdevice cuDev;
+    cuCtxGetDevice(&cuDev);
+    
+    printf("Curently on device %d, ctx %p\n", cuDev, cuCtx);
+
+    CUresult ret = cuModuleGetFunction(&func->cufunc[i], module[i], deviceName);
+    if (ret != CUDA_SUCCESS) {
+      LOG_ERROR << "cuModuleGetFunction fail with " << ret;
+      throw std::runtime_error("failed to get module function");
+    }
+    std::cerr << "*** __helper_register_function kernel at device " << i << " host func " << std::hex << (uintptr_t)hostFun << " -> device func " << (uintptr_t)func->cufunc[i]
+      << " deviceName " << deviceName << std::endl;
+    func->hostfunc[i] = (void *)hostFun;
+    func->module[i] = module[i];
   }
 
-  if (func == NULL) {
-    LOG_FATAL << "fatbin_function is NULL";
-    throw std::invalid_argument("received empty fatbin_function");
-  }
-
-  // Only register the first host function
-  if (func->hostfunc != NULL) return;
-
-  CUresult ret = cuModuleGetFunction(&func->cufunc, module, deviceName);
-  if (ret != CUDA_SUCCESS) {
-    LOG_ERROR << "cuModuleGetFunction fail with " << ret;
-    throw std::runtime_error("failed to get module function");
-  }
-  std::cerr << "register host func " << std::hex << (uintptr_t)hostFun << " -> device func " << (uintptr_t)func->cufunc 
-    << " deviceName " << deviceName << std::endl;
-  func->hostfunc = (void *)hostFun;
-  func->module = module;
+  //reset back
+  cudaSetDevice(__internal_getCurrentDevice());
 }
 
 /**
@@ -345,31 +363,34 @@ int __helper_type_size(cudaDataType dataType) {
 
 cudaError_t __helper_func_get_attributes(struct cudaFuncAttributes *attr, struct fatbin_function *func,
                                          const void *hostFun) {
+  
+  uint32_t cur_dvc = __internal_getCurrentDevice();
+  
   if (func == NULL) {
     LOG_DEBUG << "func is NULL";
     return static_cast<cudaError_t>(cudaErrorInvalidDeviceFunction);
   }
 
-  if (func->hostfunc != hostFun) {
-    LOG_ERROR << "search host func " << hostFun << " -> stored " << (void *)func->hostfunc << " (device func "
-              << (void *)func->cufunc << ")";
+  if (func->hostfunc[cur_dvc] != hostFun) {
+    LOG_ERROR << "search host func " << hostFun << " -> stored " << (void *)func->hostfunc[cur_dvc] << " (device func "
+              << (void *)func->cufunc[cur_dvc] << ")";
   } else {
-    LOG_DEBUG << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc;
+    LOG_DEBUG << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc[cur_dvc];
   }
 
   CUresult ret;
-  ret = cuFuncGetAttribute((int *)&attr->sharedSizeBytes, CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES, func->cufunc);
-  ret = cuFuncGetAttribute((int *)&attr->constSizeBytes, CU_FUNC_ATTRIBUTE_CONST_SIZE_BYTES, func->cufunc);
-  ret = cuFuncGetAttribute((int *)&attr->localSizeBytes, CU_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES, func->cufunc);
-  ret = cuFuncGetAttribute(&attr->maxThreadsPerBlock, CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK, func->cufunc);
-  ret = cuFuncGetAttribute(&attr->numRegs, CU_FUNC_ATTRIBUTE_NUM_REGS, func->cufunc);
-  ret = cuFuncGetAttribute(&attr->ptxVersion, CU_FUNC_ATTRIBUTE_PTX_VERSION, func->cufunc);
-  ret = cuFuncGetAttribute(&attr->binaryVersion, CU_FUNC_ATTRIBUTE_BINARY_VERSION, func->cufunc);
+  ret = cuFuncGetAttribute((int *)&attr->sharedSizeBytes, CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES, func->cufunc[cur_dvc]);
+  ret = cuFuncGetAttribute((int *)&attr->constSizeBytes, CU_FUNC_ATTRIBUTE_CONST_SIZE_BYTES, func->cufunc[cur_dvc]);
+  ret = cuFuncGetAttribute((int *)&attr->localSizeBytes, CU_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES, func->cufunc[cur_dvc]);
+  ret = cuFuncGetAttribute(&attr->maxThreadsPerBlock, CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK, func->cufunc[cur_dvc]);
+  ret = cuFuncGetAttribute(&attr->numRegs, CU_FUNC_ATTRIBUTE_NUM_REGS, func->cufunc[cur_dvc]);
+  ret = cuFuncGetAttribute(&attr->ptxVersion, CU_FUNC_ATTRIBUTE_PTX_VERSION, func->cufunc[cur_dvc]);
+  ret = cuFuncGetAttribute(&attr->binaryVersion, CU_FUNC_ATTRIBUTE_BINARY_VERSION, func->cufunc[cur_dvc]);
   attr->cacheModeCA = 0;
   ret = cuFuncGetAttribute(&attr->maxDynamicSharedSizeBytes, CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES,
-                           func->cufunc);
+                           func->cufunc[cur_dvc]);
   ret = cuFuncGetAttribute(&attr->preferredShmemCarveout, CU_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT,
-                           func->cufunc);
+                           func->cufunc[cur_dvc]);
 
   return static_cast<cudaError_t>(ret);
 }
@@ -377,19 +398,20 @@ cudaError_t __helper_func_get_attributes(struct cudaFuncAttributes *attr, struct
 cudaError_t __helper_occupancy_max_active_blocks_per_multiprocessor(int *numBlocks, struct fatbin_function *func,
                                                                     const void *hostFun, int blockSize,
                                                                     size_t dynamicSMemSize) {
+  uint32_t cur_dvc = __internal_getCurrentDevice();
   if (func == NULL) {
     LOG_DEBUG << "func is NULL";
     return (cudaError_t)cudaErrorInvalidDeviceFunction;
   }
 
-  if (func->hostfunc != hostFun) {
-    LOG_ERROR << "search host func " << hostFun << " -> stored " << (void *)func->hostfunc << " (device func "
-              << (void *)func->cufunc << ")";
+  if (func->hostfunc[cur_dvc] != hostFun) {
+    LOG_ERROR << "search host func " << hostFun << " -> stored " << (void *)func->hostfunc[cur_dvc] << " (device func "
+              << (void *)func->cufunc[cur_dvc] << ")";
   } else {
-    LOG_DEBUG << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc;
+    LOG_DEBUG << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc[cur_dvc];
   }
   return static_cast<cudaError_t>(
-      cuOccupancyMaxActiveBlocksPerMultiprocessor(numBlocks, func->cufunc, blockSize, dynamicSMemSize));
+      cuOccupancyMaxActiveBlocksPerMultiprocessor(numBlocks, func->cufunc[cur_dvc], blockSize, dynamicSMemSize));
 }
 
 cudaError_t __helper_occupancy_max_active_blocks_per_multiprocessor_with_flags(int *numBlocks,
@@ -397,20 +419,21 @@ cudaError_t __helper_occupancy_max_active_blocks_per_multiprocessor_with_flags(i
                                                                                const void *hostFun, int blockSize,
                                                                                size_t dynamicSMemSize,
                                                                                unsigned int flags) {
+  uint32_t cur_dvc = __internal_getCurrentDevice();
   if (func == NULL) {
     LOG_DEBUG << "func is NULL";
     return (cudaError_t)cudaErrorInvalidDeviceFunction;
   }
 
-  if (func->hostfunc != hostFun) {
-    LOG_ERROR << "search host func " << hostFun << " -> stored " << (void *)func->hostfunc << " (device func "
-              << (void *)func->cufunc << ")";
+  if (func->hostfunc[cur_dvc] != hostFun) {
+    LOG_ERROR << "search host func " << hostFun << " -> stored " << (void *)func->hostfunc[cur_dvc] << " (device func "
+              << (void *)func->cufunc[cur_dvc] << ")";
   } else {
-    LOG_DEBUG << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc;
+    LOG_DEBUG << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc[cur_dvc];
   }
 
   return static_cast<cudaError_t>(
-      cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(numBlocks, func->cufunc, blockSize, dynamicSMemSize, flags));
+      cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(numBlocks, func->cufunc[cur_dvc], blockSize, dynamicSMemSize, flags));
 }
 
 void __helper_print_pointer_attributes(const struct cudaPointerAttributes *attributes, const void *ptr) {

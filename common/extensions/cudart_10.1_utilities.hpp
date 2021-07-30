@@ -43,9 +43,9 @@ struct fatbin_function {
   int argc;
   struct kernel_arg args[MAX_KERNEL_ARG];
 
-  CUfunction cufunc;
-  void *hostfunc;
-  CUmodule module;
+  CUfunction cufunc[4];
+  void *hostfunc[4];
+  CUmodule module[4];
 };
 
 size_t __helper_fatbin_size(const void *cubin);
@@ -72,7 +72,7 @@ void __helper_cu_mem_host_free(void *ptr);
 void __helper_assosiate_function_dump(GHashTable *funcs, struct fatbin_function **func, void *local,
                                       const char *deviceName);
 
-void __helper_register_function(struct fatbin_function *func, const char *hostFun, CUmodule module,
+void __helper_register_function(struct fatbin_function *func, const char *hostFun, CUmodule* module,
                                 const char *deviceName);
 
 /* Async buffer address list */
