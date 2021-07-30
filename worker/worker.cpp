@@ -201,7 +201,8 @@ int main(int argc, char *argv[]) {
       }
 
       //report our max memory requested
-      GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(requested_gpu_mem);
+      //GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(requested_gpu_mem);
+      //this might be failing due to race condition
       //GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(16);
 
       std::cerr << "[worker#" << listen_port << "] got one, setting up cmd handler" << std::endl;

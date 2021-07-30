@@ -54,7 +54,6 @@ void __internal_kernelOut() {
 CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
                                 unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
                                 unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
-                
     CUresult cur;
     GPUMemoryServer::Client::getInstance().kernelIn();
     cur = cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
@@ -82,17 +81,28 @@ namespace GPUMemoryServer {
         context = zmq_ctx_new();
         sockets = new void*[device_count];
         for (int i = 0 ; i < device_count; i++) {
-            sockets[i] = zmq_socket(context, ZMQ_REQ);
-            std::string ad = get_base_socket_path();
-            ad += std::to_string(i);
-            int ret;
-            while (ret != 0) { 
-                zmq_connect(sockets[i], ad.c_str());
-                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-            }
-            printf("GPU Client succesfully connected to server [%d]\n", i);
+            sockets[i] = 0;
         }
-        return 0;
+    }
+
+    void Client::connectToGPU(uint32_t gpuid) {
+        int ret;
+        std::ostringstream stringStream;
+        stringStream << GPUMemoryServer::get_base_socket_path() << gpuid;
+        sockets[gpuid] = zmq_socket(context, ZMQ_REQ);
+        while (ret != 0) { 
+            ret = zmq_connect(sockets[gpuid], stringStream.str().c_str());
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        }
+        printf("GPU Client succesfully connected to server [%d] at %p\n", gpuid, sockets[gpuid]);
+    }
+
+    cudaError_t Client::localMalloc(void** devPtr, size_t size) {
+        cudaError_t err = cudaMalloc(devPtr, size);
+        local_allocs.emplace((uint64_t)*devPtr, std::make_unique<Client::LocalAlloc>(*devPtr, size, current_device));
+        //report to server
+        GPUMemoryServer::Client::getInstance().sendMallocRequest(size); 
+        return err;
     }
 
     void Client::sendMallocRequest(uint64_t size) {
@@ -120,10 +130,20 @@ namespace GPUMemoryServer {
 
     void Client::sendRequest(Request &req) {
         strcpy(req.worker_id, uuid.c_str());
-        zmq_send(sockets[current_device], (char*)&req, sizeof(Request), 0);
+        printf(" !! sending to %d  at %p\n",current_device, sockets[current_device] );
 
+        if (sockets[current_device] == 0) {
+            connectToGPU(current_device);
+        }
+
+        int rc = zmq_send(sockets[current_device], (char*)&req, sizeof(Request), 0);
+        printf(" !!! zmq_send ret %d\n", rc);
+
+
+        printf(" !!! waiting for receive\n");
         zmq_recv(sockets[current_device], buffer, sizeof(Reply), 0);
         memcpy(&reply, buffer, sizeof(Reply));
+        printf(" !!! received\n");
 
         handleReply();
     }
@@ -166,13 +186,7 @@ namespace GPUMemoryServer {
         sendRequest(req);
     }
 
-    cudaError_t Client::localMalloc(void** devPtr, size_t size) {
-        cudaError_t err = cudaMalloc(devPtr, size);
-        local_allocs.emplace((uint64_t)*devPtr, std::make_unique<Client::LocalAlloc>(*devPtr, size, current_device));
-        //report to server
-        GPUMemoryServer::Client::getInstance().sendMallocRequest(size); 
-        return err;
-    }
+    
 
     cudaError_t Client::localFree(void* devPtr) {
         auto it = local_allocs.find((uint64_t)devPtr);

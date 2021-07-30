@@ -10,6 +10,7 @@
 #include <memory>
 //#include <absl/containers/flat_hash_map.h>
 #include <unordered_map>
+#include <mutex>
 #include "common.hpp"
 
 #ifdef __cplusplus
@@ -42,6 +43,7 @@ namespace GPUMemoryServer {
         void* context;
         void** sockets;
         char* buffer;
+        std::mutex zmq_lock;
 
         //let's keep one Reply here since we can always reuse it
         Reply reply;
@@ -84,6 +86,7 @@ namespace GPUMemoryServer {
         void setOriginalGPU();
         void setCurrentGPU(int id);
         void connectToGPUs();
+        void connectToGPU(uint32_t gpuid);
         void sendMallocRequest(uint64_t size);
         void sendFreeRequest(uint64_t size);
         void sendCleanupRequest();

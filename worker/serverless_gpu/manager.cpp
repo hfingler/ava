@@ -67,7 +67,8 @@ int main(int argc, const char *argv[]) {
   }
 
   manager->LaunchMemoryServers();
-  
+  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
   // normal ava mode
   if (!rm_addr) {
     std::cerr << "Running manager on normal manager mode" << std::endl;

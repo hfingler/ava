@@ -11,7 +11,7 @@
 namespace GPUMemoryServer {
 
     inline std::string get_base_socket_path() {
-        return std::string("ipc:///tmp/gpumemserver_sock");
+        return std::string("ipc:///tmp/gpumemserver_sock_");
     }
 
     enum RequestType { ALLOC, FREE, FINISHED, MEMREQUESTED,

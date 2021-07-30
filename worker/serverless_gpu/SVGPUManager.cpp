@@ -181,7 +181,9 @@ SVGPUManager::SVGPUManager(uint32_t port, uint32_t worker_port_base, std::string
 void SVGPUManager::LaunchMemoryServers() {
   std::string base_path = GPUMemoryServer::get_base_socket_path();
 
-  for (unsigned int i = gpu_offset; i < gpu_offset+n_gpus; i++) {
+  //for (unsigned int i = gpu_offset; i < gpu_offset+n_gpus; i++) {
+  //this is real shitty, but it doesnt use many resources and we have to do this becasue workers are not aware of offsets
+  for (unsigned int i = 0; i < 4; i++) {
     std::ostringstream stringStream;
     stringStream << base_path << i;
     std::cerr << "Launching GPU memory server for GPU " << i << " at socket "

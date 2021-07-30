@@ -46,7 +46,9 @@ void Server::run() {
     printf("Memory server of GPU %d ready, bound to %s\n", gpu, unix_socket_path.c_str());
     
     while(1) {
+        printf(" !! server %d waiting for request\n", gpu);
         zmq_recv(responder, buffer, BUF_SIZE, 0);
+        printf(" !! server %d got a request\n", gpu);
         handleRequest((char*)buffer, responder);
     }
 }
@@ -96,6 +98,7 @@ void Server::handleRequest(char* buffer, void *responder) {
         handleKernelOut(req, rep);
     }
 
+    printf("sending response\n");
     zmq_send(responder, (char*)&rep, sizeof(Reply), 0);
 }
 
