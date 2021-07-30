@@ -3,6 +3,7 @@
 
 #include <grpcpp/grpcpp.h>
 #include <vector>
+#include <map>
 #include "gpuserver.grpc.pb.h"
 #include "manager_service.hpp"
 #include "manager_service.proto.h"
@@ -33,7 +34,7 @@ class SVGPUManager : public ManagerServiceServerBase, public GPU::Service {
       : stub_(ResMngrService::NewStub(channel)) {}
       
       //TODO: get gpus as arguments and set
-      void RegisterSelf(uint32_t& gpu_offset, uint32_t& n_gpus);
+      void RegisterSelf(uint32_t& gpu_offset, uint32_t& n_gpus, std::map<uint32_t, uint64_t> &gpu_memory);
 
     private:
       std::unique_ptr<ResMngrService::Stub> stub_;
@@ -41,21 +42,22 @@ class SVGPUManager : public ManagerServiceServerBase, public GPU::Service {
 
   // fields
   BaseScheduler *scheduler;
+  std::string resmngr_address;
   ResMngrClient *resmngr_client;
   std::unique_ptr<Server> grpc_server;
   uint32_t n_gpus;
   uint32_t gpu_offset;
   bool serverless_mode;
+  std::map<uint32_t, uint64_t> gpu_memory;
   std::vector<std::unique_ptr<GPUMemoryServer::Server>> memory_servers;
-  std::string memory_mode;
   uint32_t uuid_counter;
 
   // methods
   SVGPUManager(uint32_t port, uint32_t worker_port_base, std::string worker_path, std::vector<std::string> &worker_argv,
-            std::vector<std::string> &worker_env, uint16_t ngpus, uint16_t gpu_offset, std::string memory_mode);
+            std::vector<std::string> &worker_env, uint16_t ngpus, uint16_t gpu_offset);
 
   void setRealGPUOffsetCount();
-  void RegisterSelf(std::string rm_addr);
+  void RegisterSelf();
   void LaunchService();
   void LaunchMemoryServers();
   Status SpawnGPUWorker(ServerContext *context, const SpawnGPUWorkerRequest *request,

@@ -22,6 +22,8 @@ Status SVGPUManager::SpawnGPUWorker(ServerContext *AVA_UNUSED(context), const Sp
 
     // TODO: make sure gpuid is sane
 
+    std::cerr << "~~~ SpawnGPUWorker spawning " << n << " workers on GPU " << gpuid << std::endl;
+
     for (uint32_t i = 0; i < n; i++) {
       uint32_t port = LaunchWorker(gpuid);
       auto w = response->add_workers();
@@ -33,9 +35,9 @@ Status SVGPUManager::SpawnGPUWorker(ServerContext *AVA_UNUSED(context), const Sp
   return Status::OK;
 }
 
-void SVGPUManager::RegisterSelf(std::string rm_addr) {
-  resmngr_client = new ResMngrClient(grpc::CreateChannel(rm_addr, grpc::InsecureChannelCredentials()));
-  resmngr_client->RegisterSelf(gpu_offset, n_gpus);
+void SVGPUManager::RegisterSelf() {
+  resmngr_client = new ResMngrClient(grpc::CreateChannel(resmngr_address, grpc::InsecureChannelCredentials()));
+  resmngr_client->RegisterSelf(gpu_offset, n_gpus, gpu_memory);
 }
 
 void SVGPUManager::LaunchService() {
@@ -86,7 +88,7 @@ void SVGPUManager::setRealGPUOffsetCount() {
   }
 }
 
-void SVGPUManager::ResMngrClient::RegisterSelf(uint32_t& gpu_offset, uint32_t& n_gpus) {
+void SVGPUManager::ResMngrClient::RegisterSelf(uint32_t& gpu_offset, uint32_t& n_gpus, std::map<uint32_t, uint64_t> &gpu_memory) {
   RegisterGPUNodeRequest request;
   nvmlReturn_t result;
 
@@ -112,6 +114,9 @@ void SVGPUManager::ResMngrClient::RegisterSelf(uint32_t& gpu_offset, uint32_t& n
       std::cerr << "Failed to get memory of device " << i << ": " << nvmlErrorString(result) << std::endl;
       std::exit(1);
     }
+
+    //store locally
+    gpu_memory[i] = memory.free;
 
     RegisterGPUNodeRequest::GPU *g = request.add_gpus();
     g->set_id(i);
@@ -163,30 +168,27 @@ ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::Worker
  *************************************/
 
 SVGPUManager::SVGPUManager(uint32_t port, uint32_t worker_port_base, std::string worker_path, std::vector<std::string> &worker_argv,
-            std::vector<std::string> &worker_env, uint16_t ngpus, uint16_t gpu_offset, std::string memory_mode)
+            std::vector<std::string> &worker_env, uint16_t ngpus, uint16_t gpu_offset)
     : ManagerServiceServerBase(port, worker_port_base, worker_path, worker_argv, worker_env) {
   this->scheduler = new RoundRobin(ngpus, gpu_offset);
   this->n_gpus = ngpus;
   this->gpu_offset = gpu_offset;
-  this->memory_mode = memory_mode;
   this->uuid_counter = 0;
   //already update to real values using nvml
   setRealGPUOffsetCount();
 };
 
 void SVGPUManager::LaunchMemoryServers() {
-  std::cerr << "Using memory server mode " << memory_mode << std::endl;
   std::string base_path = GPUMemoryServer::get_base_socket_path();
 
   for (unsigned int i = gpu_offset; i < gpu_offset+n_gpus; i++) {
     std::ostringstream stringStream;
     stringStream << base_path << i;
-    
     std::cerr << "Launching GPU memory server for GPU " << i << " at socket "
           << stringStream.str() << std::endl;
-    
-    auto sv = std::make_unique<GPUMemoryServer::Server>(i, stringStream.str());
-    sv.get()->start();
+    auto sv = std::make_unique<GPUMemoryServer::Server>
+        (i, gpu_memory[i], stringStream.str(), resmngr_address);
+    sv->start();
     memory_servers.push_back(std::move(sv));
   }
 }
@@ -221,7 +223,7 @@ uint32_t SVGPUManager::LaunchWorker(uint32_t gpu_id) {
 
   for (auto& element : environments) {
     printf("  > %s\n", element.c_str());
-}
+  }
 
   std::cerr << "Spawn API server at 0.0.0.0:" << port << " (cmdline=\"" << boost::algorithm::join(environments, " ")
             << " " << boost::algorithm::join(parameters, " ") << "\")" << std::endl;

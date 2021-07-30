@@ -19,8 +19,6 @@ ABSL_FLAG(uint16_t, ngpus, 1, "(OPTIONAL) Number of GPUs the manager should use"
 ABSL_FLAG(uint16_t, gpuoffset, 0, "(OPTIONAL)GPU id offset");
 ABSL_FLAG(std::string, resmngr_addr, "",
           "(OPTIONAL) Address of the Alouatta resource manager. If enabled will run on grpc mode.");
-ABSL_FLAG(std::string, gpumemory_mode, "default",
-          "(OPTIONAL) GPU memory mode, default means all guestlib do their own, server means we use memory servers.");
 
 ABSL_FLAG(std::string, debug_migration, "no", "(OPTIONAL) turn on debug migration");
 
@@ -38,10 +36,6 @@ int main(int argc, const char *argv[]) {
   } else {
     port = absl::GetFlag(FLAGS_manager_port);
   }
-
-  std::string mmode = "GPU_MEMORY_MODE=";
-  mmode += absl::GetFlag(FLAGS_gpumemory_mode);
-  worker_env.push_back(mmode);
 
   //check for debug flag
   if (absl::GetFlag(FLAGS_debug_migration) != "no") {
@@ -62,8 +56,7 @@ int main(int argc, const char *argv[]) {
   std::cerr << "Using port " << port << " for AvA" << std::endl;
   SVGPUManager *manager =
       new SVGPUManager(port, absl::GetFlag(FLAGS_worker_port_base), absl::GetFlag(FLAGS_worker_path), worker_argv,
-                       worker_env, absl::GetFlag(FLAGS_ngpus), absl::GetFlag(FLAGS_gpuoffset),
-                       absl::GetFlag(FLAGS_gpumemory_mode));
+                       worker_env, absl::GetFlag(FLAGS_ngpus), absl::GetFlag(FLAGS_gpuoffset));
 
   manager->LaunchMemoryServers();
   
@@ -79,10 +72,11 @@ int main(int argc, const char *argv[]) {
     full_addr += std::getenv("RESMNGR_PORT");
 
     std::cerr << "Running manager on serverless mode, rm at " << full_addr << std::endl;
+    manager->resmngr_address = full_addr;
     manager->LaunchService();
     // wait a bit
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    manager->RegisterSelf(full_addr);
+    manager->RegisterSelf();
 
     //launch the memory servers, needs to be after LaunchService, which fills device count
     manager->LaunchMemoryServers();

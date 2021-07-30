@@ -6,39 +6,61 @@
 #include <map>
 #include <memory>
 #include <thread>
-#include <cuda_runtime_api.h>
+#include <grpcpp/grpcpp.h>
+#include "resmngr.grpc.pb.h"
 #include "common/extensions/memory_server/common.hpp"
 
+using grpc::Channel;
+using grpc::ClientContext;
+using grpc::Status;
+using resmngr::RegisterGPUNodeRequest;
+using resmngr::RegisterGPUNodeResponse;
+using resmngr::ResMngrService;
+
 namespace GPUMemoryServer {
-    struct Allocation {
-        uint64_t size;
-        void* devPtr;
-        Allocation(uint32_t size, void* devPtr)
-            : size(size), devPtr(devPtr) {}
-        ~Allocation();
+    struct WorkerInfo {
+        uint64_t mem_used;
+        uint64_t requested_memory;
+        WorkerInfo()
+            : mem_used(0) {}
+        bool isGoodCitizen() {
+            return mem_used <= requested_memory;
+        }
     };
 
     class Server {
         public:
+        class ResMngrClient {
+            public:
+            ResMngrClient(std::shared_ptr<Channel> channel)
+            : stub_(ResMngrService::NewStub(channel)) {}
+            
+            //TODO: get gpus as arguments and set
+            void RegisterSelf(uint32_t& gpu_offset, uint32_t& n_gpus);
+
+            private:
+            std::unique_ptr<ResMngrService::Stub> stub_;
+        };
+        ResMngrClient *resmngr_client;
+
         //fields
-        uint16_t gpu;
         std::string unix_socket_path;
-        //map of worker_id to a map of dev_pointers to allocation struct
-        std::map<std::string, std::map<uint64_t, std::unique_ptr<Allocation>>> allocs;
-        //both these maps below are in MB unit
-        std::map<std::string, uint64_t> used_memory;
-        std::map<std::string, uint64_t> requested_memory;
+        uint16_t gpu;
+        uint64_t gpu_memory_total;
+        uint64_t gpu_memory_used;
+        uint32_t kernels_queued;
+        std::map<std::string, WorkerInfo> workers_info;
+        
         std::thread self_thread;
 
-        Server(uint16_t gpu, std::string unix_socket_path) : gpu(gpu), unix_socket_path(unix_socket_path){}
+        Server(uint16_t gpu, uint64_t total_memory, std::string unix_socket_path, std::string resmngr_address);
         void handleRequest(char* buffer, void *responder);
-        uint32_t handleMalloc(Request& req, Reply& rep);
-        uint32_t handleFree(Request& req, Reply& rep);
-        uint32_t handleFinish(Request& req, Reply& rep);
-        uint32_t handleKernelIn(Request& req, Reply& rep);
-        uint32_t handleKernelOut(Request& req, Reply& rep);
-        uint32_t handleGetAllPointers(Request& req, Reply& rep);
-        uint32_t handleMigrate(Request& req, Reply& rep);
+        void handleMalloc(Request& req, Reply& rep);
+        void handleFree(Request& req, Reply& rep);
+        void handleRequestedMemory(Request& req, Reply& rep);
+        void handleFinish(Request& req, Reply& rep);
+        void handleKernelIn(Request& req, Reply& rep);
+        void handleKernelOut(Request& req, Reply& rep);
         void run();
         void start() {
             self_thread = std::thread(&Server::run, this);

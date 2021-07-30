@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <string>
 #include <zmq.h>
-#include <vector>
+#include <map>
 #include <cuda_runtime_api.h>
 #include <cuda.h>
 #include <memory>
@@ -40,22 +40,16 @@ namespace GPUMemoryServer {
         public:
         //zmq and comms stuff
         void* context;
-        void* socket;
+        void** sockets;
         char* buffer;
-        bool memoryserver_mode;
 
         //let's keep one Reply here since we can always reuse it
-        //it's 16K so we dont wanna keep creating these
         Reply reply;
         Request req;
 
-        //this sucks
-        Reply* getReply() {
-            return &reply;
-        }
-
         //device management
         int current_device, og_device;
+        int device_count;
         std::string uuid;
         //local mallocs
         struct LocalAlloc {
@@ -69,7 +63,7 @@ namespace GPUMemoryServer {
                 cudaFree(devPtr);
             }
         };
-        std::vector<std::unique_ptr<LocalAlloc>> local_allocs;
+        std::map<uint64_t, std::unique_ptr<LocalAlloc>> local_allocs;
 
         //pointer translation
         //absl::flat_hash_map<uint64_t, void*> pointer_map;
@@ -77,16 +71,8 @@ namespace GPUMemoryServer {
         void* translate_ptr(void* ptr);
 
         //migration
-        void sendGetAllPointersRequest();
-        void migrateToGPU(uint32_t new_gpuid);
+        void migrateToGPU(uint32_t new_gpuid, Migration migration_type);
 
-        //simple functions
-        void setMemoryServerMode(bool f) {
-            memoryserver_mode = f;
-        }
-        bool isMemoryServerMode() {
-            return memoryserver_mode;
-        }
         void setUuid(std::string id) {
             uuid = id;
         }
@@ -97,9 +83,9 @@ namespace GPUMemoryServer {
         void kernelOut();
         void setOriginalGPU();
         void setCurrentGPU(int id);
-        int connectToGPU(uint16_t gpuId);
+        void connectToGPUs();
         void sendMallocRequest(uint64_t size);
-        void sendFreeRequest(void* devPtr);
+        void sendFreeRequest(uint64_t size);
         void sendCleanupRequest();
         void sendMemoryRequestedValue(uint64_t mem_mb);
 
@@ -109,12 +95,13 @@ namespace GPUMemoryServer {
         }
 
         private:
-        void sendRequest(Request &req, void* sock = 0);
+        void sendRequest(Request &req);
+        void handleReply();
 
         Client() {
             buffer = new char[BUF_SIZE];
-            memoryserver_mode = false;
             og_device = -1;
+            sockets = 0;
         }
         ~Client();
 
