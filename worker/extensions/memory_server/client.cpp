@@ -129,6 +129,7 @@ namespace GPUMemoryServer {
     }
 
     void Client::sendRequest(Request &req) {
+        /*
         strcpy(req.worker_id, uuid.c_str());
         printf(" !! sending to %d  at %p\n",current_device, sockets[current_device] );
 
@@ -146,6 +147,7 @@ namespace GPUMemoryServer {
         printf(" !!! received\n");
 
         handleReply();
+    */
     }
 
     Client::~Client() {
