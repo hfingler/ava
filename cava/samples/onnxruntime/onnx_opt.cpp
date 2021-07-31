@@ -107,9 +107,12 @@ extern GQueue *filter_descriptor_pool;
 extern GQueue *idle_filter_descriptor_pool;
 extern GQueue *cu_event_pool;
 extern GQueue *idle_cu_event_pool;
+extern struct ava_endpoint __ava_endpoint;
 
 extern cudaError_t cuda_last_error;
 void __helper_worker_init_epilogue();
+
+void ava_metadata_reset(struct ava_endpoint *endpoint, const void *ptr);
 
 ava_end_utility;
 
@@ -642,7 +645,8 @@ ava_utility void **__helper_load_and_register_fatbin(void *fatCubin, absl::strin
     if (wSize) free(wSize);
   }
 
-  return fatbin_handle;
+  AVA_DEBUG << "DONE with helper_load_and_register_fatbin";
+  return releasefatbin_handle;
 }
 
 /*
@@ -13681,6 +13685,7 @@ ava_end_replacement;
 
 ava_begin_worker_replacement;
 void ava_load_cubin_worker(absl::string_view dump_dir) {
+  ava_metadata_reset(&__ava_endpoint, NULL);
   /* Preload CUDA fat binaries */
   fatbin_handle_list = g_ptr_array_new();
   /* Read cubin number */
@@ -13711,23 +13716,10 @@ void ava_load_cubin_worker(absl::string_view dump_dir) {
     g_ptr_array_add(fatbin_handle_list, (gpointer)fatbin_handle);
   }
   close(fd);
+  AVA_DEBUG << "DONE with ava_load_cubin_worker";
 }
 
 void __helper_worker_init_epilogue() {
-// this prevents ava_load_cubin_worker from being called twice if a dump dir is specified
-#ifndef AVA_RECV_DUMP_FROM_GUESTLIB
-  // the internal_api_handler usually calls ava_load_cubin_worker if DUMP_DIR is set,
-  // but leaving the env var check here in case it's set on the worker side
-  const char *dump_dir;
-  if (std::getenv("AVA_WORKER_DUMP_DIR") != NULL) {
-    dump_dir = std::getenv("AVA_WORKER_DUMP_DIR");
-    AVA_DEBUG << "setting dump directory to " << dump_dir << std::endl;
-  } else {
-    AVA_DEBUG << "AVA_WORKER_DUMP_DIR is not set, using /cuda_dumps" << std::endl;
-    dump_dir = "/cuda_dumps";
-  }
-  ava_load_cubin_worker(dump_dir);
-#endif
   worker_tf_opt_init();
 }
 ava_end_worker_replacement;

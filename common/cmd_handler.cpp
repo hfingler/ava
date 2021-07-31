@@ -395,16 +395,13 @@ void internal_api_handler(struct command_channel *chan, struct nw_handle_pool *h
     memcpy(&requested_gpu_mem, cmd->reserved_area, sizeof(uint32_t));
     printf("\n//! Requested GPU memory: %u\n\n", requested_gpu_mem);
 
-    if (strcmp(dump_dir, "") != 0) {
-        printf("\n//! Sets directory for dump files to %s\n\n", dump_dir);
-        if (setenv("AVA_WORKER_DUMP_DIR", dump_dir, 1)) {
-          perror("setenv failed for AVA_WORKER_DUMP_DIR\n");
-          exit(0);
-        }
+    if (strcmp(dump_dir, "") == 0)
+        dump_dir = "/cuda_dumps";
+        
 #ifdef AVA_PRELOAD_CUBIN
-        ava_load_cubin_worker(dump_dir);
+    printf("\n//! Sets directory for dump files to %s\n\n", dump_dir);
+    ava_load_cubin_worker(dump_dir);
 #endif
-    }
     break;
   }
 
