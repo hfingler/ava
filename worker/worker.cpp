@@ -149,9 +149,7 @@ int main(int argc, char *argv[]) {
 
   /* set current device*/
   GPUMemoryServer::Client::getInstance().setCurrentGPU(std::stoi(gpu_device));
-  auto ccontext = ava::CommonContext::instance();
-  ccontext->current_device = std::stoi(gpu_device);
-
+  
   /* setup signal handler */
   if ((original_sigint_handler = signal(SIGINT, sigint_handler)) == SIG_ERR) printf("failed to catch SIGINT\n");
   if ((original_sigsegv_handler = signal(SIGSEGV, sigsegv_handler)) == SIG_ERR) printf("failed to catch SIGSEGV\n");
@@ -171,7 +169,6 @@ int main(int argc, char *argv[]) {
   std::cerr << "[worker#" << listen_port << "] To check the state of AvA remoting progress, use `tail -f " << wctx->log_file
             << "`" << std::endl;
 
-  GPUMemoryServer::Client::getInstance().connectToGPUs();
 
   if (!getenv("AVA_CHANNEL") || !strcmp(getenv("AVA_CHANNEL"), "TCP")) {
     chan_hv = NULL;

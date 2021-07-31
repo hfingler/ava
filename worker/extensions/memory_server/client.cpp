@@ -77,24 +77,27 @@ cudaError_t __internal_cudaFree(void *devPtr) {
  * ************************************/
 
 namespace GPUMemoryServer {
-    void Client::connectToGPUs() {
+    Client::Client() {
+        buffer = new char[BUF_SIZE];
+        og_device = -1;
         context = zmq_ctx_new();
-        sockets = new void*[device_count];
-        for (int i = 0 ; i < device_count; i++) {
-            sockets[i] = 0;
-        }
-    }
+        for (int i = 0 ; i < 4; i++) {
+             sockets[i] = 0;
+         }
+     }
 
     void Client::connectToGPU(uint32_t gpuid) {
-        int ret;
         std::ostringstream stringStream;
         stringStream << GPUMemoryServer::get_base_socket_path() << gpuid;
         sockets[gpuid] = zmq_socket(context, ZMQ_REQ);
-        while (ret != 0) { 
-            ret = zmq_connect(sockets[gpuid], stringStream.str().c_str());
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+        while (1) { 
+            int ret = zmq_connect(sockets[gpuid], stringStream.str().c_str());
+            if (ret == 0) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            printf(" !!! GPU Client couldn't connect to server [%d], this is WRONG! The server probably died due to a bug\n", gpuid);
         }
-        printf("GPU Client succesfully connected to server [%d] at %p\n", gpuid, sockets[gpuid]);
+        printf("GPU Client succesfully connected to server [%d]\n", gpuid);
     }
 
     cudaError_t Client::localMalloc(void** devPtr, size_t size) {

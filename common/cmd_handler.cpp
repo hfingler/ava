@@ -26,6 +26,35 @@ using namespace std;
 #include <sys/time.h>
 #include <time.h>
 
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+
+/*
+ *   two condition variables to make thread and worker synchronize
+ */
+bool received_vmid(false);
+std::mutex received_vmid_mutex;
+std::condition_variable received_vmid_cv;
+bool continue_thread(false);
+std::mutex continue_thread_mutex;
+std::condition_variable continue_thread_cv;
+
+//helpers to synchronize threads
+void wait_for_worker_setup() {
+  //wait for worker to set up and let us go
+  std::unique_lock<std::mutex> lk(received_vmid_mutex);
+  while (!received_vmid)
+      received_vmid_cv.wait(lk);
+}
+
+void notify_worker_done() {
+  std::unique_lock<std::mutex> lk(continue_thread_mutex);
+  continue_thread = true;
+  continue_thread_cv.notify_one();
+}
+
+
 // Internal flag set by the first call to init_command_handler
 EXPORTED_WEAKLY volatile int init_command_handler_executed;
 
@@ -108,16 +137,18 @@ static void _handle_commands_loop(struct command_channel *chan) {
 }
 
 void handle_command_and_notify(struct command_channel *chan, struct command_base *cmd) {
+  thread_local int32_t tl_current_device = -1;
   auto context = ava::CommonContext::instance();
 
 #ifdef AVA_WORKER
-  int current_gpu;
-  cudaGetDevice(&current_gpu);
-  printf(">>> shadow thread running on GPU [%d]\n", current_gpu);
-
-  if (current_gpu != context->current_device) {
-    printf(">>> shadow thread detected change of device, changing..  [%d] -> [%d]\n", current_gpu, context->current_device);
+  if (tl_current_device == -1) {
     cudaSetDevice(context->current_device);
+    tl_current_device = context->current_device;
+  }
+  if (tl_current_device != context->current_device) {
+    printf(">>> shadow thread detected change of device, changing..  [%d] -> [%d]\n", tl_current_device, context->current_device);
+    cudaSetDevice(context->current_device);
+    tl_current_device = context->current_device;
   }
 #endif
 

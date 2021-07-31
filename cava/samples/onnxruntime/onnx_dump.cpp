@@ -4,7 +4,7 @@ ava_version("10.1.0");
 ava_identifier(ONNX_DUMP);
 ava_number(10);
 ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -I/usr/local/cuda-10.1/nvvm/include);
-ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver -L/usr/local/cuda-10.1/nvvm/lib64 -lnvvm zmq nvidia-ml absl::flat_hash_map);
+ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver -L/usr/local/cuda-10.1/nvvm/lib64 -lnvvm zmq nvidia-ml absl::flat_hash_map absl::hash);
 ava_guestlib_srcs(cuda/nvvm_helper.cpp extensions/gpu_address_tracking.cpp);
 ava_worker_srcs(extensions/cudart_10.1_utilities.cpp extensions/memory_server/client.cpp);
 ava_common_utility_srcs(extensions/cudart_10.1_utilities.cpp);
