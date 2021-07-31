@@ -108,6 +108,9 @@ extern GQueue *idle_filter_descriptor_pool;
 extern GQueue *cu_event_pool;
 extern GQueue *idle_cu_event_pool;
 
+extern struct ava_endpoint __ava_endpoint;
+void ava_metadata_reset(struct ava_endpoint *endpoint, const void *ptr);
+
 extern cudaError_t cuda_last_error;
 void __helper_worker_init_epilogue();
 
@@ -13680,6 +13683,7 @@ ava_begin_worker_replacement;
 void ava_load_cubin_worker(absl::string_view dump_dir) {
   /* Preload CUDA fat binaries */
   fatbin_handle_list = g_ptr_array_new();
+  ava_metadata_reset(&__ava_endpoint, NULL);
   /* Read cubin number */
   int fd;
   bool ret;

@@ -149,8 +149,7 @@ char CUDARTAPI __cudaInitModule(void **fatCubinHandle) {
   }
 }
 
-ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs, int *num_funcs,
-                                      absl::string_view dump_dir) {
+ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs, int *num_funcs) {
   struct fatbin_wrapper *wp = static_cast<struct fatbin_wrapper *>(fatCubin);
   struct fatBinaryHeader *fbh = reinterpret_cast<struct fatBinaryHeader *>(wp->ptr);
   int fd, retval;
@@ -158,7 +157,7 @@ ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs,
 
   /* Dump fat binary to a file */
   if (ava_is_worker) {
-    auto fatbin_filename = fmt::format("{}/fatbin-{}.ava", dump_dir, ava_metadata(NULL)->num_fatbins);
+    auto fatbin_filename = fmt::format("/tmp/fatbin-{}.ava", ava_metadata(NULL)->num_fatbins);
     fd = open(fatbin_filename.c_str(), O_WRONLY | O_TRUNC | O_CREAT, 0666);
     if (fd == -1) {
       ava_fatal("open %s [errno=%d, errstr=%s] at %s:%d", fatbin_filename.c_str(), errno, strerror(errno), __FILE__,
@@ -187,8 +186,7 @@ ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs,
   }
 
   /*  Open the command pipe for reading */
-  auto pip_command = fmt::format("/usr/local/cuda-10.1/bin/cuobjdump -elf {}/fatbin-{}.ava", dump_dir,
-                                 ava_metadata(NULL)->num_fatbins);
+  auto pip_command = fmt::format("/usr/local/cuda-10.1/bin/cuobjdump -elf /tmp/fatbin-{}.ava", ava_metadata(NULL)->num_fatbins);
   fp_pipe = popen(pip_command.c_str(), "r");
   assert(fp_pipe);
 
@@ -270,7 +268,7 @@ ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs,
       if (ava_is_worker) {
         /* Open function argument dump file on first valid function */
         if (!has_funcs) {
-          auto function_arg_filename = fmt::format("{}/function_arg-{}.ava", dump_dir, ava_metadata(NULL)->num_fatbins);
+          auto function_arg_filename = fmt::format("/tmp/function_arg-{}.ava", ava_metadata(NULL)->num_fatbins);
           function_arg_fd = open(function_arg_filename.c_str(), O_WRONLY | O_TRUNC | O_CREAT, 0666);
           if (function_arg_fd == -1) {
             ava_fatal("open %s [errno=%d, errstr=%s] at %s:%d", function_arg_filename.c_str(), errno, strerror(errno),
@@ -312,7 +310,7 @@ ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs,
     if (has_funcs) {
       close(function_arg_fd);
       char file_name[148];
-      sprintf(file_name, "%s/fatbin-info.ava", dump_dir);
+      sprintf(file_name, "/tmp/fatbin-info.ava");
       fd = open(file_name, O_RDWR | O_CREAT, 0666);
       if (fd == -1) {
         ava_fatal("open %s [errno=%d, errstr=%s] at %s:%d", file_name, errno, strerror(errno), __FILE__, __LINE__);
@@ -390,16 +388,7 @@ void **CUDARTAPI __cudaRegisterFatBinary(void *fatCubin) {
     ava_lifetime_manual;
   }
 
-  const char *dump_dir;
-  if (std::getenv("AVA_DUMP_DIR")) {
-    dump_dir = std::getenv("AVA_DUMP_DIR");
-    AVA_DEBUG << "setting dump directory to " << dump_dir << std::endl;
-  } else {
-    AVA_DEBUG << "AVA_DUMP_DIR is not set, using /tmp" << std::endl;
-    dump_dir = "/tmp";
-  }
-
-  __helper_dump_fatbin(fatCubin, &ava_metadata(NULL)->fatbin_funcs, &ava_metadata(NULL)->num_funcs, dump_dir);
+  __helper_dump_fatbin(fatCubin, &ava_metadata(NULL)->fatbin_funcs, &ava_metadata(NULL)->num_funcs);
 
   if (ava_is_worker) {
     //__helper_print_fatcubin_info(fatCubin, ret);
@@ -425,15 +414,14 @@ void CUDARTAPI __cudaUnregisterFatBinary(void **fatCubinHandle) {
 }
 
 ava_utility void __helper_dump_cuda_function(char *deviceFun, const char *deviceName, int thread_limit, uint3 *tid,
-                                             uint3 *bid, dim3 *bDim, dim3 *gDim, int *wSize,
-                                             absl::string_view dump_dir) {
+                                             uint3 *bid, dim3 *bDim, dim3 *gDim, int *wSize) {
   int fd = ava_metadata(NULL)->fd_functions;
   if (fd == 0) {
     char file_name[148];
-    sprintf(file_name, "%s/fatfunction.ava", dump_dir);
+    sprintf(file_name, "/tmp/fatfunction.ava");
     fd = open(file_name, O_WRONLY | O_TRUNC | O_CREAT, 0666);
     if (fd == -1) {
-      ava_fatal("open %s/fatfunction.ava [errno=%d, errstr=%s] at %s:%d", dump_dir, errno, strerror(errno), __FILE__,
+      ava_fatal("open /tmp/fatfunction.ava [errno=%d, errstr=%s] at %s:%d", errno, strerror(errno), __FILE__,
                 __LINE__);
     }
     ava_metadata(NULL)->fd_functions = fd;
@@ -526,17 +514,8 @@ void CUDARTAPI __cudaRegisterFunction(void **fatCubinHandle, const char *hostFun
                                       dim3 *gDim, int *wSize) {
   ava_disable_native_call;
 
-  const char *dump_dir;
-  if (std::getenv("AVA_DUMP_DIR")) {
-    dump_dir = std::getenv("AVA_DUMP_DIR");
-    AVA_DEBUG << "setting dump directory to " << dump_dir << std::endl;
-  } else {
-    AVA_DEBUG << "AVA_DUMP_DIR is not set, using /tmp" << std::endl;
-    dump_dir = "/tmp";
-  }
-
   if (ava_is_worker)
-    __helper_dump_cuda_function(deviceFun, deviceName, thread_limit, tid, bid, bDim, gDim, wSize, dump_dir);
+    __helper_dump_cuda_function(deviceFun, deviceName, thread_limit, tid, bid, bDim, gDim, wSize);
 
   printf(
       "Register hostFun=%p, deviceFun=%s, deviceName=%s, thread_limit=%d, tid={%d,%d,%d}, bid={%d,%d,%d}, "

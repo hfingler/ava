@@ -444,12 +444,16 @@ void internal_api_handler(struct command_channel *chan, struct nw_handle_pool *h
     memcpy(&requested_gpu_mem, cmd->reserved_area, sizeof(uint32_t));
     printf("\n//! Requested GPU memory: %u\n\n", requested_gpu_mem);
 
+    //if it wasnt specified, use default
+    if (strcmp(dump_dir, "") == 0) {
+      printf("dump_dir not specified in COMMAND_HANDLER_REGISTER_DUMP_DIR, using default /cuda_dumps\n");
+      dump_dir = "/cuda_dumps";
+    }
 
-//if we are in opt spec, we need to load cubin
+//if we are in opt spec, we need to load cubin (dump will dump instead)
 #ifdef AVA_PRELOAD_CUBIN
-    ava_load_cubin_worker("/cuda_dumps");
+    ava_load_cubin_worker(dump_dir);
 #endif
-
 
     break;
   }

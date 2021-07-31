@@ -18,6 +18,10 @@
 
 struct ava_endpoint __ava_endpoint;
 
+void opt_reset_ava_endpoint() {
+  ava_metadata_reset(&__ava_endpoint, NULL);
+}
+
 struct nw_handle_pool {
   GHashTable *to_handle;
   GHashTable *to_id;
