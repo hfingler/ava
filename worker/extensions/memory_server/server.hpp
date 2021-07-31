@@ -54,7 +54,7 @@ namespace GPUMemoryServer {
         std::thread self_thread;
 
         Server(uint16_t gpu, uint64_t total_memory, std::string unix_socket_path, std::string resmngr_address);
-        void handleRequest(char* buffer, void *responder);
+        void handleRequest(Request& req, Reply& rep);
         void handleMalloc(Request& req, Reply& rep);
         void handleFree(Request& req, Reply& rep);
         void handleRequestedMemory(Request& req, Reply& rep);

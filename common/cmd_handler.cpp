@@ -417,8 +417,7 @@ void internal_api_handler(struct command_channel *chan, struct nw_handle_pool *h
 
   case COMMAND_HANDLER_REGISTER_VMID: {
     svless_vmid = std::string(cmd->reserved_area);
-    //printf("\n COMMAND_HANDLER_REGISTER_VMID vmid of this worker to: %s\n", svless_vmid.c_str());
-/*
+
     {
       //notify worker that we got the data
       std::unique_lock<std::mutex> lk(received_vmid_mutex);
@@ -434,7 +433,7 @@ void internal_api_handler(struct command_channel *chan, struct nw_handle_pool *h
           continue_thread_cv.wait(lk);
       printf("CV: cmd_handler continuing..\n");
     }
-*/
+
     break;
   }
 

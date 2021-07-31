@@ -42,11 +42,7 @@ namespace GPUMemoryServer {
         //zmq and comms stuff
         void* context;
         void* sockets[4];
-        char* buffer;
-
-        //let's keep one Reply here since we can always reuse it
-        Reply reply;
-        Request req;
+        std::mutex sockmtx;
 
         //device management
         int current_device, og_device;
@@ -85,10 +81,10 @@ namespace GPUMemoryServer {
         void setOriginalGPU();
         void setCurrentGPU(int id);
         void connectToGPU(uint32_t gpuid);
-        void sendMallocRequest(uint64_t size);
-        void sendFreeRequest(uint64_t size);
-        void sendCleanupRequest();
-        void sendMemoryRequestedValue(uint64_t mem_mb);
+        void reportMalloc(uint64_t size);
+        void reportFree(uint64_t size);
+        void reportCleanup();
+        void reportMemoryRequested(uint64_t mem_mb);
 
         static Client& getInstance() {
             static Client instance;
@@ -97,7 +93,7 @@ namespace GPUMemoryServer {
 
         private:
         void sendRequest(Request &req);
-        void handleReply();
+        void handleReply(Reply& reply);
 
         Client();
         ~Client();

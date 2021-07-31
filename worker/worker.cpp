@@ -187,7 +187,9 @@ int main(int argc, char *argv[]) {
       //this launches the thread that listens for commands
       init_command_handler(channel_create);
 
-/*
+      /*
+       *  sync with worker until we get vmid and memory requested
+       */
       wait_for_worker_setup();
       printf("CV: worker was notified..\n");
       //if this is serverless, we need to update our id
@@ -200,13 +202,11 @@ int main(int argc, char *argv[]) {
         GPUMemoryServer::Client::getInstance().setUuid(svless_vmid);
       }
       //report our max memory requested
-      //GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(requested_gpu_mem);
-      //this might be failing due to race condition
-      //GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(16);
+      GPUMemoryServer::Client::getInstance().reportMemoryRequested(requested_gpu_mem);
       std::cerr << "[worker#" << listen_port << "] is free to work now" << std::endl;
       notify_worker_done();
-*/
 
+      //now go
       wait_for_command_handler();
       destroy_command_handler(false);
       std::cerr << "[worker#" << listen_port << "] worker is done, looping." << std::endl;
