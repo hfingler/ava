@@ -241,7 +241,11 @@ void __helper_assosiate_function_dump(GHashTable *funcs, struct fatbin_function 
 void __helper_register_function(struct fatbin_function *func, const char *hostFun, CUmodule* module,
                                 const char *deviceName) {
   
+#ifdef WITH_SVLESS_MIGRATION
   for (int i = 0 ; i < __internal_getDeviceCount() ; i++) {
+#else
+  for (int i = 0 ; i < 1 ; i++) {
+#endif
     // Empty fatbinary
     if (!module[i]) {
       LOG_DEBUG << "Register a fat binary from a empty module";
@@ -257,17 +261,6 @@ void __helper_register_function(struct fatbin_function *func, const char *hostFu
     //if (func->hostfunc != NULL) return;
     if (func->hostfunc[i] != NULL) continue;
 
-    //this call needs to be done in each context
-    printf("setting device to %d\n", i);
-    cudaSetDevice(i);
-    
-    CUcontext cuCtx;
-    cuCtxGetCurrent(&cuCtx);
-    CUdevice cuDev;
-    cuCtxGetDevice(&cuDev);
-    
-    printf("Curently on device %d, ctx %p\n", cuDev, cuCtx);
-
     CUresult ret = cuModuleGetFunction(&func->cufunc[i], module[i], deviceName);
     if (ret != CUDA_SUCCESS) {
       LOG_ERROR << "cuModuleGetFunction fail with " << ret;
@@ -279,8 +272,10 @@ void __helper_register_function(struct fatbin_function *func, const char *hostFu
     func->module[i] = module[i];
   }
 
+#ifdef WITH_SVLESS_MIGRATION
   //reset back
   cudaSetDevice(__internal_getCurrentDevice());
+#endif
 }
 
 /**
@@ -364,8 +359,12 @@ int __helper_type_size(cudaDataType dataType) {
 cudaError_t __helper_func_get_attributes(struct cudaFuncAttributes *attr, struct fatbin_function *func,
                                          const void *hostFun) {
   
+#ifdef WITH_SVLESS_MIGRATION
   uint32_t cur_dvc = __internal_getCurrentDevice();
-  
+#else
+  uint32_t cur_dvc = 0;
+#endif
+
   if (func == NULL) {
     LOG_DEBUG << "func is NULL";
     return static_cast<cudaError_t>(cudaErrorInvalidDeviceFunction);
@@ -398,7 +397,12 @@ cudaError_t __helper_func_get_attributes(struct cudaFuncAttributes *attr, struct
 cudaError_t __helper_occupancy_max_active_blocks_per_multiprocessor(int *numBlocks, struct fatbin_function *func,
                                                                     const void *hostFun, int blockSize,
                                                                     size_t dynamicSMemSize) {
+#ifdef WITH_SVLESS_MIGRATION
   uint32_t cur_dvc = __internal_getCurrentDevice();
+#else
+  uint32_t cur_dvc = 0;
+#endif
+
   if (func == NULL) {
     LOG_DEBUG << "func is NULL";
     return (cudaError_t)cudaErrorInvalidDeviceFunction;
@@ -419,7 +423,11 @@ cudaError_t __helper_occupancy_max_active_blocks_per_multiprocessor_with_flags(i
                                                                                const void *hostFun, int blockSize,
                                                                                size_t dynamicSMemSize,
                                                                                unsigned int flags) {
+#ifdef WITH_SVLESS_MIGRATION
   uint32_t cur_dvc = __internal_getCurrentDevice();
+#else
+  uint32_t cur_dvc = 0;
+#endif
   if (func == NULL) {
     LOG_DEBUG << "func is NULL";
     return (cudaError_t)cudaErrorInvalidDeviceFunction;

@@ -107,7 +107,6 @@ typedef struct {
 
   /* global states */
   CUmodule cur_module[4];
-  //int cuinit_called;
 
   /* memory flags */
   int is_pinned;
@@ -349,31 +348,27 @@ ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs,
 
 ava_utility void __helper_init_module(struct fatbin_wrapper *fatCubin, void **handle) {
   int ret;
-  //we dont need cuInit anymore
-  /*
-  if (ava_metadata(NULL)->cuinit_called == 0) {
-    ret = cuInit(0);
-    AVA_DEBUG << "cuInit in " << __func__ << " ret=" << ret;
-    assert(ret == CUDA_SUCCESS && "CUDA driver init failed");
-    ava_metadata(NULL)->cuinit_called = 1;
-  }
-  */
-  //if (ava_is_worker) {
-    for (int i = 0 ; i < __internal_getDeviceCount() ; i++) {
-      printf("setting device to %d\n", i);
-      cudaSetDevice(i);
+  
+#ifdef WITH_SVLESS_MIGRATION
+  for (int i = 0 ; i < __internal_getDeviceCount() ; i++) {
+    printf("setting device to %d\n", i);
+    cudaSetDevice(i);
 
-      __cudaInitModule(handle);
-      ava_metadata(NULL)->cur_module[i] = NULL;
-      ret = cuModuleLoadData(&ava_metadata(NULL)->cur_module[i], (void *)fatCubin->ptr);
-      printf("loaded module data into ctx %d : %p\n", i, ava_metadata(NULL)->cur_module[i]);
-      (void)ret;
-      assert((ret == CUDA_SUCCESS || ret == CUDA_ERROR_NO_BINARY_FOR_GPU) && "Module load failed");
-    }
-  //}
-    //reset back
-    printf("resetting device to %d\n", __internal_getCurrentDevice());
-    cudaSetDevice(__internal_getCurrentDevice());
+    __cudaInitModule(handle);
+    ava_metadata(NULL)->cur_module[i] = NULL;
+    ret = cuModuleLoadData(&ava_metadata(NULL)->cur_module[i], (void *)fatCubin->ptr);
+    printf("loaded module data into ctx %d : %p\n", i, ava_metadata(NULL)->cur_module[i]);
+    assert((ret == CUDA_SUCCESS || ret == CUDA_ERROR_NO_BINARY_FOR_GPU) && "Module load failed");
+  }
+  //reset back
+  printf("resetting device to %d\n", __internal_getCurrentDevice());
+  cudaSetDevice(__internal_getCurrentDevice());
+#else
+  __cudaInitModule(handle);
+  ava_metadata(NULL)->cur_module[0] = NULL;
+  ret = cuModuleLoadData(&ava_metadata(NULL)->cur_module[0], (void *)fatCubin->ptr);
+  assert((ret == CUDA_SUCCESS || ret == CUDA_ERROR_NO_BINARY_FOR_GPU) && "Module load failed");
+#endif
 }
 
 void **CUDARTAPI __cudaRegisterFatBinary(void *fatCubin) {

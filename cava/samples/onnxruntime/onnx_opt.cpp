@@ -3,7 +3,7 @@ ava_name("CUDA Runtime for ONNX");
 ava_version("10.1.0");
 ava_identifier(ONNX_OPT);
 ava_number(10);
-ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN); //-DAVA_RECV_DUMP_FROM_GUESTLIB);
+ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN);
 // To enable stat collecting, use the below line and uncomment the ava_stats definition
 // ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN -D__AVA_ENABLE_STAT);
 ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver zmq nvidia-ml absl::flat_hash_map absl::hash);
@@ -341,28 +341,21 @@ char CUDARTAPI __cudaInitModule(void **fatCubinHandle) {
 
 ava_utility void __helper_init_module(struct fatbin_wrapper *fatCubin, void **handle) {
   int ret;
-  /*
-  if (ava_metadata(NULL)->cuinit_called == 0) {
-    ret = cuInit(0);
-    if (ret != CUDA_SUCCESS) {
-      fprintf(stderr, "cuInit fail: %d\n", ret);
-    }
-    ava_metadata(NULL)->cuinit_called = 1;
-    assert(ret == CUDA_SUCCESS && "CUDA driver init failed");
-    (void)ret;
-  }
-  */
+ 
+#ifdef WITH_SVLESS_MIGRATION
   for (int i = 0 ; i < __internal_getDeviceCount() ; i++) {
     cudaSetDevice(i);
     __cudaInitModule(handle);
     ret = cuModuleLoadData(&ava_metadata(NULL)->cur_module[i], (void *)fatCubin->ptr);
     assert((ret == CUDA_SUCCESS || ret == CUDA_ERROR_NO_BINARY_FOR_GPU) && "Module load failed");
-    (void)ret;
   }
-  //reset back
-  printf("resetting device to %d\n", __internal_getCurrentDevice());
   cudaSetDevice(__internal_getCurrentDevice());
-
+#else
+  __cudaInitModule(handle);
+  ret = cuModuleLoadData(&ava_metadata(NULL)->cur_module[0], (void *)fatCubin->ptr);
+  printf("In __helper_init_module, loaded cuModuleLoadData into [0]\n");
+  assert((ret == CUDA_SUCCESS || ret == CUDA_ERROR_NO_BINARY_FOR_GPU) && "Module load failed");
+#endif
 }
 
 ava_utility void __helper_load_function_arg_info(absl::string_view dump_dir) {
@@ -631,7 +624,12 @@ ava_utility void **__helper_load_and_register_fatbin(void *fatCubin, absl::strin
     func_id = (void *)g_hash_table_lookup(ht, deviceName);
     assert(func_id != NULL && "func_id should not be NULL");
     func = static_cast<struct fatbin_function *>(g_ptr_array_index(fatbin_funcs, (intptr_t)func_id));
+
+
+
     __helper_register_function(func, (const char *)func_id, ava_metadata(NULL)->cur_module, deviceName);
+
+
 
     free(deviceFun);
     free(deviceName);
@@ -13676,7 +13674,6 @@ void ava_preload_cubin_guestlib() {
     __helper_load_function_arg_info(dump_dir);
   }
 }
-
 ava_end_replacement;
 
 ava_begin_worker_replacement;
@@ -13714,6 +13711,7 @@ void ava_load_cubin_worker(absl::string_view dump_dir) {
 }
 
 void __helper_worker_init_epilogue() {
+  /*
 // this prevents ava_load_cubin_worker from being called twice if a dump dir is specified
 #ifndef AVA_RECV_DUMP_FROM_GUESTLIB
   // the internal_api_handler usually calls ava_load_cubin_worker if DUMP_DIR is set,
@@ -13728,6 +13726,7 @@ void __helper_worker_init_epilogue() {
   }
   ava_load_cubin_worker(dump_dir);
 #endif
+*/
   worker_tf_opt_init();
 }
 ava_end_worker_replacement;

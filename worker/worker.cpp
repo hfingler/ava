@@ -136,16 +136,18 @@ int main(int argc, char *argv[]) {
 
   char const *gpu_device_str = getenv("GPU_DEVICE");
   std::string gpu_device = std::string(gpu_device_str);
-
   //AVA_WORKER_UUID is a unique, starting at 0, id we can use
   char const *cworker_uuid = getenv("AVA_WORKER_UUID");
   std::string worker_uuid = std::string(cworker_uuid);
 
-  char *cmmode = std::getenv("GPU_MEMORY_MODE");
-  std::string mmode = cmmode ? std::string(cmmode) : "default";
-  
+#ifdef WITH_SVLESS_MIGRATION
   // preemptively create context on all GPUs
   create_cuda_contexts();
+#else
+  cudaSetDevice(std::stoi(gpu_device));
+  //this forcibly creates a primary context, which is lazily-created
+  cudaFree(0);
+#endif
 
   /* set current device*/
   GPUMemoryServer::Client::getInstance().setCurrentGPU(std::stoi(gpu_device));
@@ -185,8 +187,9 @@ int main(int argc, char *argv[]) {
       //this launches the thread that listens for commands
       init_command_handler(channel_create);
 
-      //TODO: I can see a race condition with init_command_handler and commands below, need to be sure and fix
-
+/*
+      wait_for_worker_setup();
+      printf("CV: worker was notified..\n");
       //if this is serverless, we need to update our id
       if (svless_vmid == "NO_VMID" || svless_vmid == "") {
         printf("svless_vmid is default, using %s\n", worker_uuid.c_str());
@@ -196,13 +199,14 @@ int main(int argc, char *argv[]) {
         printf("got vmid from cmd channel: %s\n", svless_vmid.c_str());
         GPUMemoryServer::Client::getInstance().setUuid(svless_vmid);
       }
-
       //report our max memory requested
       //GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(requested_gpu_mem);
       //this might be failing due to race condition
       //GPUMemoryServer::Client::getInstance().sendMemoryRequestedValue(16);
+      std::cerr << "[worker#" << listen_port << "] is free to work now" << std::endl;
+      notify_worker_done();
+*/
 
-      std::cerr << "[worker#" << listen_port << "] got one, setting up cmd handler" << std::endl;
       wait_for_command_handler();
       destroy_command_handler(false);
       std::cerr << "[worker#" << listen_port << "] worker is done, looping." << std::endl;

@@ -191,8 +191,6 @@ namespace GPUMemoryServer {
         sendRequest(req);
     }
 
-    
-
     cudaError_t Client::localFree(void* devPtr) {
         auto it = local_allocs.find((uint64_t)devPtr);
         if (it == local_allocs.end()) {
