@@ -4,12 +4,14 @@ Steps to run onnx_opt with a specified dump directory:
 
 0. Set AVA_GUEST_DUMP_DIR and AVA_WORKER_DUMP_DIR on the guestlib application side when running. Two separate envvars are necessary in svless mode due to the guestlib application residing in the VM.
 
-1. Generate the onnx_opt spec with -DAVA_RECV_DUMP_FROM_GUESTLIB in the ava_cxx flags at the top of onnx_opt.cpp. This is to prevent fatbins from being loaded in two separate calls from both the internal_api_handler and the worker. Only the internal_api_handler will load fatbins when it receives the name of the dump directory from the guestlib.
-
-2. Compile ava (without regenerating the spec, so build-ava without the ava-gen dependency) with the addition of the following line to the top of the ava_load_cubin_worker function in `cava/onnx_opt_nw/onnx_opt_nw_worker.cpp`. This is to prevent global metadata values (e.g. number of fatbins) from persisting over multiple applications' loading.
-    `ava_metadata_reset(&__ava_endpoint, NULL);`
-
-3. profit
+1. Generate / compile the onnx_opt spec with -DAVA_PRELOAD_CUBIN in the ava_cxx flags at the top of onnx_opt.cpp. This is just to make sure onnx_dump doesn't try to call ava_load_cubin_worker in the cmd handler. There's probably something better like a flag for each spec or something.
 
 You should see the dump directory name output from the internal_api_handler when the command is received on the worker's side.
 
+
+Current issue:
+There may be a race condition with API commands being remoted before the worker's loaded the fatbins. I'm a little suspicious of that reason though as I was doing this fine before with no problems, so it's probably worth investigating further.
+
+If it is a race condition, things I've tried so far:
+- switch `__handle_command_onnx_opt_init()` and `nw_init_guestlib(ONNX_OPT_API)` in the guestlib's guest context (in the generated code). Don't do this, bad things happen.
+- switch the order in guestlib/init.cpp that the DUMP_DIR and INIT_API commands are sent. I don't think this works, need to look into it more.
