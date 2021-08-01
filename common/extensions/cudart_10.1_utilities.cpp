@@ -9,8 +9,9 @@
 #include <iostream>
 #include <fmt/core.h>
 #include "common/logging.h"
+#include <absl/synchronization/mutex.h>
 
-absl::mutex module_path_mu;
+absl::Mutex module_path_mu;
 absl::flat_hash_map<CUmodule, std::string> module_path_map ABSL_GUARDED_BY(module_path_mu);
 
 int deference_int_pointer(int *p) {

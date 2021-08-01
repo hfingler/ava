@@ -313,7 +313,7 @@ ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs,
       sprintf(file_name, "/tmp/fatbin-info.ava");
       fd = open(file_name, O_RDWR | O_CREAT, 0666);
       if (fd == -1) {
-        ava_fatal("open %s [errno=%d, errstr=%s] at %s:%d", file_name.c_str(), errno, strerror(errno), __FILE__, __LINE__);
+        ava_fatal("open %s [errno=%d, errstr=%s] at %s:%d", file_name, errno, strerror(errno), __FILE__, __LINE__);
       }
       AVA_LOG_F(DEBUG, "Fatbinary counter = {}", ava_metadata(NULL)->num_fatbins);
       ret = ava::support::WriteData(fd, (const char *)&(ava_metadata(NULL)->num_fatbins), sizeof(int));
@@ -820,6 +820,7 @@ __host__ cudaError_t CUDARTAPI cudaMemcpy(void *dst, const void *src, size_t cou
     //const void* src2 = (kind == cudaMemcpyDeviceToHost || kind ==  cudaMemcpyDeviceToDevice) ? __translate_ptr(src) : src;   
   
     ret = __helper_cudaMemcpy(dst, src, count, kind);
+    return ret;
   }
 }
 
@@ -11946,6 +11947,7 @@ CUresult CUDAAPI cuModuleLoad(CUmodule *module, const char *fname) {
   // CUresult ret;
   // if (ava_is_worker) {
   //   ret = __helper_cuModuleLoad(module, fname);
+  //   return ret;
   // }
   ava_execute();
   __helper_record_module_path(*module, fname);

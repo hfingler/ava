@@ -118,9 +118,9 @@ void __helper_init_module(struct fatbin_wrapper *fatCubin, void **handle, CUmodu
     cudaSetDevice(i);
 
     __cudaInitModule(handle);
-    ava_metadata(NULL)->cur_module[i] = NULL;
-    ret = cuModuleLoadData(&ava_metadata(NULL)->cur_module[i], (void *)fatCubin->ptr);
-    printf("loaded module data into ctx %d : %p\n", i, ava_metadata(NULL)->cur_module[i]);
+    module[i] = NULL;
+    ret = cuModuleLoadData(&module[i], (void *)fatCubin->ptr);
+    printf("loaded module data into ctx %d : %p\n", i, module[i]);
     assert((ret == CUDA_SUCCESS || ret == CUDA_ERROR_NO_BINARY_FOR_GPU) && "Module load failed");
     (void)ret;
   }
@@ -129,13 +129,14 @@ void __helper_init_module(struct fatbin_wrapper *fatCubin, void **handle, CUmodu
   cudaSetDevice(__internal_getCurrentDevice());
 #else
   __cudaInitModule(handle);
-  ava_metadata(NULL)->cur_module[0] = NULL;
-  ret = cuModuleLoadData(&ava_metadata(NULL)->cur_module[0], (void *)fatCubin->ptr);
+  module[0] = NULL;
+  ret = cuModuleLoadData(&module[0], (void *)fatCubin->ptr);
   assert((ret == CUDA_SUCCESS || ret == CUDA_ERROR_NO_BINARY_FOR_GPU) && "Module load failed");
 #endif
 }
 
 CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
+#ifdef WITH_SVLESS_MIGRATION
   CUresult ret;
   CUresult other_ret;
   CUmodule other_module;
@@ -150,6 +151,9 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
   fprintf(stderr, "resetting device to %d\n", __internal_getCurrentDevice());
   cudaSetDevice(__internal_getCurrentDevice());
   return ret;
+#else
+  return cuModuleLoad(module, fname);
+#endif
 }
 
 cudaError_t __helper_cudaLaunchKernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
