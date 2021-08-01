@@ -98,7 +98,6 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
     }
     //BIG TODOs: need to map streams on new GPU when migrating
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[cur_dvc], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y, blockDim.z,
-                                      //0, 0, args, NULL);
                                       sharedMem, (CUstream)stream, args, NULL);
     printf(">>> cuLaunchKernel returned %d\n", ret);
 
@@ -109,7 +108,6 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   // if not with migration, just get over it and do
   else {
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[0], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y, blockDim.z,
-                                      //0, 0, args, 0);
                                       sharedMem, (CUstream)stream, args, NULL);
     printf(">>> cuLaunchKernel returned %d\n", ret);
 

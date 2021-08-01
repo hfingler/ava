@@ -55,6 +55,33 @@ int main(int argc, const char *argv[]) {
     worker_env.push_back(kmd);
   }
 
+  /*
+   *  Check all contexts option
+   */
+  if (absl::GetFlag(FLAGS_allctx) == "yes") {
+    std::cerr << "[SVLESS-MNGR]: All context init is enabled." << std::endl;
+    worker_env.push_back("AVA_ENABLE_ALL_CTX=yes");
+  }
+  else {
+    std::cerr << "[SVLESS-MNGR]: All context init is DISABLE." << std::endl;
+    worker_env.push_back("AVA_ENABLE_ALL_CTX=no");
+  }
+
+  /*
+   *  Check reporting option
+   */
+  if (absl::GetFlag(FLAGS_reporting) == "yes") {
+    std::cerr << "[SVLESS-MNGR]: Reporting is enabled, launching GPU Servers.." << std::endl;
+    worker_env.push_back("AVA_ENABLE_REPORTING=yes");
+  }
+  else {
+    std::cerr << "[SVLESS-MNGR]: Reporting is not enabled, no GPU servers will be launched" << std::endl;
+    worker_env.push_back("AVA_ENABLE_REPORTING=no");
+  }
+
+  /*
+   *  Create the manager 
+   */
   std::cerr << "[SVLESS-MNGR]: Using port " << port << " for AvA" << std::endl;
   SVGPUManager *manager =
       new SVGPUManager(port, absl::GetFlag(FLAGS_worker_port_base), absl::GetFlag(FLAGS_worker_path), worker_argv,
@@ -67,26 +94,11 @@ int main(int argc, const char *argv[]) {
     std::cerr << "[SVLESS-MNGR]: Running manager on serverless mode, rm at " << full_addr << std::endl;
     manager->resmngr_address = full_addr;
   }
-
-  if (absl::GetFlag(FLAGS_allctx) == "yes") {
-    std::cerr << "[SVLESS-MNGR]: All context init is enabled." << std::endl;
-    worker_env.push_back("AVA_ENABLE_ALL_CTX=yes");
-  }
-  else {
-    std::cerr << "[SVLESS-MNGR]: All context init is DISABLE." << std::endl;
-    worker_env.push_back("AVA_ENABLE_ALL_CTX=no");
-  }
-
+  
   if (absl::GetFlag(FLAGS_reporting) == "yes") {
-    std::cerr << "[SVLESS-MNGR]: Reporting is enabled, launching GPU Servers.." << std::endl;
-    worker_env.push_back("AVA_ENABLE_REPORTING=yes");
     manager->LaunchMemoryServers();
     std::cerr << "[SVLESS-MNGR]:Launched memory servers, sleeping to give them time to spin up" << std::endl;
     std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-  }
-  else {
-    std::cerr << "[SVLESS-MNGR]: Reporting is not enabled, no GPU servers will be launched" << std::endl;
-    worker_env.push_back("AVA_ENABLE_REPORTING=no");
   }
 
   // normal ava mode
