@@ -1045,6 +1045,7 @@ __host__ cudaError_t CUDARTAPI cudaMemcpy(void *dst, const void *src, size_t cou
   cudaError_t ret;
   if (ava_is_worker) {
     ret = __helper_cudaMemcpy(dst, src, count, kind);
+    return ret;
   }
 }
 
@@ -1221,6 +1222,7 @@ __host__ cudaError_t CUDARTAPI cudaMemset(void *devPtr, int value, size_t count)
   if (ava_is_worker) {
     // everything that takes a device pointer must go through __translate_ptr
     ret = __helper_cudaMemset(devPtr, value, count);
+    return ret;
   }
 }
 
