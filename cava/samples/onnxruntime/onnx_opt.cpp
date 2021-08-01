@@ -3,10 +3,10 @@ ava_name("CUDA Runtime for ONNX");
 ava_version("10.1.0");
 ava_identifier(ONNX_OPT);
 ava_number(10);
-ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN); //-DAVA_RECV_DUMP_FROM_GUESTLIB);
+ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN);
 // To enable stat collecting, use the below line and uncomment the ava_stats definition
 // ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN -D__AVA_ENABLE_STAT);
-ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver zmq nvidia-ml absl::flat_hash_map);
+ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver zmq nvidia-ml absl::flat_hash_map absl::hash);
 ava_guestlib_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/guest_cmd_batching_queue.cpp extensions/extension_api.cpp extensions/gpu_address_tracking.cpp);
 ava_worker_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/cmd_batching.cpp extensions/cudart_10.1_utilities.cpp extensions/memory_server/client.cpp);
 ava_common_utility_srcs(extensions/cudart_10.1_utilities.cpp);
@@ -106,6 +106,9 @@ extern GQueue *filter_descriptor_pool;
 extern GQueue *idle_filter_descriptor_pool;
 extern GQueue *cu_event_pool;
 extern GQueue *idle_cu_event_pool;
+
+extern struct ava_endpoint __ava_endpoint;
+void ava_metadata_reset(struct ava_endpoint *endpoint, const void *ptr);
 
 extern cudaError_t cuda_last_error;
 void __helper_worker_init_epilogue();
@@ -605,7 +608,12 @@ void **__helper_load_and_register_fatbin(void *fatCubin, absl::string_view dump_
     func_id = (void *)g_hash_table_lookup(ht, deviceName);
     assert(func_id != NULL && "func_id should not be NULL");
     func = static_cast<struct fatbin_function *>(g_ptr_array_index(fatbin_funcs, (intptr_t)func_id));
+
+
+
     __helper_register_function(func, (const char *)func_id, ava_metadata(NULL)->cur_module, deviceName);
+
+
 
     free(deviceFun);
     free(deviceName);
@@ -13686,13 +13694,13 @@ void ava_preload_cubin_guestlib() {
     __helper_load_function_arg_info(dump_dir);
   }
 }
-
 ava_end_replacement;
 
 ava_begin_worker_replacement;
 void ava_load_cubin_worker(absl::string_view dump_dir) {
   /* Preload CUDA fat binaries */
   fatbin_handle_list = g_ptr_array_new();
+  ava_metadata_reset(&__ava_endpoint, NULL);
   /* Read cubin number */
   int fd;
   bool ret;
@@ -13724,6 +13732,7 @@ void ava_load_cubin_worker(absl::string_view dump_dir) {
 }
 
 void __helper_worker_init_epilogue() {
+  /*
 // this prevents ava_load_cubin_worker from being called twice if a dump dir is specified
 #ifndef AVA_RECV_DUMP_FROM_GUESTLIB
   // the internal_api_handler usually calls ava_load_cubin_worker if DUMP_DIR is set,
@@ -13738,6 +13747,7 @@ void __helper_worker_init_epilogue() {
   }
   ava_load_cubin_worker(dump_dir);
 #endif
+*/
   worker_tf_opt_init();
 }
 ava_end_worker_replacement;

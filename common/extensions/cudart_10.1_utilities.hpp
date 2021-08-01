@@ -43,6 +43,7 @@ struct fatbin_function {
   int argc;
   struct kernel_arg args[MAX_KERNEL_ARG];
 
+  //this is barely any space, so leave 4 as default for both WITH_SVLESS_MIGRATION and not
   CUfunction cufunc[4];
   void *hostfunc[4];
   CUmodule module[4];

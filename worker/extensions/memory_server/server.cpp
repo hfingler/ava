@@ -42,24 +42,22 @@ void Server::run() {
         printf("BIND FAILED\n");
     }
 
-    char* buffer[BUF_SIZE];
     printf("Memory server of GPU %d ready, bound to %s\n", gpu, unix_socket_path.c_str());
-    
+    Reply rep;
+    Request req;
     while(1) {
-        printf(" !! server %d waiting for request\n", gpu);
-        zmq_recv(responder, buffer, BUF_SIZE, 0);
-        printf(" !! server %d got a request\n", gpu);
-        handleRequest((char*)buffer, responder);
+        printf(" >> server %d waiting for request\n", gpu);
+        zmq_recv(responder, &req, sizeof(Request), 0);
+        printf(" >> server %d got a request\n", gpu);
+        handleRequest(req, rep);
+        printf(" >> sending response\n");
+        zmq_send(responder, &rep, sizeof(Reply), 0);
     }
 }
 
-void Server::handleRequest(char* buffer, void *responder) {
-    Request req;
-    Reply rep;
+void Server::handleRequest(Request& req, Reply& rep) {
+    //reset reply
     rep.migrate = Migration::NOPE;
-
-    //TODO: better (de)serialization
-    memcpy(&req, buffer, sizeof(Request));
 
     /*************************
      *   cudaMalloc request
@@ -97,9 +95,6 @@ void Server::handleRequest(char* buffer, void *responder) {
     else if (req.type == RequestType::KERNEL_OUT) {
         handleKernelOut(req, rep);
     }
-
-    printf("sending response\n");
-    zmq_send(responder, (char*)&rep, sizeof(Reply), 0);
 }
 
 void Server::handleMalloc(Request& req, Reply& rep) {

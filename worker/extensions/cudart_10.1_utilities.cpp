@@ -60,7 +60,11 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
                                    void **args, size_t sharedMem, cudaStream_t stream) {
   cudaError_t ret = (cudaError_t)CUDA_ERROR_PROFILER_ALREADY_STOPPED;
 
+#ifdef WITH_SVLESS_MIGRATION
   uint32_t cur_dvc = __internal_getCurrentDevice();
+#else
+  uint32_t cur_dvc = 0;
+#endif
 
   if (func == NULL) {
     return (cudaError_t)CUDA_ERROR_INVALID_PTX;
@@ -77,69 +81,58 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   std::cerr << "function metadata (" << (void *)func << ") for local " << func->hostfunc[cur_dvc] << ", cufunc "
             << (void *)func->cufunc[cur_dvc] << ", argc " << func->argc << std::endl;
 
-  /*
-  //this is the default stuff
-  ret = (cudaError_t)cuLaunchKernel(func->cufunc, gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y, blockDim.z,
-                                    sharedMem, (CUstream)stream, args, NULL);
-  return ret;
-  */
-
+#ifdef WITH_SVLESS_MIGRATION
   for (int i = 0; i < func->argc; i++) {
     //TODO: I'm just throwing pointers at the dict. there is a probability that pointers collide and we mess up
     printf("  arg %d is handle? %d   size %d\n", i, func->args[i].is_handle, func->args[i].size);
     printf("p1 %p   p2 %p \n", args[i], *((void **)args[i]));
 
     //TODO: we need something that says if something is a pointer or not
-    //if (func->args[i].is_handle) {    
+    //if (func->args[i].is_handle) {
     if (func->args[i].size == 8) {
       *((void**)args[i]) = __translate_ptr(*((void **)args[i]));
     }
   }
-
-  for (int i = 0; i < func->argc; i++) {
-    printf("    arg [%d]:  %p\n", i, *((void **)args[i]));
-  }
-
   //BIG TODOs: need to map streams on new GPU when migrating
-  //      (maybe) need to figure out the replay mechanism so we actually have the kernel in the new GPU
-  int current_gpu;
-  cudaGetDevice(&current_gpu);
-  printf(">>> __helper_launch_kernel on GPU [%d], current device: %d\n", current_gpu, cur_dvc);
-
   ret = (cudaError_t)cuLaunchKernel(func->cufunc[cur_dvc], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y, blockDim.z,
                                     0, 0, args, NULL);
                                     //sharedMem, (CUstream)stream, args, NULL);
-
   printf(">>> cuLaunchKernel returned %d\n", ret);
   return ret;
-
+// if not with migration, just get over it and do
+#else
+  ret = (cudaError_t)cuLaunchKernel(func->cufunc[0], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y, blockDim.z,
+                                    0, 0, args, 0);
+                                    //sharedMem, (CUstream)stream, args, NULL);
+  printf(">>> cuLaunchKernel returned %d\n", ret);
+  return ret;
+#endif
 }
 
 void __helper_init_module(struct fatbin_wrapper *fatCubin, void **handle, CUmodule *module) {
   int ret;
-  //we dont need cuInit anymore
-  /*
-  if (ava_metadata(NULL)->cuinit_called == 0) {
-    ret = cuInit(0);
-    AVA_DEBUG << "cuInit in " << __func__ << " ret=" << ret;
-    assert(ret == CUDA_SUCCESS && "CUDA driver init failed");
-    ava_metadata(NULL)->cuinit_called = 1;
-  }
-  */
 
+#ifdef WITH_SVLESS_MIGRATION
   for (int i = 0 ; i < __internal_getDeviceCount() ; i++) {
     printf("setting device to %d\n", i);
     cudaSetDevice(i);
+
     __cudaInitModule(handle);
-    module[i] = NULL;
-    ret = cuModuleLoadData(&module[i], (void *)fatCubin->ptr);
-    printf("loaded module data into ctx %d : %p\n", i, module[i]);
-    (void)ret;
+    ava_metadata(NULL)->cur_module[i] = NULL;
+    ret = cuModuleLoadData(&ava_metadata(NULL)->cur_module[i], (void *)fatCubin->ptr);
+    printf("loaded module data into ctx %d : %p\n", i, ava_metadata(NULL)->cur_module[i]);
     assert((ret == CUDA_SUCCESS || ret == CUDA_ERROR_NO_BINARY_FOR_GPU) && "Module load failed");
+    (void)ret;
   }
   //reset back
   printf("resetting device to %d\n", __internal_getCurrentDevice());
   cudaSetDevice(__internal_getCurrentDevice());
+#else
+  __cudaInitModule(handle);
+  ava_metadata(NULL)->cur_module[0] = NULL;
+  ret = cuModuleLoadData(&ava_metadata(NULL)->cur_module[0], (void *)fatCubin->ptr);
+  assert((ret == CUDA_SUCCESS || ret == CUDA_ERROR_NO_BINARY_FOR_GPU) && "Module load failed");
+#endif
 }
 
 CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
@@ -181,8 +174,12 @@ cudaError_t __helper_cudaMemset(void *devPtr, int value, size_t count) {
  */
 void __helper_register_function(struct fatbin_function *func, const char *hostFun, CUmodule* module,
                                 const char *deviceName) {
-  
+
+#ifdef WITH_SVLESS_MIGRATION
   for (int i = 0 ; i < __internal_getDeviceCount() ; i++) {
+#else
+  for (int i = 0 ; i < 1 ; i++) {
+#endif
     // Empty fatbinary
     if (!module[i]) {
       LOG_DEBUG << "Register a fat binary from a empty module";
@@ -198,16 +195,18 @@ void __helper_register_function(struct fatbin_function *func, const char *hostFu
     //if (func->hostfunc != NULL) return;
     if (func->hostfunc[i] != NULL) continue;
 
+#ifdef WITH_SVLESS_MIGRATION
     //this call needs to be done in each context
     printf("setting device to %d\n", i);
     cudaSetDevice(i);
-    
+
     CUcontext cuCtx;
     cuCtxGetCurrent(&cuCtx);
     CUdevice cuDev;
     cuCtxGetDevice(&cuDev);
-    
+
     printf("Curently on device %d, ctx %p\n", cuDev, cuCtx);
+#endif
 
     CUresult ret = cuModuleGetFunction(&func->cufunc[i], module[i], deviceName);
     if (ret != CUDA_SUCCESS) {
@@ -220,13 +219,20 @@ void __helper_register_function(struct fatbin_function *func, const char *hostFu
     func->module[i] = module[i];
   }
 
+#ifdef WITH_SVLESS_MIGRATION
   //reset back
   cudaSetDevice(__internal_getCurrentDevice());
+#endif
 }
 
 cudaError_t __helper_func_get_attributes(struct cudaFuncAttributes *attr, struct fatbin_function *func,
                                          const void *hostFun) {
+#ifdef WITH_SVLESS_MIGRATION
   uint32_t cur_dvc = __internal_getCurrentDevice();
+#else
+  uint32_t cur_dvc = 0;
+#endif
+
   if (func == NULL) {
     LOG_DEBUG << "func is NULL";
     return static_cast<cudaError_t>(cudaErrorInvalidDeviceFunction);
@@ -259,7 +265,12 @@ cudaError_t __helper_func_get_attributes(struct cudaFuncAttributes *attr, struct
 cudaError_t __helper_occupancy_max_active_blocks_per_multiprocessor(int *numBlocks, struct fatbin_function *func,
                                                                     const void *hostFun, int blockSize,
                                                                     size_t dynamicSMemSize) {
+#ifdef WITH_SVLESS_MIGRATION
   uint32_t cur_dvc = __internal_getCurrentDevice();
+#else
+  uint32_t cur_dvc = 0;
+#endif
+
   if (func == NULL) {
     LOG_DEBUG << "func is NULL";
     return (cudaError_t)cudaErrorInvalidDeviceFunction;
@@ -280,7 +291,12 @@ cudaError_t __helper_occupancy_max_active_blocks_per_multiprocessor_with_flags(i
                                                                                const void *hostFun, int blockSize,
                                                                                size_t dynamicSMemSize,
                                                                                unsigned int flags) {
+#ifdef WITH_SVLESS_MIGRATION
   uint32_t cur_dvc = __internal_getCurrentDevice();
+#else
+  uint32_t cur_dvc = 0;
+#endif
+
   if (func == NULL) {
     LOG_DEBUG << "func is NULL";
     return (cudaError_t)cudaErrorInvalidDeviceFunction;

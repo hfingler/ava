@@ -26,6 +26,35 @@ using namespace std;
 #include <sys/time.h>
 #include <time.h>
 
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+
+/*
+ *   two condition variables to make thread and worker synchronize
+ */
+bool received_vmid(false);
+std::mutex received_vmid_mutex;
+std::condition_variable received_vmid_cv;
+bool continue_thread(false);
+std::mutex continue_thread_mutex;
+std::condition_variable continue_thread_cv;
+
+//helpers to synchronize threads
+void wait_for_worker_setup() {
+  //wait for worker to set up and let us go
+  std::unique_lock<std::mutex> lk(received_vmid_mutex);
+  while (!received_vmid)
+      received_vmid_cv.wait(lk);
+}
+
+void notify_worker_done() {
+  std::unique_lock<std::mutex> lk(continue_thread_mutex);
+  continue_thread = true;
+  continue_thread_cv.notify_one();
+}
+
+
 // Internal flag set by the first call to init_command_handler
 EXPORTED_WEAKLY volatile int init_command_handler_executed;
 
@@ -108,16 +137,19 @@ static void _handle_commands_loop(struct command_channel *chan) {
 }
 
 void handle_command_and_notify(struct command_channel *chan, struct command_base *cmd) {
+  thread_local int32_t tl_current_device = -1;
   auto context = ava::CommonContext::instance();
 
 #ifdef AVA_WORKER
-  int current_gpu;
-  cudaGetDevice(&current_gpu);
-  printf(">>> shadow thread running on GPU [%d]\n", current_gpu);
-
-  if (current_gpu != context->current_device) {
-    printf(">>> shadow thread detected change of device, changing..  [%d] -> [%d]\n", current_gpu, context->current_device);
+  if (tl_current_device == -1) {
     cudaSetDevice(context->current_device);
+    tl_current_device = context->current_device;
+    printf(">>> shadow thread setting default device  [%d] \n", context->current_device);
+  }
+  if (tl_current_device != context->current_device) {
+    printf(">>> shadow thread detected change of device, changing..  [%d] -> [%d]\n", tl_current_device, context->current_device);
+    cudaSetDevice(context->current_device);
+    tl_current_device = context->current_device;
   }
 #endif
 
@@ -385,7 +417,23 @@ void internal_api_handler(struct command_channel *chan, struct nw_handle_pool *h
 
   case COMMAND_HANDLER_REGISTER_VMID: {
     svless_vmid = std::string(cmd->reserved_area);
-    //printf("\n COMMAND_HANDLER_REGISTER_VMID vmid of this worker to: %s\n", svless_vmid.c_str());
+
+    {
+      //notify worker that we got the data
+      std::unique_lock<std::mutex> lk(received_vmid_mutex);
+      received_vmid = true;
+      printf("CV: cmd_handler notifying vmid was received..\n");
+      received_vmid_cv.notify_one();
+    }
+
+    {
+      //wait for worker to set up and let us go
+      std::unique_lock<std::mutex> lk(continue_thread_mutex);
+      while (!continue_thread)
+          continue_thread_cv.wait(lk);
+      printf("CV: cmd_handler continuing..\n");
+    }
+
     break;
   }
 
@@ -395,16 +443,17 @@ void internal_api_handler(struct command_channel *chan, struct nw_handle_pool *h
     memcpy(&requested_gpu_mem, cmd->reserved_area, sizeof(uint32_t));
     printf("\n//! Requested GPU memory: %u\n\n", requested_gpu_mem);
 
-    if (strcmp(dump_dir, "") != 0) {
-        printf("\n//! Sets directory for dump files to %s\n\n", dump_dir);
-        if (setenv("AVA_WORKER_DUMP_DIR", dump_dir, 1)) {
-          perror("setenv failed for AVA_WORKER_DUMP_DIR\n");
-          exit(0);
-        }
-#ifdef AVA_PRELOAD_CUBIN
-        ava_load_cubin_worker(dump_dir);
-#endif
+    //if it wasnt specified, use default
+    if (strcmp(dump_dir, "") == 0) {
+      printf("dump_dir not specified in COMMAND_HANDLER_REGISTER_DUMP_DIR, using default /cuda_dumps\n");
+      dump_dir = "/cuda_dumps";
     }
+
+//if we are in opt spec, we need to load cubin (dump will dump instead)
+#ifdef AVA_PRELOAD_CUBIN
+    ava_load_cubin_worker(dump_dir);
+#endif
+
     break;
   }
 

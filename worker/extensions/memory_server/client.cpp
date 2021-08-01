@@ -77,84 +77,130 @@ cudaError_t __internal_cudaFree(void *devPtr) {
  * ************************************/
 
 namespace GPUMemoryServer {
-    void Client::connectToGPUs() {
+    Client::Client() {
+        og_device = -1;
         context = zmq_ctx_new();
-        sockets = new void*[device_count];
-        for (int i = 0 ; i < device_count; i++) {
-            sockets[i] = 0;
+        for (int i = 0 ; i < 4; i++) {
+             sockets[i] = 0;
+         }
+     }
+
+     Client::~Client() {
+        for (int i = 0 ; i < device_count ; i++) {
+            zmq_close(sockets[i]);
         }
+        //zmq_ctx_destroy(context);
     }
 
     void Client::connectToGPU(uint32_t gpuid) {
-        int ret;
         std::ostringstream stringStream;
         stringStream << GPUMemoryServer::get_base_socket_path() << gpuid;
         sockets[gpuid] = zmq_socket(context, ZMQ_REQ);
-        while (ret != 0) { 
-            ret = zmq_connect(sockets[gpuid], stringStream.str().c_str());
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+        while (1) { 
+            int ret = zmq_connect(sockets[gpuid], stringStream.str().c_str());
+            if (ret == 0) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            printf(" !!! GPU Client couldn't connect to server [%d], this is WRONG! The server probably died due to a bug\n", gpuid);
         }
-        printf("GPU Client succesfully connected to server [%d] at %p\n", gpuid, sockets[gpuid]);
+        printf("GPU Client succesfully connected to server [%d]\n", gpuid);
     }
 
     cudaError_t Client::localMalloc(void** devPtr, size_t size) {
         cudaError_t err = cudaMalloc(devPtr, size);
         local_allocs.emplace((uint64_t)*devPtr, std::make_unique<Client::LocalAlloc>(*devPtr, size, current_device));
         //report to server
-        GPUMemoryServer::Client::getInstance().sendMallocRequest(size); 
+        GPUMemoryServer::Client::getInstance().reportMalloc(size); 
         return err;
     }
 
-    void Client::sendMallocRequest(uint64_t size) {
+    void Client::reportMalloc(uint64_t size) {
+        Request req;
         req.type = RequestType::ALLOC;
         req.data.size = size;
         sendRequest(req);
     }
     
-    void Client::sendFreeRequest(uint64_t size) {
+    cudaError_t Client::localFree(void* devPtr) {
+        auto it = local_allocs.find((uint64_t)devPtr);
+        if (it == local_allocs.end()) {
+            printf("ILLEGAL cudaFree call!\n");
+            return 1;
+        }
+        //report to server
+        GPUMemoryServer::Client::getInstance().reportFree(it->second->size); 
+        local_allocs.erase(it);
+        return (cudaError_t)0;   
+    }
+
+    void Client::reportFree(uint64_t size) {
+        Request req;
         req.type = RequestType::FREE;
         req.data.size = size;
         sendRequest(req);
     }
-    
-    void Client::sendCleanupRequest() {
+
+    //clean up all memory that are in current_device ONLY
+    void Client::cleanup() {
+        //report to server
+        reportCleanup();
+        //erase only memory in GPU current_device
+        uint32_t cd = current_device;
+        for (auto it = local_allocs.begin(); it != local_allocs.end(); ) {
+            if (it->second->device_id == cd)
+                it = local_allocs.erase(it);
+            else
+                ++it;
+        }
+    }
+
+    void Client::reportCleanup() {
+        Request req;
         req.type = RequestType::FINISHED;
         sendRequest(req);
     }
 
-    void Client::sendMemoryRequestedValue(uint64_t mem_mb) {
+    void Client::reportMemoryRequested(uint64_t mem_mb) {
+        Request req;
         req.type = RequestType::MEMREQUESTED;
         req.data.size = mem_mb;
         sendRequest(req);
     }
 
     void Client::sendRequest(Request &req) {
-        /*
-        strcpy(req.worker_id, uuid.c_str());
-        printf(" !! sending to %d  at %p\n",current_device, sockets[current_device] );
+        sockmtx.lock();
 
+        strncpy(req.worker_id, uuid.c_str(), MAX_UUID_LEN);
+        if (strlen(uuid.c_str()) > MAX_UUID_LEN) {
+            printf(" @@@@ uuid %S IS LONGER THAN %d, THIS IS AN ISSUE\n", uuid.c_str(), MAX_UUID_LEN);
+        }
+
+        //if not connected yet, do it
         if (sockets[current_device] == 0) {
             connectToGPU(current_device);
         }
 
-        int rc = zmq_send(sockets[current_device], (char*)&req, sizeof(Request), 0);
-        printf(" !!! zmq_send ret %d\n", rc);
+        printf(" !! sending request type [%d]  to %d\n", req.type, current_device);
+        int rc = zmq_send(sockets[current_device], &req, sizeof(Request), 0);
+        printf(" !!! zmq_send ret %d, waiting for reply\n", rc);
 
+        if (rc == -1) {
+            printf(" !!!!!!!! zmq_send errno %d\n", errno);
+        }
 
-        printf(" !!! waiting for receive\n");
-        zmq_recv(sockets[current_device], buffer, sizeof(Reply), 0);
-        memcpy(&reply, buffer, sizeof(Reply));
+        Reply rep;
+        zmq_recv(sockets[current_device], &rep, sizeof(Reply), 0);
         printf(" !!! received\n");
 
-        handleReply();
-    */
+        handleReply(rep);
+        printf(" !!! reply handled\n");
+
+        sockmtx.unlock();
     }
 
-    Client::~Client() {
-        for (int i = 0 ; i < device_count ; i++) {
-            zmq_close(sockets[i]);
-        }
-        //zmq_ctx_destroy(context);
+    void Client::handleReply(Reply& reply) {
+        if (reply.migrate != Migration::NOPE)
+            migrateToGPU(reply.target_device, reply.migrate);
     }
 
     void Client::setCurrentGPU(int id) {
@@ -179,41 +225,15 @@ namespace GPUMemoryServer {
     }
 
     void Client::kernelIn() {
+        Request req;
         req.type = RequestType::KERNEL_IN;
         sendRequest(req);
     }
     
     void Client::kernelOut() {
+        Request req;
         req.type = RequestType::KERNEL_OUT;
         sendRequest(req);
-    }
-
-    
-
-    cudaError_t Client::localFree(void* devPtr) {
-        auto it = local_allocs.find((uint64_t)devPtr);
-        if (it == local_allocs.end()) {
-            printf("ILLEGAL cudaFree call!\n");
-            return 1;
-        }
-        //report to server
-        GPUMemoryServer::Client::getInstance().sendFreeRequest(it->second->size); 
-        local_allocs.erase(it);
-        return (cudaError_t)0;   
-    }
-
-    //clean up all memory that are in current_device ONLY
-    void Client::cleanup() {
-        //report to server
-        sendCleanupRequest();
-        //erase only memory in GPU current_device
-        uint32_t cd = current_device;
-        for (auto it = local_allocs.begin(); it != local_allocs.end(); ) {
-            if (it->second->device_id == cd)
-                it = local_allocs.erase(it);
-            else
-                ++it;
-        }
     }
 
     void* Client::translate_ptr(void* ptr) {
@@ -228,13 +248,8 @@ namespace GPUMemoryServer {
         }
     }
 
-    void Client::handleReply() {
-        if (reply.migrate != Migration::NOPE)
-            migrateToGPU(reply.target_device, reply.migrate);
-    }
-
     void Client::migrateToGPU(uint32_t new_gpuid, Migration migration_type) {
-        printf("Worker [%s] talked to GPU server and it told us to ask for migration\n");
+        printf("GPU server told us to ask for migration\n");
        
         if (migration_type == Migration::KERNEL) {
             printf("Migration by kernel mode, changing device to [%d]\n", new_gpuid);

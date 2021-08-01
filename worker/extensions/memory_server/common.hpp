@@ -6,8 +6,7 @@
 #include <string.h>
 #include <cstddef>
 
-#define BUF_SIZE 4094
-
+#define MAX_UUID_LEN 40
 namespace GPUMemoryServer {
 
     inline std::string get_base_socket_path() {
@@ -26,7 +25,7 @@ namespace GPUMemoryServer {
     struct Request {
         RequestType type;
         RequestData data;
-        char worker_id[40]; //36 is the size of a uuid v4
+        char worker_id[MAX_UUID_LEN]; //36 is the size of a uuid v4
     };
 
     struct Reply {
