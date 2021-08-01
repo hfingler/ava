@@ -957,6 +957,7 @@ __host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, 
     ret = __helper_cudaLaunchKernel(
         ((struct fatbin_function *)g_ptr_array_index(ava_metadata((void *)0)->fatbin_funcs, (intptr_t)func_id)),
         func_id, gridDim, blockDim, args, sharedMem, stream);
+    return ret;
   }
 }
 

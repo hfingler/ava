@@ -686,6 +686,7 @@ __host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, 
   cudaError_t ret;
   if (ava_is_worker) {
     ret = __helper_cudaLaunchKernel(ava_metadata(func)->func, func, gridDim, blockDim, args, sharedMem, stream);
+    return ret;
   }
 }
 
