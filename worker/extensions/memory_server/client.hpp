@@ -29,11 +29,14 @@ void __internal_kernelOut();
 }
 #endif
 
+bool __internal_allContextsEnabled(); 
+bool __internal_setAllContextsEnabled(bool f);
 uint32_t __internal_getCurrentDevice(); 
 int32_t __internal_getDeviceCount();
 void __internal_setDeviceCount(uint32_t dc);
 void* __translate_ptr(void*);
 const void* __translate_ptr(const void*);
+
 
 namespace GPUMemoryServer {
 
@@ -43,6 +46,7 @@ namespace GPUMemoryServer {
         void* context;
         void* sockets[4];
         std::mutex sockmtx;
+        bool enable_reporting;
 
         //device management
         int current_device, og_device;

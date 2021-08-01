@@ -20,6 +20,8 @@ ABSL_FLAG(uint16_t, gpuoffset, 0, "(OPTIONAL)GPU id offset");
 ABSL_FLAG(std::string, resmngr_addr, "",
           "(OPTIONAL) Address of the Alouatta resource manager. If enabled will run on grpc mode.");
 
+ABSL_FLAG(std::string, allctx, "no", "(OPTIONAL) turn on setting up all device ctx on workers (required for migration)");
+ABSL_FLAG(std::string, reporting, "no", "(OPTIONAL) turn on client reports to gpu server (required for migration)");
 ABSL_FLAG(std::string, debug_migration, "no", "(OPTIONAL) turn on debug migration");
 
 int main(int argc, const char *argv[]) {
@@ -53,7 +55,7 @@ int main(int argc, const char *argv[]) {
     worker_env.push_back(kmd);
   }
 
-  std::cerr << "Using port " << port << " for AvA" << std::endl;
+  std::cerr << "[SVLESS-MNGR]: Using port " << port << " for AvA" << std::endl;
   SVGPUManager *manager =
       new SVGPUManager(port, absl::GetFlag(FLAGS_worker_port_base), absl::GetFlag(FLAGS_worker_path), worker_argv,
                        worker_env, absl::GetFlag(FLAGS_ngpus), absl::GetFlag(FLAGS_gpuoffset));
@@ -62,17 +64,34 @@ int main(int argc, const char *argv[]) {
     std::string full_addr(rm_addr);
     full_addr += ":";
     full_addr += std::getenv("RESMNGR_PORT");
-    std::cerr << "Running manager on serverless mode, rm at " << full_addr << std::endl;
+    std::cerr << "[SVLESS-MNGR]: Running manager on serverless mode, rm at " << full_addr << std::endl;
     manager->resmngr_address = full_addr;
   }
 
-  manager->LaunchMemoryServers();
-  std::cerr << "Launched memory servers, sleeping 1s to give them time " << std::endl;
-  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+  if (absl::GetFlag(FLAGS_allctx) == "yes") {
+    std::cerr << "[SVLESS-MNGR]: All context init is enabled." << std::endl;
+    worker_env.push_back("AVA_ENABLE_ALL_CTX=yes");
+  }
+  else {
+    std::cerr << "[SVLESS-MNGR]: All context init is DISABLE." << std::endl;
+    worker_env.push_back("AVA_ENABLE_ALL_CTX=no");
+  }
+
+  if (absl::GetFlag(FLAGS_reporting) == "yes") {
+    std::cerr << "[SVLESS-MNGR]: Reporting is enabled, launching GPU Servers.." << std::endl;
+    worker_env.push_back("AVA_ENABLE_REPORTING=yes");
+    manager->LaunchMemoryServers();
+    std::cerr << "[SVLESS-MNGR]:Launched memory servers, sleeping to give them time to spin up" << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+  }
+  else {
+    std::cerr << "[SVLESS-MNGR]: Reporting is not enabled, no GPU servers will be launched" << std::endl;
+    worker_env.push_back("AVA_ENABLE_REPORTING=no");
+  }
 
   // normal ava mode
   if (!rm_addr) {
-    std::cerr << "Running manager on normal manager mode" << std::endl;
+    std::cerr << "[SVLESS-MNGR]: Running manager on normal manager mode" << std::endl;
     manager->RunServer();
   }
   // gRPC mode
