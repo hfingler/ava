@@ -686,6 +686,7 @@ __host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, 
   cudaError_t ret;
   if (ava_is_worker) {
     ret = __helper_cudaLaunchKernel(ava_metadata(func)->func, func, gridDim, blockDim, args, sharedMem, stream);
+#warning This will bypass the resource reporting routine.
     return ret;
   }
 }
@@ -1031,6 +1032,7 @@ __host__ cudaError_t CUDARTAPI cudaMemset(void *devPtr, int value, size_t count)
   if (ava_is_worker) {
     // everything that takes a device pointer must go through __translate_ptr
     ret = __helper_cudaMemset(devPtr, value, count);
+    return ret;
   }
 }
 
