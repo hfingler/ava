@@ -15,6 +15,13 @@
 #include "common/linkage.h"
 #include "common/logging.h"
 
+#include <mutex>
+
+//extern from cmd_handle.cpp
+extern std::mutex first_thread;
+extern bool first_thread_done;
+
+
 struct shadow_thread_pool_t {
   GHashTable *threads; /* Keys are ava IDs, values are shadow_thread_t* */
   pthread_mutex_t lock;
@@ -128,10 +135,21 @@ int shadow_thread_handle_single_command(struct shadow_thread_pool_t *pool) {
 static void *shadow_thread_loop(void *arg) {
   struct shadow_thread_t *t = (struct shadow_thread_t *)arg;
   pthread_setspecific(t->pool->key, t);
+  
+  //block until we can go ahead (after load)
+  //printf("   !!!!  shadow thread was locking first_thread\n");
+  first_thread.lock();
+  if (first_thread_done) {
+    //printf("   !!!!  shadow thread was unlocked because first_thread_done\n");
+    first_thread.unlock();
+  }
+
   int exit_thread_flag;
   do {
     exit_thread_flag = shadow_thread_handle_single_command(t->pool);
   } while (!exit_thread_flag);
+
+  //printf(" !!!!  shadow thread exited\n");
   return NULL;
 }
 

@@ -86,7 +86,7 @@ typedef union Algorithm {
   cudnnCTCLossAlgo_t CTCLossAlgo;
 };
 
-extern GPtrArray *fatbin_handle_list;
+//extern GPtrArray *fatbin_handle_list;
 
 struct call_configuration {
   dim3 gridDim;
@@ -406,7 +406,7 @@ ava_utility void __helper_load_function_arg_info(absl::string_view dump_dir) {
  * This utility function should only be called by the worker.
  */
 ava_begin_worker_replacement;
-void **__helper_load_and_register_fatbin(void *fatCubin, absl::string_view dump_dir) {
+void __helper_load_and_register_fatbin(void *fatCubin, absl::string_view dump_dir) {
   /* Read fatbin dump */
   int fd, ret;
   bool read_ret;
@@ -446,9 +446,9 @@ void **__helper_load_and_register_fatbin(void *fatCubin, absl::string_view dump_
   struct fatbin_wrapper *wrapper = (struct fatbin_wrapper *)fatCubin;
   wrapper->ptr = (uint64_t)fatbin;
 
-  void **fatbin_handle = __cudaRegisterFatBinary(wrapper);
+  //void **fatbin_handle = __cudaRegisterFatBinary(wrapper);
   //__helper_print_fatcubin_info(fatCubin, fatbin_handle);
-  __helper_init_module(wrapper, fatbin_handle, ava_metadata(NULL)->cur_module);
+  __helper_init_module(wrapper, 0, ava_metadata(NULL)->cur_module);
 
   /* Load function argument information */
   // GHashTable *ht = __helper_load_function_arg_info(dump_dir);
@@ -624,7 +624,6 @@ void **__helper_load_and_register_fatbin(void *fatCubin, absl::string_view dump_
     if (wSize) free(wSize);
   }
 
-  return fatbin_handle;
 }
 ava_end_worker_replacement;
 
@@ -954,7 +953,7 @@ __host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, 
 
   cudaError_t ret;
   if (ava_is_worker) {
-    ret = __helper_cudaLaunchKernel(
+    ret = __helper_launch_kernel(
         ((struct fatbin_function *)g_ptr_array_index(ava_metadata((void *)0)->fatbin_funcs, (intptr_t)func_id)),
         func_id, gridDim, blockDim, args, sharedMem, stream);
     return ret;
@@ -13702,7 +13701,7 @@ ava_end_replacement;
 ava_begin_worker_replacement;
 void ava_load_cubin_worker(absl::string_view dump_dir) {
   /* Preload CUDA fat binaries */
-  fatbin_handle_list = g_ptr_array_new();
+  //fatbin_handle_list = g_ptr_array_new();
   ava_metadata_reset(&__ava_endpoint, NULL);
   /* Read cubin number */
   int fd;
@@ -13721,15 +13720,15 @@ void ava_load_cubin_worker(absl::string_view dump_dir) {
   AVA_DEBUG << "Fatbinary number = " << fatbin_num;
   int i;
   void *fatCubin;
-  void **fatbin_handle;
+  //void **fatbin_handle;
   for (i = 0; i < fatbin_num; i++) {
     fatCubin = malloc(sizeof(struct fatbin_wrapper));
     ret = ava::support::ReadData(fd, (char *)fatCubin, sizeof(struct fatbin_wrapper), nullptr);
     if (!ret) {
       SYSCALL_FAILURE_PRINT("read");
     }
-    fatbin_handle = __helper_load_and_register_fatbin(fatCubin, dump_dir);
-    g_ptr_array_add(fatbin_handle_list, (gpointer)fatbin_handle);
+    __helper_load_and_register_fatbin(fatCubin, dump_dir);
+    //g_ptr_array_add(fatbin_handle_list, (gpointer)fatbin_handle);
   }
   close(fd);
 }

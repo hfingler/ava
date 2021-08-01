@@ -58,10 +58,8 @@ void __helper_print_kernel_info(struct fatbin_function *func, void **args) {
 
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
                                    void **args, size_t sharedMem, cudaStream_t stream) {
-
+  //this might trigger and to migration
   __internal_kernelIn();
-
-  cudaError_t ret = (cudaError_t)CUDA_ERROR_PROFILER_ALREADY_STOPPED;
 
   uint32_t cur_dvc;
   if (__internal_allContextsEnabled())
@@ -69,6 +67,7 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   else
     cur_dvc = 0;
 
+  printf("__helper_launch_kernel on device [%d]\n", cur_dvc);
 
   if (func == NULL) {
     return (cudaError_t)CUDA_ERROR_INVALID_PTX;
@@ -85,6 +84,7 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   std::cerr << "function metadata (" << (void *)func << ") for local " << func->hostfunc[cur_dvc] << ", cufunc "
             << (void *)func->cufunc[cur_dvc] << ", argc " << func->argc << std::endl;
 
+  cudaError_t ret = (cudaError_t)CUDA_ERROR_PROFILER_ALREADY_STOPPED;
   //if we need to figure out the correct context to get function
   if (__internal_allContextsEnabled()) {
     for (int i = 0; i < func->argc; i++) {
@@ -120,23 +120,24 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
 void __helper_init_module(struct fatbin_wrapper *fatCubin, void **handle, CUmodule *module) {
   int ret;
 
+  //opt is incompatible with allContextsEnabled, so assume it is opt (handle is 0)
   if (__internal_allContextsEnabled()) {
     for (int i = 0 ; i < __internal_getDeviceCount() ; i++) {
-      printf("__helper_init_module setting device to %d\n", i);
       cudaSetDevice(i);
-
-      __cudaInitModule(handle);
+      void** hdl = __cudaRegisterFatBinary(fatCubin);
+      __cudaInitModule(hdl);
       module[i] = NULL;
-      ret = cuModuleLoadData(&module[i], (void *)fatCubin->ptr);
-      printf("loaded module data into ctx %d : %p\n", i, module[i]);
+      ret = cuModuleLoadData(&(module[i]), (void *)fatCubin->ptr);
       assert((ret == CUDA_SUCCESS || ret == CUDA_ERROR_NO_BINARY_FOR_GPU) && "Module load failed");
-      (void)ret;
     }
     //reset back
-    printf("resetting device to %d\n", __internal_getCurrentDevice());
     cudaSetDevice(__internal_getCurrentDevice());
   }
   else {
+    //opt passes no handles, so we have to register
+    if (handle == 0) {
+      handle =  __cudaRegisterFatBinary(fatCubin);
+    }
     __cudaInitModule(handle);
     module[0] = NULL;
     ret = cuModuleLoadData(&module[0], (void *)fatCubin->ptr);
@@ -166,14 +167,6 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
   }
 }
 
-cudaError_t __helper_cudaLaunchKernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
-                                      void **args, size_t sharedMem, cudaStream_t stream) {
-  cudaError_t ret;
-  __internal_kernelIn();
-  ret = __helper_launch_kernel(func, hostFun, gridDim, blockDim, args, sharedMem, stream);
-  __internal_kernelOut();
-  return ret;
-}
 
 cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind) {
   return cudaMemcpy(__translate_ptr(dst), __translate_ptr(src), count, kind);
@@ -213,7 +206,7 @@ void __helper_register_function(struct fatbin_function *func, const char *hostFu
 
     //this call needs to be done in each context
     if (__internal_allContextsEnabled()) {
-      printf("setting device to %d\n", i);
+      //printf("  __helper_register_function  setting device to %d\n", i);
       cudaSetDevice(i);
     }
 

@@ -22,7 +22,7 @@ ABSL_FLAG(std::string, resmngr_addr, "",
 
 ABSL_FLAG(std::string, allctx, "no", "(OPTIONAL) turn on setting up all device ctx on workers (required for migration)");
 ABSL_FLAG(std::string, reporting, "no", "(OPTIONAL) turn on client reports to gpu server (required for migration)");
-ABSL_FLAG(std::string, debug_migration, "no", "(OPTIONAL) turn on debug migration");
+ABSL_FLAG(std::string, debug_migration, "no", "(OPTIONAL) turn on debug migration (1 for execution, 2 for memory)");
 
 int main(int argc, const char *argv[]) {
   absl::ParseCommandLine(argc, const_cast<char **>(argv));
@@ -42,7 +42,8 @@ int main(int argc, const char *argv[]) {
   //check for debug flag
   if (absl::GetFlag(FLAGS_debug_migration) != "no") {
     printf(">>> Setting SG_DEBUG_MIGRATION \n");
-    std::string kmd = "SG_DEBUG_MIGRATION=1";
+    std::string kmd = "SG_DEBUG_MIGRATION=";
+    kmd += absl::GetFlag(FLAGS_debug_migration);
     worker_env.push_back(kmd);
     setenv("SG_DEBUG_MIGRATION", "1", 1);
   }

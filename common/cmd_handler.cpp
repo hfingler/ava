@@ -54,6 +54,10 @@ void notify_worker_done() {
   continue_thread_cv.notify_one();
 }
 
+//stuff to block until load
+std::mutex first_thread;
+bool first_thread_done(false);
+
 
 // Internal flag set by the first call to init_command_handler
 EXPORTED_WEAKLY volatile int init_command_handler_executed;
@@ -178,6 +182,9 @@ static void *dispatch_thread_impl(void *userdata) {
 // calling thread.
 
 EXPORTED_WEAKLY void init_command_handler(struct command_channel *(*channel_create)()) {
+  //reset the loading part
+  first_thread_done = false;
+  
   pthread_mutex_lock(&nw_handler_lock);
   if (!init_command_handler_executed) {
     nw_global_command_channel = channel_create();
@@ -434,6 +441,9 @@ void internal_api_handler(struct command_channel *chan, struct nw_handle_pool *h
       printf("CV: cmd_handler continuing..\n");
     }
 
+    //loading is done
+    first_thread_done = true;
+    first_thread.unlock();
     break;
   }
 

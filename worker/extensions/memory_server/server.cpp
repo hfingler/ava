@@ -133,11 +133,22 @@ void Server::handleKernelIn(Request& req, Reply& rep) {
     printf(" >>in: there are now %d kernels queued\n", kernels_queued);
 
     //check if we are just debugging
-    if (std::getenv("SG_DEBUG_MIGRATION")) {
+    char* dbg_mig = std::getenv("SG_DEBUG_MIGRATION");
+    if (dbg_mig) {
         debug_kernel_count += 1;
         if (debug_kernel_count % 2 == 0) {
             printf("SG_DEBUG_MIGRATION:  kernel #%d, setting migration on\n", debug_kernel_count);
-            rep.migrate = Migration::KERNEL;
+
+            if (!strcmp(dbg_mig, "1")) {
+                printf("SG_DEBUG_MIGRATION:  setting EXEECUTION migration on\n");
+                rep.migrate = Migration::KERNEL;
+                rep.target_device = gpu == 2 ? 3 : 2;
+            }
+            else if (!strcmp(dbg_mig, "2")) {
+                printf("SG_DEBUG_MIGRATION:  setting MEMORY migration on\n");
+                rep.migrate = Migration::MEMORY;
+                rep.target_device = gpu == 2 ? 3 : 2;
+            }
         }
         else 
             rep.migrate = Migration::NOPE;
