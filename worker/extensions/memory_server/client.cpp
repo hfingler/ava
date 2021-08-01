@@ -11,9 +11,9 @@
 #include <chrono>
 #include <thread>
 #include "common/extensions/cudart_10.1_utilities.hpp"
-#include "common/extensions/memory_server/common.hpp"
-#include "common/extensions/memory_server/client.hpp"
 #include "common/common_context.h"
+#include "extensions/memory_server/client.hpp"
+#include "extensions/memory_server/common.hpp"
 
 /**************************************
  * 

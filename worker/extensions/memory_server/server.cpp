@@ -6,8 +6,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <zmq.h>
-#include "common/extensions/memory_server/common.hpp"
 #include "server.hpp"
+#include "extensions/memory_server/common.hpp"
 
 
 namespace GPUMemoryServer {

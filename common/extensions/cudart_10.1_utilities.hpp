@@ -54,6 +54,8 @@ void __helper_print_kernel_info(struct fatbin_function *func, void **args);
 
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
                                    void **args, size_t sharedMem, cudaStream_t stream);
+cudaError_t __helper_cudaLaunchKernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
+                                      void **args, size_t sharedMem, cudaStream_t stream);
 
 int __helper_cubin_num(void **cubin_handle);
 
@@ -120,6 +122,15 @@ cudaError_t __helper_cuda_memcpy_async_default(void *dst, const void *src,
 
 void __helper_record_module_path(CUmodule module, const char* fname);
 void __helper_parse_module_function_args(CUmodule module, const char *name, struct fatbin_function **func);
+void __helper_init_module(struct fatbin_wrapper *fatCubin, void **handle, CUmodule *module);
+CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname);
+cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind);
+cudaError_t __helper_cudaMemset(void *devPtr, int value, size_t count);
+CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
+                                   unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
+                                   unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra);
+cudaError_t __internal_cudaMalloc(void **devPtr, size_t size);
+cudaError_t __internal_cudaFree(void *devPtr);
 
 #if defined(__cplusplus)
 }

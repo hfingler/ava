@@ -18,8 +18,8 @@ extern "C" {
 #endif
 
 CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
-                                unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
-                                unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra);
+                                   unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
+                                   unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra);
 cudaError_t __internal_cudaMalloc(void **devPtr, size_t size);
 cudaError_t __internal_cudaFree(void *devPtr);
 void __internal_kernelIn();

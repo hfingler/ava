@@ -8,7 +8,7 @@
 #include <thread>
 #include <grpcpp/grpcpp.h>
 #include "resmngr.grpc.pb.h"
-#include "common/extensions/memory_server/common.hpp"
+#include "extensions/memory_server/common.hpp"
 
 using grpc::Channel;
 using grpc::ClientContext;

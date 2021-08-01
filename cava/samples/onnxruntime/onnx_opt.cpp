@@ -64,7 +64,6 @@ ava_begin_utility;
 #include "common/linkage.h"
 #include "common/logging.h"
 #include "common/extensions/cudart_10.1_utilities.hpp"
-#include "common/extensions/memory_server/client.hpp"
 #include "common/support/time_util.h"
 #include "common/support/gen_stat.h"
 #include "common/support/io.h"
@@ -339,32 +338,6 @@ char CUDARTAPI __cudaInitModule(void **fatCubinHandle) {
   }
 }
 
-ava_utility void __helper_init_module(struct fatbin_wrapper *fatCubin, void **handle) {
-  int ret;
-  /*
-  if (ava_metadata(NULL)->cuinit_called == 0) {
-    ret = cuInit(0);
-    if (ret != CUDA_SUCCESS) {
-      fprintf(stderr, "cuInit fail: %d\n", ret);
-    }
-    ava_metadata(NULL)->cuinit_called = 1;
-    assert(ret == CUDA_SUCCESS && "CUDA driver init failed");
-    (void)ret;
-  }
-  */
-  for (int i = 0 ; i < __internal_getDeviceCount() ; i++) {
-    cudaSetDevice(i);
-    __cudaInitModule(handle);
-    ret = cuModuleLoadData(&ava_metadata(NULL)->cur_module[i], (void *)fatCubin->ptr);
-    assert((ret == CUDA_SUCCESS || ret == CUDA_ERROR_NO_BINARY_FOR_GPU) && "Module load failed");
-    (void)ret;
-  }
-  //reset back
-  printf("resetting device to %d\n", __internal_getCurrentDevice());
-  cudaSetDevice(__internal_getCurrentDevice());
-
-}
-
 ava_utility void __helper_load_function_arg_info(absl::string_view dump_dir) {
   GPtrArray *fatbin_funcs;
   GHashTable *ht;
@@ -429,7 +402,8 @@ ava_utility void __helper_load_function_arg_info(absl::string_view dump_dir) {
 /**
  * This utility function should only be called by the worker.
  */
-ava_utility void **__helper_load_and_register_fatbin(void *fatCubin, absl::string_view dump_dir) {
+ava_begin_worker_replacement;
+void **__helper_load_and_register_fatbin(void *fatCubin, absl::string_view dump_dir) {
   /* Read fatbin dump */
   int fd, ret;
   bool read_ret;
@@ -471,7 +445,7 @@ ava_utility void **__helper_load_and_register_fatbin(void *fatCubin, absl::strin
 
   void **fatbin_handle = __cudaRegisterFatBinary(wrapper);
   //__helper_print_fatcubin_info(fatCubin, fatbin_handle);
-  __helper_init_module(wrapper, fatbin_handle);
+  __helper_init_module(wrapper, fatbin_handle, ava_metadata(NULL)->cur_module);
 
   /* Load function argument information */
   // GHashTable *ht = __helper_load_function_arg_info(dump_dir);
@@ -521,7 +495,7 @@ ava_utility void **__helper_load_and_register_fatbin(void *fatCubin, absl::strin
       ava_fatal("malloc size=0x%lx [errno=%d, errstr=%s] at %s:%d", size, errno, strerror(errno), __FILE__, __LINE__);
     }
     read_ret = ava::support::ReadData(fd, (char *)deviceFun, size, &eof_ret);
-    if (read_ret == -1) {
+    if (!read_ret) {
       SYSCALL_FAILURE_PRINT("read");
     }
 
@@ -644,6 +618,7 @@ ava_utility void **__helper_load_and_register_fatbin(void *fatCubin, absl::strin
 
   return fatbin_handle;
 }
+ava_end_worker_replacement;
 
 /*
 void** CUDARTAPI
@@ -812,7 +787,7 @@ EXPORTED void CUDARTAPI __cudaRegisterVar(void **fatCubinHandle, char *hostVar, 
                                           const char *deviceName, int ext, size_t size, int constant, int global) {
   fprintf(stderr, "__cudaRegisterVar is a dummpy implementation\n");
   fprintf(stderr,
-          "__cudaRegisterVar: hostPtr=%p; deviceAddress=%s; deviceName=%s; Registering const memory of %d bytes\n",
+          "__cudaRegisterVar: hostPtr=%p; deviceAddress=%s; deviceName=%s; Registering const memory of %lu bytes\n",
           hostVar, deviceAddress, deviceName, size);
 }
 
@@ -971,13 +946,9 @@ __host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, 
 
   cudaError_t ret;
   if (ava_is_worker) {
-    __internal_kernelIn();
-    ret = __helper_launch_kernel(
+    ret = __helper_cudaLaunchKernel(
         ((struct fatbin_function *)g_ptr_array_index(ava_metadata((void *)0)->fatbin_funcs, (intptr_t)func_id)),
         func_id, gridDim, blockDim, args, sharedMem, stream);
-    __internal_kernelOut();
-#warning This will bypass the resource reporting routine.
-    return ret;
   }
 }
 
@@ -1034,22 +1005,37 @@ EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMalloc(void **dev
 ava_end_replacement;
 
 __host__ cudaError_t CUDARTAPI cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind) {
+  ava_disable_native_call;
   ava_argument(dst) {
-    if (kind == cudaMemcpyHostToDevice) {
+    if (kind == cudaMemcpyHostToHost) {
+      ava_out;
+      ava_buffer(count);
+    } else if (kind == cudaMemcpyHostToDevice) {
       ava_opaque;
     } else if (kind == cudaMemcpyDeviceToHost) {
       ava_out;
       ava_buffer(count);
+    } else if (kind == cudaMemcpyDeviceToDevice) {
+      ava_opaque;
     }
   }
 
   ava_argument(src) {
-    if (kind == cudaMemcpyHostToDevice) {
+    if (kind == cudaMemcpyHostToHost) {
+      ava_in;
+      ava_buffer(count);
+    } else if (kind == cudaMemcpyHostToDevice) {
       ava_in;
       ava_buffer(count);
     } else if (kind == cudaMemcpyDeviceToHost) {
       ava_opaque;
+    } else if (kind == cudaMemcpyDeviceToDevice) {
+      ava_opaque;
     }
+  }
+  cudaError_t ret;
+  if (ava_is_worker) {
+    ret = __helper_cudaMemcpy(dst, src, count, kind);
   }
 }
 
@@ -1065,7 +1051,7 @@ cudaError_t __internal_cudaFree(void *devPtr) {
 }
 
 ava_begin_replacement;
-EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFree(void *devPtr) { __internal_cudaFree(devPtr); }
+EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFree(void *devPtr) { return __internal_cudaFree(devPtr); }
 ava_end_replacement;
 
 /* Rich set of APIs */
@@ -1218,7 +1204,16 @@ EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMemcpyAsync(void 
 }
 ava_end_replacement;
 
-__host__ cudaError_t CUDARTAPI cudaMemset(void *devPtr, int value, size_t count) { ava_argument(devPtr) ava_opaque; }
+__host__ cudaError_t CUDARTAPI cudaMemset(void *devPtr, int value, size_t count) {
+  ava_disable_native_call;
+  ava_argument(devPtr) ava_opaque;
+
+  cudaError_t ret;
+  if (ava_is_worker) {
+    // everything that takes a device pointer must go through __translate_ptr
+    ret = __helper_cudaMemset(devPtr, value, count);
+  }
+}
 
 __host__ cudaError_t CUDARTAPI cudaPointerGetAttributes(struct cudaPointerAttributes *attributes, const void *ptr) {
   ava_argument(attributes) {
@@ -2059,7 +2054,16 @@ CUresult CUDAAPI cuTexRefSetAddress2D(CUtexref hTexRef, const CUDA_ARRAY_DESCRIP
 
 CUresult CUDAAPI cuTexRefSetFilterMode(CUtexref hTexRef, CUfilter_mode fm) { ava_unsupported; }
 
-CUresult CUDAAPI cuGetErrorString(CUresult error, const char **pStr) { ava_unsupported; }
+CUresult CUDAAPI cuGetErrorString(CUresult error, const char **pStr) {
+  ava_argument(pStr) {
+    ava_out;
+    ava_buffer(1);
+    ava_element {
+      ava_lifetime_manual;
+      ava_buffer(100);
+    }
+  }
+}
 
 CUresult CUDAAPI cuTexRefSetArray(CUtexref hTexRef, CUarray hArray, unsigned int Flags) { ava_unsupported; }
 
@@ -2113,6 +2117,7 @@ CUresult CUDAAPI cuFuncSetAttribute(CUfunction hfunc, CUfunction_attribute attri
 CUresult CUDAAPI cuFuncSetSharedMemConfig(CUfunction hfunc, CUsharedconfig config) { ava_unsupported; }
 
 CUresult CUDAAPI cuModuleLoad(CUmodule *module, const char *fname) {
+  // ava_disable_native_call;
   ava_argument(module) {
     ava_out;
     ava_buffer(1);
@@ -2121,6 +2126,11 @@ CUresult CUDAAPI cuModuleLoad(CUmodule *module, const char *fname) {
     ava_in;
     ava_buffer(strlen(fname) + 1);
   }
+
+  // CUresult ret;
+  // if (ava_is_worker) {
+  //   ret = __helper_cuModuleLoad(module, fname);
+  // }
   ava_execute();
   __helper_record_module_path(*module, fname);
 }

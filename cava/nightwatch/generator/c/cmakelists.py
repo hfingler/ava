@@ -37,7 +37,7 @@ set(c_flags {api.cflags})
 set(cxx_flags {api.cflags} {api.cxxflags})
 add_compile_options("$<$<COMPILE_LANGUAGE:C>:${{c_flags}}>")
 add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:${{cxx_flags}}>")
-add_compile_options(-Wall -Wextra -pedantic -D_FILE_OFFSET_BITS=64 -fPIC -rdynamic -fpermissive -Wno-unused-parameter)
+add_compile_options(-Wall -Wextra -D_FILE_OFFSET_BITS=64 -fPIC -rdynamic -fpermissive -Wno-unused-parameter)
 add_compile_options({' '.join(optimization_flags)})
 
 string(TOUPPER "${{CMAKE_BUILD_TYPE}}" cmake_build_type_upper)
