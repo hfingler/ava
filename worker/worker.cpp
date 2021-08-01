@@ -136,22 +136,35 @@ int main(int argc, char *argv[]) {
 
   char const *gpu_device_str = getenv("GPU_DEVICE");
   std::string gpu_device = std::string(gpu_device_str);
+  /* set current device*/
+  GPUMemoryServer::Client::getInstance().setCurrentGPU(std::stoi(gpu_device));
+
   //AVA_WORKER_UUID is a unique, starting at 0, id we can use
   char const *cworker_uuid = getenv("AVA_WORKER_UUID");
   std::string worker_uuid = std::string(cworker_uuid);
 
-#ifdef WITH_SVLESS_MIGRATION
-  // preemptively create context on all GPUs
-  create_cuda_contexts();
-#else
-  cudaSetDevice(std::stoi(gpu_device));
-  //this forcibly creates a primary context, which is lazily-created
-  cudaFree(0);
-#endif
+  //check if we are enabling all device contexts
+  std::string enable_all_ctx = std::string(getenv("AVA_ENABLE_ALL_CTX"));
+  if (enable_all_ctx == "yes") {
+    // preemptively create context on all GPUs
+    create_cuda_contexts();
+    __internal_setAllContextsEnabled(true);
+  }
+  else {
+    cudaSetDevice(std::stoi(gpu_device));
+    //this forcibly creates a primary context, which is lazily-created
+    cudaFree(0);
+    __internal_setAllContextsEnabled(false);
+  }
 
-  /* set current device*/
-  GPUMemoryServer::Client::getInstance().setCurrentGPU(std::stoi(gpu_device));
-  
+  std::string enable_reporting = std::string(getenv("AVA_ENABLE_REPORTING"));
+  if (enable_reporting == "yes") {
+    GPUMemoryServer::Client::getInstance().enable_reporting = true;
+  }
+  else {
+    GPUMemoryServer::Client::getInstance().enable_reporting = false;
+  }
+
   /* setup signal handler */
   if ((original_sigint_handler = signal(SIGINT, sigint_handler)) == SIG_ERR) printf("failed to catch SIGINT\n");
   if ((original_sigsegv_handler = signal(SIGSEGV, sigsegv_handler)) == SIG_ERR) printf("failed to catch SIGSEGV\n");

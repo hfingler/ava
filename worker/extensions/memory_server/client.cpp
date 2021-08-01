@@ -21,6 +21,15 @@
  * 
  * ************************************/
 
+bool allContextsEnabled;
+bool __internal_allContextsEnabled() {
+    return allContextsEnabled;
+}
+bool __internal_setAllContextsEnabled(bool f) {
+    allContextsEnabled = f;
+}
+
+
 int32_t __internal_getDeviceCount() {
     return GPUMemoryServer::Client::getInstance().device_count;
 }
@@ -168,6 +177,11 @@ namespace GPUMemoryServer {
     }
 
     void Client::sendRequest(Request &req) {
+        //just quit if we are not reporting to gpu server
+        if (enable_reporting == false) {
+            return;
+        }
+
         sockmtx.lock();
 
         strncpy(req.worker_id, uuid.c_str(), MAX_UUID_LEN);
