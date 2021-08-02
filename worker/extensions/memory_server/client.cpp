@@ -116,6 +116,7 @@ namespace GPUMemoryServer {
     }
 
     cudaError_t Client::localMalloc(void** devPtr, size_t size) {
+        matchCurrentGPU();
         cudaError_t err = cudaMalloc(devPtr, size);
         local_allocs.emplace((uint64_t)*devPtr, std::make_unique<Client::LocalAlloc>(*devPtr, size, current_device));
         //report to server
