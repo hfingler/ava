@@ -67,9 +67,11 @@ namespace GPUMemoryServer {
         std::map<uint64_t, std::unique_ptr<LocalAlloc>> local_allocs;
 
         //pointer translation
-        //absl::flat_hash_map<uint64_t, void*> pointer_map;
         std::unordered_map<uint64_t, void*> pointer_map;
         void* translate_ptr(void* ptr);
+        //stream translation
+        std::map<cudaStream_t, std::map<uint32_t,cudaStream_t>> streams_map;
+
 
         //migration
         void migrateToGPU(uint32_t new_gpuid, Migration migration_type);
@@ -80,6 +82,7 @@ namespace GPUMemoryServer {
         cudaError_t localMalloc(void** devPtr, size_t size);
         cudaError_t localFree(void* devPtr);
         void cleanup();
+        void fullCleanup();
         void kernelIn();
         void kernelOut();
         void setOriginalGPU();

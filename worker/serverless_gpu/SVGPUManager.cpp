@@ -16,10 +16,10 @@
 
 Status SVGPUManager::SpawnGPUWorker(ServerContext *AVA_UNUSED(context), const SpawnGPUWorkerRequest *request,
                                     SpawnGPUWorkerReply *response) {
+  std::cout << "[SVLESS-MNGR]: Got a SpawnGPUWorker gRPC request " << std::endl;
   for (auto &pair : request->workers()) {
     uint32_t gpuid = pair.first;
     uint32_t n = pair.second;
-
     // TODO: make sure gpuid is sane
 
     std::cerr << "~~~ SpawnGPUWorker spawning " << n << " workers on GPU " << gpuid << std::endl;
@@ -55,7 +55,7 @@ void SVGPUManager::LaunchService() {
   builder.RegisterService(this);
 
   grpc_server = builder.BuildAndStart();
-  std::cout << "Server listening on " << server_address << std::endl;
+  std::cout << "[SVLESS-MNGR]: gRPC server listening on " << server_address << std::endl;
 }
 
 void SVGPUManager::setRealGPUOffsetCount() {
@@ -81,16 +81,20 @@ void SVGPUManager::setRealGPUOffsetCount() {
 
   // bounds check requested gpus, use all gpus if n_gpus == 0
   if (n_gpus == 0) {
-    device_count = device_count - gpu_offset;
+    n_gpus = device_count - gpu_offset;
   } 
   else {
-    device_count = gpu_offset + n_gpus;
+    n_gpus = gpu_offset + n_gpus;
   }
+
+  std::cout << "[SVLESS-MNGR]: set GPU offset to " << gpu_offset << " and GPU count to " << n_gpus << std::endl;
 }
 
 void SVGPUManager::ResMngrClient::RegisterSelf(uint32_t& gpu_offset, uint32_t& n_gpus, std::map<uint32_t, uint64_t> &gpu_memory) {
   RegisterGPUNodeRequest request;
   nvmlReturn_t result;
+
+  std::cout << "[SVLESS-MNGR]: RegisterSelf to resource manager.. " << std::endl;
 
   result = nvmlInit();
   if (result != NVML_SUCCESS) {
@@ -121,6 +125,8 @@ void SVGPUManager::ResMngrClient::RegisterSelf(uint32_t& gpu_offset, uint32_t& n
     RegisterGPUNodeRequest::GPU *g = request.add_gpus();
     g->set_id(i);
     g->set_memory(memory.free);
+
+    printf("    GPU [%d]  has [%u] memory\n", i, memory.free);
   }
 
   result = nvmlShutdown();

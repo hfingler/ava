@@ -56,6 +56,37 @@ void __helper_print_kernel_info(struct fatbin_function *func, void **args) {
   }
 }
 
+cudaError_t __helper_create_stream(cudaStream_t *pStream, unsigned int flags, int priority) {
+  cudaError_t ret;
+
+  if (__internal_allContextsEnabled()) {
+    uint32_t cur_dvc = __internal_getCurrentDevice();
+    cudaStream_t cur_stream;
+    cudaStreamCreateWithPriority(&cur_stream, flags, priority);
+    //get the map for this stream
+    auto v = GPUMemoryServer::Client::getInstance().streams_map[cur_stream];
+    //add current text
+    v[cur_dvc] = cur_stream;
+
+    for (int i = 0 ; i < __internal_getDeviceCount() ; i++) {
+      if (i == cur_dvc) continue;
+
+      cudaSetDevice(i);
+      cudaStream_t new_stream;
+      cudaStreamCreateWithPriority(&new_stream, flags, priority);
+      v[i] = new_stream;
+    }
+
+    //reset back
+    cudaSetDevice(__internal_getCurrentDevice());
+    return (cudaError_t)0;
+  }
+  else {
+    cudaError_t err = cudaStreamCreateWithPriority(pStream, flags, priority);
+    return err;
+  }
+}
+
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
                                    void **args, size_t sharedMem, cudaStream_t stream) {
   //this might trigger and to migration

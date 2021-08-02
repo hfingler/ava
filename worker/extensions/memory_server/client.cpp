@@ -149,6 +149,25 @@ namespace GPUMemoryServer {
         sendRequest(req);
     }
 
+    void Client::fullCleanup() {
+        //clean memory on all gpus
+        uint32_t cur_dvc = current_device;
+        for (int i = 0 ; i < device_count ; i++) {
+            //hack this thing so we dont switch contexts
+            current_device = i;
+            cleanup();
+        }
+        current_device = cur_dvc;
+
+        //iterate over map of maps, destroying events
+        for (auto& kv : streams_map) {
+            for (auto& idx_st : kv.second) {
+                cudaStreamDestroy(idx_st.second);
+            }
+        }
+        streams_map.clear();
+    }
+
     //clean up all memory that are in current_device ONLY
     void Client::cleanup() {
         //report to server

@@ -49,6 +49,9 @@ struct fatbin_function {
   CUmodule module[4];
 };
 
+
+cudaError_t __helper_create_stream(cudaStream_t *pStream, unsigned int flag, int priority);
+
 size_t __helper_fatbin_size(const void *cubin);
 
 void __helper_print_kernel_info(struct fatbin_function *func, void **args);

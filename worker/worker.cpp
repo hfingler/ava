@@ -225,7 +225,7 @@ int main(int argc, char *argv[]) {
       std::cerr << "[worker#" << listen_port << "] worker is done, looping." << std::endl;
 
       //clean up allocations, local and remote
-      GPUMemoryServer::Client::getInstance().cleanup();
+      GPUMemoryServer::Client::getInstance().fullCleanup();
       //go back to original GPU
       GPUMemoryServer::Client::getInstance().setOriginalGPU();
     } while(std::getenv("SERVERLESS_MODE"));

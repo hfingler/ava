@@ -20,6 +20,7 @@ ABSL_FLAG(uint16_t, gpuoffset, 0, "(OPTIONAL)GPU id offset");
 ABSL_FLAG(std::string, resmngr_addr, "",
           "(OPTIONAL) Address of the Alouatta resource manager. If enabled will run on grpc mode.");
 
+ABSL_FLAG(std::string, keepworkeralive, "no", "(OPTIONAL) (debug) forcefully make the worker not die when not in serverlss mode");
 ABSL_FLAG(std::string, allctx, "no", "(OPTIONAL) turn on setting up all device ctx on workers (required for migration)");
 ABSL_FLAG(std::string, reporting, "no", "(OPTIONAL) turn on client reports to gpu server (required for migration)");
 ABSL_FLAG(std::string, debug_migration, "no", "(OPTIONAL) turn on debug migration (1 for execution, 2 for memory)");
@@ -54,6 +55,11 @@ int main(int argc, const char *argv[]) {
     setenv("SERVERLESS_MODE", "1", 1);
     std::string kmd = "SERVERLESS_MODE=1";
     worker_env.push_back(kmd);
+  }
+
+  if (!rm_addr && absl::GetFlag(FLAGS_keepworkeralive) == "yes") {
+    std::cerr << "[SVLESS-MNGR]: Forcing worker to loop so it can be reused manually." << std::endl;
+    worker_env.push_back("SERVERLESS_MODE=1");
   }
 
   /*
@@ -98,7 +104,7 @@ int main(int argc, const char *argv[]) {
   
   if (absl::GetFlag(FLAGS_reporting) == "yes") {
     manager->LaunchMemoryServers();
-    std::cerr << "[SVLESS-MNGR]:Launched memory servers, sleeping to give them time to spin up" << std::endl;
+    std::cerr << "[SVLESS-MNGR]: Launched memory servers, sleeping to give them time to spin up" << std::endl;
     std::this_thread::sleep_for(std::chrono::milliseconds(2000));
   }
 
@@ -111,11 +117,8 @@ int main(int argc, const char *argv[]) {
   else {
     manager->LaunchService();
     // wait a bit
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     manager->RegisterSelf();
-
-    //launch the memory servers, needs to be after LaunchService, which fills device count
-    manager->LaunchMemoryServers();
 
     // block forever
     manager->grpc_server->Wait();
