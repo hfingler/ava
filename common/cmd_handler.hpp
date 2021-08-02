@@ -41,8 +41,12 @@ void print_command(FILE *file, const struct command_channel *chan, const struct 
 #define DEBUG_PRINT_COMMAND(chan, cmd)
 #endif
 
-void notify_worker_done();
 void wait_for_worker_setup();
+void worker_setup_done();
+void wait_for_cubin_loaded();
+void set_cubin_loaded();
+void release_shadow_threads();
+void wait_for_shadow_threads_release();
 
 void handle_command_and_notify(struct command_channel *chan, struct command_base *cmd);
 

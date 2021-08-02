@@ -204,7 +204,7 @@ int main(int argc, char *argv[]) {
        *  sync with worker until we get vmid and memory requested
        */
       wait_for_worker_setup();
-      printf("CV: worker was notified..\n");
+      printf("CV: worker was notified vmid was received..\n");
       //if this is serverless, we need to update our id
       if (svless_vmid == "NO_VMID" || svless_vmid == "") {
         printf("svless_vmid is default, using %s\n", worker_uuid.c_str());
@@ -214,12 +214,17 @@ int main(int argc, char *argv[]) {
         printf("got vmid from cmd channel: %s\n", svless_vmid.c_str());
         GPUMemoryServer::Client::getInstance().setUuid(svless_vmid);
       }
+      
+      //now wait for cubin flag to be set
+      wait_for_cubin_loaded();
+      printf("CV: worker was notified cubin was loaded..\n");
       //report our max memory requested
       GPUMemoryServer::Client::getInstance().reportMemoryRequested(requested_gpu_mem);
-      std::cerr << "[worker#" << listen_port << "] is free to work now" << std::endl;
-      notify_worker_done();
 
-      //now go
+      std::cerr << "[worker#" << listen_port << "] is free to work now" << std::endl;
+      //and now all threads can work
+      release_shadow_threads();
+
       wait_for_command_handler();
       destroy_command_handler(false);
       std::cerr << "[worker#" << listen_port << "] worker is done, looping." << std::endl;

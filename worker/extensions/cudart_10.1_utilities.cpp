@@ -90,7 +90,7 @@ cudaError_t __helper_create_stream(cudaStream_t *pStream, unsigned int flags, in
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
                                    void **args, size_t sharedMem, cudaStream_t stream) {
   //this might trigger and to migration
-  __internal_kernelIn();
+  //__internal_kernelIn();
 
   uint32_t cur_dvc;
   if (__internal_allContextsEnabled())
@@ -98,7 +98,7 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   else
     cur_dvc = 0;
 
-  printf("__helper_launch_kernel on device [%d]\n", cur_dvc);
+  printf("__helper_launch_kernel on device slot [%d]\n", cur_dvc);
 
   if (func == NULL) {
     return (cudaError_t)CUDA_ERROR_INVALID_PTX;
@@ -138,12 +138,14 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   }
   // if not with migration, just get over it and do
   else {
+    GPUMemoryServer::Client::getInstance().matchCurrentGPU();
+
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[0], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y, blockDim.z,
-                                      sharedMem, (CUstream)stream, args, NULL);
+                                      sharedMem, 0, args, NULL);
     printf(">>> cuLaunchKernel returned %d\n", ret);
 
     //TODO: fix
-    __internal_kernelOut();
+    //__internal_kernelOut();
     return ret;
   }
 }
@@ -165,6 +167,7 @@ void __helper_init_module(struct fatbin_wrapper *fatCubin, void **handle, CUmodu
     cudaSetDevice(__internal_getCurrentDevice());
   }
   else {
+    GPUMemoryServer::Client::getInstance().matchCurrentGPU();
     //opt passes no handles, so we have to register
     if (handle == 0) {
       handle =  __cudaRegisterFatBinary(fatCubin);
@@ -194,6 +197,7 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
     return ret;
   }
   else {
+    GPUMemoryServer::Client::getInstance().matchCurrentGPU();
     return cuModuleLoad(module, fname);
   }
 }
@@ -233,12 +237,18 @@ void __helper_register_function(struct fatbin_function *func, const char *hostFu
 
     // Only register the first host function
     //if (func->hostfunc != NULL) return;
-    if (func->hostfunc[i] != NULL) continue;
+    if (func->hostfunc[i] != NULL) {
+      std::cerr << "----------------------- func->hostfunc[i] != NULL in __helper_register_function------------"  << std::endl;
+      continue;
+    }
 
     //this call needs to be done in each context
     if (__internal_allContextsEnabled()) {
       //printf("  __helper_register_function  setting device to %d\n", i);
       cudaSetDevice(i);
+    }
+    else {
+      GPUMemoryServer::Client::getInstance().matchCurrentGPU();
     }
 
     CUresult ret = cuModuleGetFunction(&func->cufunc[i], module[i], deviceName);
@@ -246,10 +256,12 @@ void __helper_register_function(struct fatbin_function *func, const char *hostFu
       LOG_ERROR << "cuModuleGetFunction fail with " << ret;
       throw std::runtime_error("failed to get module function");
     }
-    std::cerr << "*** __helper_register_function kernel at device " << i << " host func " << std::hex << (uintptr_t)hostFun << " -> device func " << (uintptr_t)func->cufunc[i]
+    
+    std::cerr << "*** __helper_register_function kernel at device slot " << i << " host func " << std::hex << (uintptr_t)hostFun << " -> device func " << (uintptr_t)func->cufunc[i]
       << " deviceName " << deviceName << std::endl;
     func->hostfunc[i] = (void *)hostFun;
     func->module[i] = module[i];
+
   }
 
   //reset back if necessary

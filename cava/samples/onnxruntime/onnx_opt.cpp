@@ -12893,52 +12893,37 @@ __host__ cudaError_t CUDARTAPI cudaSetDeviceFlags(unsigned int flags) { ava_unsu
 __host__ cudaError_t CUDARTAPI cudaGetDeviceFlags(unsigned int *flags) { ava_unsupported; }
 
 __host__ cudaError_t CUDARTAPI cudaStreamCreate(cudaStream_t *pStream) {
-  //ava_disable_native_call;
   ava_argument(pStream) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
   }
+}
+
 /*
+ava_disable_native_call;
   cudaError_t ret;
   if (ava_is_worker) {
     ret = __helper_create_stream(pStream, 0, 0);
     return ret;
   }
-  */
-}
+*/
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamCreateWithFlags(cudaStream_t *pStream, unsigned int flags) {
-  //ava_disable_native_call;
   ava_argument(pStream) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
   }
-/*
-  cudaError_t ret;
-  if (ava_is_worker) {
-    ret = __helper_create_stream(pStream, flags, 0);
-    return ret;
-  }
-  */
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamCreateWithPriority(cudaStream_t *pStream,
                                                                                unsigned int flags, int priority) {
-  //ava_disable_native_call;
   ava_argument(pStream) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
   }
-/*
-  cudaError_t ret;
-  if (ava_is_worker) {
-    ret = __helper_create_stream(pStream, flags, priority);
-    return ret;
-  }
-  */
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamGetPriority(cudaStream_t hStream, int *priority) {

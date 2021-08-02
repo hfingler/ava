@@ -87,6 +87,7 @@ namespace GPUMemoryServer {
         void kernelOut();
         void setOriginalGPU();
         void setCurrentGPU(int id);
+        void matchCurrentGPU();
         void connectToGPU(uint32_t gpuid);
         void reportMalloc(uint64_t size);
         void reportFree(uint64_t size);

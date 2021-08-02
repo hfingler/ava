@@ -224,8 +224,20 @@ namespace GPUMemoryServer {
             migrateToGPU(reply.target_device, reply.migrate);
     }
 
+    void Client::matchCurrentGPU() {
+        int d;
+        cudaGetDevice(&d);
+        if (current_device != d) {
+            printf("  !!! Worker [%s] is at the wrong GPU somehow cuda %d  client %d\n", uuid.c_str(), d, current_device);
+            setCurrentGPU(current_device);
+        } else {
+            printf(" ... Device is correct : %d == %d\n", d, current_device);
+        }
+    }
+
     void Client::setCurrentGPU(int id) {
         cudaError_t err = cudaSetDevice(id);
+        cudaFree(0);
         if (err) {
             printf("CUDA err on cudaSetDevice(%d): %d\n", id, err);
             exit(1);
