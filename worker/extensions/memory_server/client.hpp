@@ -81,7 +81,7 @@ namespace GPUMemoryServer {
         }
         cudaError_t localMalloc(void** devPtr, size_t size);
         cudaError_t localFree(void* devPtr);
-        void cleanup();
+        void cleanup(uint32_t cd);
         void fullCleanup();
         void kernelIn();
         void kernelOut();
@@ -90,7 +90,7 @@ namespace GPUMemoryServer {
         void connectToGPU(uint32_t gpuid);
         void reportMalloc(uint64_t size);
         void reportFree(uint64_t size);
-        void reportCleanup();
+        void reportCleanup(uint32_t gpuid);
         void reportMemoryRequested(uint64_t mem_mb);
 
         static Client& getInstance() {

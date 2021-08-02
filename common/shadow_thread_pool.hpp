@@ -11,6 +11,9 @@
 extern "C" {
 #endif
 
+//murder all shadow threads because they stick around when reusing
+void kill_all_shadow_threads();
+
 // Forward declarations of structs to avoid dependency cycles in the includes.
 struct command_channel;
 struct command_base;

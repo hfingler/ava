@@ -17,11 +17,6 @@
 
 #include <mutex>
 
-//extern from cmd_handle.cpp
-extern std::mutex first_thread;
-extern bool first_thread_done;
-
-
 struct shadow_thread_pool_t {
   GHashTable *threads; /* Keys are ava IDs, values are shadow_thread_t* */
   pthread_mutex_t lock;
@@ -136,20 +131,12 @@ static void *shadow_thread_loop(void *arg) {
   struct shadow_thread_t *t = (struct shadow_thread_t *)arg;
   pthread_setspecific(t->pool->key, t);
   
-  //block until we can go ahead (after load)
-  //printf("   !!!!  shadow thread was locking first_thread\n");
-  first_thread.lock();
-  if (first_thread_done) {
-    //printf("   !!!!  shadow thread was unlocked because first_thread_done\n");
-    first_thread.unlock();
-  }
-
   int exit_thread_flag;
   do {
     exit_thread_flag = shadow_thread_handle_single_command(t->pool);
   } while (!exit_thread_flag);
 
-  //printf(" !!!!  shadow thread exited\n");
+  printf(" !!!!  shadow thread exited\n");
   return NULL;
 }
 
@@ -178,4 +165,16 @@ void shadow_thread_pool_dispatch(struct shadow_thread_pool_t *pool, struct comma
   scmd->cmd = cmd;
   g_async_queue_push(t->queue, scmd);
   pthread_mutex_unlock(&pool->lock);
+}
+
+
+void delete_shadow_thread(gpointer key, gpointer value, gpointer userdata) {
+  printf("canceling shadow thread\n");
+  struct shadow_thread_t *t = (struct shadow_thread_t *) value;
+  pthread_cancel(t->thread);
+}
+
+void kill_all_shadow_threads() {
+  auto context = ava::CommonContext::instance();
+  g_hash_table_foreach(context->nw_shadow_thread_pool->threads, delete_shadow_thread, NULL);
 }

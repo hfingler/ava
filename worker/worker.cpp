@@ -226,6 +226,17 @@ int main(int argc, char *argv[]) {
 
       //clean up allocations, local and remote
       GPUMemoryServer::Client::getInstance().fullCleanup();
+      
+      //explode and reset cuda contexts
+      cudaDeviceReset();
+      if (enable_all_ctx == "yes") 
+        create_cuda_contexts();
+      else {
+        cudaSetDevice(std::stoi(gpu_device));
+        cudaFree(0);
+      }
+
+
       //go back to original GPU
       GPUMemoryServer::Client::getInstance().setOriginalGPU();
     } while(std::getenv("SERVERLESS_MODE"));

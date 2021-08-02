@@ -27,6 +27,7 @@ using namespace std;
 #include <time.h>
 
 #include <chrono>
+#include <thread>
 #include <condition_variable>
 #include <mutex>
 
@@ -55,8 +56,9 @@ void notify_worker_done() {
 }
 
 //stuff to block until load
-std::mutex first_thread;
-bool first_thread_done(false);
+std::mutex cubin_loaded_mutex;
+std::atomic<bool> cubin_loaded;
+std::condition_variable cubin_loaded_cv;
 
 
 // Internal flag set by the first call to init_command_handler
@@ -155,6 +157,17 @@ void handle_command_and_notify(struct command_channel *chan, struct command_base
     cudaSetDevice(context->current_device);
     tl_current_device = context->current_device;
   }
+
+  //printf("before lock.  %d   %d  %d\n", int(cubin_loaded), cmd->command_id == COMMAND_HANDLER_REGISTER_VMID, cmd->command_id == COMMAND_HANDLER_REGISTER_DUMP_DIR);
+  //if cubin is not loaded we gotta wait, but let the load cmds go through
+  if (!cubin_loaded && cmd->command_id != COMMAND_HANDLER_REGISTER_VMID && cmd->command_id != COMMAND_HANDLER_REGISTER_DUMP_DIR) {
+    //wait for worker to set up and let us go
+    std::unique_lock<std::mutex> lk(continue_thread_mutex);
+    while (!cubin_loaded)
+        cubin_loaded_cv.wait(lk);
+    printf("  #### shadow thread unlocked for handling!\n");
+  }
+
 #endif
 
   handle_command(chan, context->nw_global_handle_pool, (struct command_channel *)nw_record_command_channel, cmd);
@@ -183,8 +196,9 @@ static void *dispatch_thread_impl(void *userdata) {
 
 EXPORTED_WEAKLY void init_command_handler(struct command_channel *(*channel_create)()) {
   //reset the loading part
-  first_thread_done = false;
-  
+  cubin_loaded = false;
+  //kill_all_shadow_threads();
+
   pthread_mutex_lock(&nw_handler_lock);
   if (!init_command_handler_executed) {
     nw_global_command_channel = channel_create();
@@ -441,9 +455,14 @@ void internal_api_handler(struct command_channel *chan, struct nw_handle_pool *h
       printf("CV: cmd_handler continuing..\n");
     }
 
+    printf("  !!! cubin loading done, signaling\n");
     //loading is done
-    first_thread_done = true;
-    first_thread.unlock();
+    {
+      std::unique_lock<std::mutex> lk(cubin_loaded_mutex);
+      cubin_loaded = true;
+      cubin_loaded_cv.notify_all();
+    }
+
     break;
   }
 
