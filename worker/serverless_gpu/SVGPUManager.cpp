@@ -83,9 +83,6 @@ void SVGPUManager::setRealGPUOffsetCount() {
   if (n_gpus == 0) {
     n_gpus = device_count - gpu_offset;
   } 
-  else {
-    n_gpus = gpu_offset + n_gpus;
-  }
 
   std::cout << "[SVLESS-MNGR]: set GPU offset to " << gpu_offset << " and GPU count to " << n_gpus << std::endl;
 }

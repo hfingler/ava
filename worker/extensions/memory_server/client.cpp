@@ -150,14 +150,8 @@ namespace GPUMemoryServer {
     }
 
     void Client::fullCleanup() {
-        //clean memory on all gpus
-        uint32_t cur_dvc = current_device;
-        for (int i = 0 ; i < device_count ; i++) {
-            //hack this thing so we dont switch contexts
-            current_device = i;
-            cleanup();
-        }
-        current_device = cur_dvc;
+        reportCleanup();
+        local_allocs.clear();
 
         //iterate over map of maps, destroying events
         for (auto& kv : streams_map) {
@@ -174,6 +168,7 @@ namespace GPUMemoryServer {
         reportCleanup();
         //erase only memory in GPU current_device
         uint32_t cd = current_device;
+
         for (auto it = local_allocs.begin(); it != local_allocs.end(); ) {
             if (it->second->device_id == cd)
                 it = local_allocs.erase(it);
