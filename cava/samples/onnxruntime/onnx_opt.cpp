@@ -32,46 +32,46 @@ size_t __args_index_0;
 size_t __kernelParams_index_0;
 
 ava_begin_utility;
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <stdio.h>
+#include <absl/strings/string_view.h>
+#include <cublas_v2.h>
+#include <cuda.h>
+#include <cuda_profiler_api.h>
+#include <cuda_runtime_api.h>
+#include <cudnn.h>
+#include <cufft.h>
+#include <cufftXt.h>
+#include <curand.h>
+#include <cusolverDn.h>
+#include <cusolverSp.h>
+#include <cusolver_common.h>
+#include <cusparse.h>
+#include <driver_types.h>
 #include <errno.h>
+#include <fatbinary.h>
+#include <fcntl.h>
 #include <glib.h>
+#include <stdio.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <texture_types.h>
+#include <unistd.h>
+
 #include <algorithm>
 #include <iostream>
 
-#include <cuda.h>
-#include <cuda_runtime_api.h>
-#include <driver_types.h>
-#include <texture_types.h>
-#include <fatbinary.h>
-#include <cublas_v2.h>
-#include <cudnn.h>
-#include <curand.h>
-#include <cufft.h>
-#include <cufftXt.h>
-#include <cusparse.h>
-#include <cusolver_common.h>
-#include <cusolverDn.h>
-#include <cusolverSp.h>
-#include <cuda_profiler_api.h>
-
-#include "cudart_nw_internal.h"
-#include "common/extensions/tf_optimization.h"
 #include "common/extensions/cmd_batching.h"
+#include "common/extensions/cudart_10.1_utilities.hpp"
+#include "common/extensions/tf_optimization.h"
 #include "common/linkage.h"
 #include "common/logging.h"
-#include "common/extensions/cudart_10.1_utilities.hpp"
-#include "common/support/time_util.h"
+#include "common/support/fmt.h"
 #include "common/support/gen_stat.h"
 #include "common/support/io.h"
-#include "common/support/fmt.h"
+#include "common/support/time_util.h"
+#include "cudart_nw_internal.h"
 #include "guestlib/extensions/extension_api.h"
-#include "guestlib/extensions/guest_cmd_batching_queue.h"
 #include "guestlib/extensions/gpu_address_tracking.h"
-#include <absl/strings/string_view.h>
+#include "guestlib/extensions/guest_cmd_batching_queue.h"
 
 #if !defined(__dv)
 #define __dv(v)
@@ -86,7 +86,7 @@ typedef union Algorithm {
   cudnnCTCLossAlgo_t CTCLossAlgo;
 };
 
-//extern GPtrArray *fatbin_handle_list;
+// extern GPtrArray *fatbin_handle_list;
 
 struct call_configuration {
   dim3 gridDim;
@@ -149,7 +149,7 @@ typedef struct {
   CUmodule cur_module[4];
 
   /* global states */
-  //int cuinit_called;
+  // int cuinit_called;
 
   /* memory flags */
   int is_pinned;
@@ -446,7 +446,7 @@ void __helper_load_and_register_fatbin(void *fatCubin, absl::string_view dump_di
   struct fatbin_wrapper *wrapper = (struct fatbin_wrapper *)fatCubin;
   wrapper->ptr = (uint64_t)fatbin;
 
-  //void **fatbin_handle = __cudaRegisterFatBinary(wrapper);
+  // void **fatbin_handle = __cudaRegisterFatBinary(wrapper);
   //__helper_print_fatcubin_info(fatCubin, fatbin_handle);
   __helper_init_module(wrapper, 0, ava_metadata(NULL)->cur_module);
 
@@ -609,11 +609,7 @@ void __helper_load_and_register_fatbin(void *fatCubin, absl::string_view dump_di
     assert(func_id != NULL && "func_id should not be NULL");
     func = static_cast<struct fatbin_function *>(g_ptr_array_index(fatbin_funcs, (intptr_t)func_id));
 
-
-
     __helper_register_function(func, (const char *)func_id, ava_metadata(NULL)->cur_module, deviceName);
-
-
 
     free(deviceFun);
     free(deviceName);
@@ -623,7 +619,6 @@ void __helper_load_and_register_fatbin(void *fatCubin, absl::string_view dump_di
     if (gDim) free(gDim);
     if (wSize) free(wSize);
   }
-
 }
 ava_end_worker_replacement;
 
@@ -1060,7 +1055,9 @@ cudaError_t __internal_cudaFree(void *devPtr) {
 }
 
 ava_begin_replacement;
-EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFree(void *devPtr) { return __internal_cudaFree(devPtr); }
+EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFree(void *devPtr) {
+  return __internal_cudaFree(devPtr);
+}
 ava_end_replacement;
 
 /* Rich set of APIs */
@@ -1161,15 +1158,20 @@ cudaError_t __helper_cuda_memcpy_async_default(void *dst, const void *src, size_
     ava_argument(dst) {
       ava_out;
       ava_buffer(count);
+      ava_depends_on(dst_is_gpu);
     }
   }
 
   if (src_is_gpu) {
-    ava_argument(src) { ava_opaque; }
+    ava_argument(src) {
+      ava_opaque;
+      ava_depends_on(src_is_gpu);
+    }
   } else {
     ava_argument(src) {
       ava_in;
       ava_buffer(count);
+      ava_depends_on(src_is_gpu);
     }
   }
   ava_argument(stream) ava_handle;
@@ -1410,8 +1412,8 @@ CUresult CUDAAPI cuModuleLoadFatBinary(CUmodule *module, const void *fatCubin) {
 }
 
 CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
-                                unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
-                                unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
+                                   unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
+                                   unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
   ava_argument(hStream) ava_handle;
 
   ava_argument(kernelParams) {
@@ -1440,11 +1442,12 @@ CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned
 }
 
 ava_begin_replacement;
-EXPORTED CUresult CUDAAPI cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
-                                unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
-                                unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
-  return __internal_cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
-                                sharedMemBytes, hStream, kernelParams, extra);
+EXPORTED CUresult CUDAAPI cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY,
+                                         unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY,
+                                         unsigned int blockDimZ, unsigned int sharedMemBytes, CUstream hStream,
+                                         void **kernelParams, void **extra) {
+  return __internal_cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ, sharedMemBytes,
+                                   hStream, kernelParams, extra);
 }
 ava_end_replacement;
 
@@ -3197,13 +3200,12 @@ CUBLASAPI cublasStatus_t CUBLASWINAPI cublasZhpr2_v2(cublasHandle_t handle, cubl
 
 /* ---------------- CUBLAS BLAS3 functions ---------------- */
 
-/* GEMM */
-CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t transa,
-                                                     cublasOperation_t transb, int m, int n, int k,
-                                                     const float *alpha, /* host or device pointer */
-                                                     const float *A, int lda, const float *B, int ldb,
-                                                     const float *beta, /* host or device pointer */
-                                                     float *C, int ldc) {
+CUBLASAPI cublasStatus_t CUBLASWINAPI __helper_cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t transa,
+                                                              cublasOperation_t transb, int m, int n, int k,
+                                                              const float *alpha, /* host or device pointer */
+                                                              const float *A, int lda, const float *B, int ldb,
+                                                              const float *beta, /* host or device pointer */
+                                                              float *C, int ldc, bool alpha_is_gpu, bool beta_is_gpu) {
   ava_async;
   ava_argument(handle) ava_handle;
 
@@ -3212,13 +3214,30 @@ CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemm_v2(cublasHandle_t handle, cubl
   ava_argument(B) ava_opaque;
   ava_argument(C) ava_opaque;
 
-  ava_argument(alpha) {
-    ava_in;
-    ava_buffer(1);
+  if (alpha_is_gpu) {
+    ava_argument(alpha) {
+      ava_opaque;
+      ava_depends_on(alpha_is_gpu);
+    }
+  } else {
+    ava_argument(alpha) {
+      ava_in;
+      ava_buffer(1);
+      ava_depends_on(alpha_is_gpu);
+    }
   }
-  ava_argument(beta) {
-    ava_in;
-    ava_buffer(1);
+
+  if (beta_is_gpu) {
+    ava_argument(beta) {
+      ava_opaque;
+      ava_depends_on(beta_is_gpu);
+    }
+  } else {
+    ava_argument(beta) {
+      ava_in;
+      ava_buffer(1);
+      ava_depends_on(beta_is_gpu);
+    }
   }
 
   /*
@@ -3231,6 +3250,37 @@ CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemm_v2(cublasHandle_t handle, cubl
   }
   */
 }
+
+/* GEMM */
+ava_begin_replacement;
+EXPORTED CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t transa,
+                                                              cublasOperation_t transb, int m, int n, int k,
+                                                              const float *alpha, /* host or device pointer */
+                                                              const float *A, int lda, const float *B, int ldb,
+                                                              const float *beta, /* host or device pointer */
+                                                              float *C, int ldc) {
+  cudaError_t ret;
+  struct cudaPointerAttributes alpha_attr;
+  struct cudaPointerAttributes beta_attr;
+  bool alpha_is_gpu = false;
+  bool beta_is_gpu = false;
+  ret = cudaPointerGetAttributes(&alpha_attr, alpha);
+  if (ret != cudaSuccess) {
+    alpha_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(alpha));
+    cudaGetLastError();
+  } else {
+    alpha_is_gpu = (alpha_attr.type == cudaMemoryTypeDevice);
+  }
+  ret = cudaPointerGetAttributes(&beta_attr, beta);
+  if (ret != cudaSuccess) {
+    beta_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(beta));
+    cudaGetLastError();
+  } else {
+    beta_is_gpu = (beta_attr.type == cudaMemoryTypeDevice);
+  }
+  return __helper_cublasSgemm_v2(handle, transa, transb, m, n, k, alpha, A, lda, B, ldb, beta, C, ldc);
+}
+ava_end_replacement;
 
 CUBLASAPI cublasStatus_t CUBLASWINAPI cublasDgemm_v2(cublasHandle_t handle, cublasOperation_t transa,
                                                      cublasOperation_t transb, int m, int n, int k,
@@ -12893,52 +12943,52 @@ __host__ cudaError_t CUDARTAPI cudaSetDeviceFlags(unsigned int flags) { ava_unsu
 __host__ cudaError_t CUDARTAPI cudaGetDeviceFlags(unsigned int *flags) { ava_unsupported; }
 
 __host__ cudaError_t CUDARTAPI cudaStreamCreate(cudaStream_t *pStream) {
-  //ava_disable_native_call;
+  // ava_disable_native_call;
   ava_argument(pStream) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
   }
-/*
-  cudaError_t ret;
-  if (ava_is_worker) {
-    ret = __helper_create_stream(pStream, 0, 0);
-    return ret;
-  }
-  */
+  /*
+    cudaError_t ret;
+    if (ava_is_worker) {
+      ret = __helper_create_stream(pStream, 0, 0);
+      return ret;
+    }
+    */
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamCreateWithFlags(cudaStream_t *pStream, unsigned int flags) {
-  //ava_disable_native_call;
+  // ava_disable_native_call;
   ava_argument(pStream) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
   }
-/*
-  cudaError_t ret;
-  if (ava_is_worker) {
-    ret = __helper_create_stream(pStream, flags, 0);
-    return ret;
-  }
-  */
+  /*
+    cudaError_t ret;
+    if (ava_is_worker) {
+      ret = __helper_create_stream(pStream, flags, 0);
+      return ret;
+    }
+    */
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamCreateWithPriority(cudaStream_t *pStream,
                                                                                unsigned int flags, int priority) {
-  //ava_disable_native_call;
+  // ava_disable_native_call;
   ava_argument(pStream) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
   }
-/*
-  cudaError_t ret;
-  if (ava_is_worker) {
-    ret = __helper_create_stream(pStream, flags, priority);
-    return ret;
-  }
-  */
+  /*
+    cudaError_t ret;
+    if (ava_is_worker) {
+      ret = __helper_create_stream(pStream, flags, priority);
+      return ret;
+    }
+    */
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamGetPriority(cudaStream_t hStream, int *priority) {
@@ -13725,7 +13775,7 @@ ava_end_replacement;
 ava_begin_worker_replacement;
 void ava_load_cubin_worker(absl::string_view dump_dir) {
   /* Preload CUDA fat binaries */
-  //fatbin_handle_list = g_ptr_array_new();
+  // fatbin_handle_list = g_ptr_array_new();
   ava_metadata_reset(&__ava_endpoint, NULL);
   /* Read cubin number */
   int fd;
@@ -13744,7 +13794,7 @@ void ava_load_cubin_worker(absl::string_view dump_dir) {
   AVA_DEBUG << "Fatbinary number = " << fatbin_num;
   int i;
   void *fatCubin;
-  //void **fatbin_handle;
+  // void **fatbin_handle;
   for (i = 0; i < fatbin_num; i++) {
     fatCubin = malloc(sizeof(struct fatbin_wrapper));
     ret = ava::support::ReadData(fd, (char *)fatCubin, sizeof(struct fatbin_wrapper), nullptr);
@@ -13752,7 +13802,7 @@ void ava_load_cubin_worker(absl::string_view dump_dir) {
       SYSCALL_FAILURE_PRINT("read");
     }
     __helper_load_and_register_fatbin(fatCubin, dump_dir);
-    //g_ptr_array_add(fatbin_handle_list, (gpointer)fatbin_handle);
+    // g_ptr_array_add(fatbin_handle_list, (gpointer)fatbin_handle);
   }
   close(fd);
 }

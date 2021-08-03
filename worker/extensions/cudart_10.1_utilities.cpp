@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cuda.h>
 #include <cuda_runtime_api.h>
+#include <cublas_v2.h>
 #include "cudart_nw_internal.h"
 #include "common/declaration.h"
 #include "common/logging.h"
@@ -54,6 +55,16 @@ void __helper_print_kernel_info(struct fatbin_function *func, void **args) {
               << "a handle, size = " << func->args[i].size << ", ptr = " << args[i]
               << ", content = " << *((void **)args[i]);
   }
+}
+
+CUBLASAPI cublasStatus_t CUBLASWINAPI __helper_cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t transa,
+                                                              cublasOperation_t transb, int m, int n, int k,
+                                                              const float *alpha, /* host or device pointer */
+                                                              const float *A, int lda, const float *B, int ldb,
+                                                              const float *beta, /* host or device pointer */
+                                                              float *C, int ldc, bool alpha_is_gpu, bool beta_is_gpu) {
+  return cublasSgemm(handle, transa, transb, m, n, k, alpha_is_gpu ? __translate_ptr(alpha) : alpha, 
+                     A, lda, B, ldb, beta_is_gpu ? __translate_ptr(beta) : beta, C, ldc);
 }
 
 cudaError_t __helper_create_stream(cudaStream_t *pStream, unsigned int flags, int priority) {
