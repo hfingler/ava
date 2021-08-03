@@ -120,6 +120,7 @@ namespace GPUMemoryServer {
         cudaError_t err = cudaMalloc(devPtr, size);
         local_allocs.emplace((uint64_t)*devPtr, std::make_unique<Client::LocalAlloc>(*devPtr, size, current_device));
         //report to server
+        //printf("malloc: %p\n", *devPtr);
         GPUMemoryServer::Client::getInstance().reportMalloc(size); 
         return err;
     }
@@ -226,14 +227,14 @@ namespace GPUMemoryServer {
     }
 
     void Client::matchCurrentGPU() {
+        /*
         int d;
         cudaGetDevice(&d);
         if (current_device != d) {
-            printf("  !!! Worker [%s] is at the wrong GPU somehow cuda %d  client %d\n", uuid.c_str(), d, current_device);
+            printf("  ###WRONG### !!! Worker [%s] is at the wrong GPU somehow cuda %d  client %d\n", uuid.c_str(), d, current_device);
             setCurrentGPU(current_device);
-        } else {
-            printf(" ... Device is correct : %d == %d\n", d, current_device);
         }
+        */
     }
 
     void Client::setCurrentGPU(int id) {
