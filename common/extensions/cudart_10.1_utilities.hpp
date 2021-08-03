@@ -135,6 +135,12 @@ cudaError_t __internal_cudaMalloc(void **devPtr, size_t size);
 cudaError_t __internal_cudaFree(void *devPtr);
 
 uint32_t __internal_getCurrentDeviceIndex();
+cublasStatus_t __helper_cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t transa,
+                                       cublasOperation_t transb, int m, int n, int k,
+                                       const float *alpha, /* host or device pointer */
+                                       const float *A, int lda, const float *B, int ldb,
+                                       const float *beta, /* host or device pointer */
+                                       float *C, int ldc, bool alpha_is_gpu, bool beta_is_gpu);
 
 #if defined(__cplusplus)
 }

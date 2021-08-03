@@ -2693,27 +2693,76 @@ CUBLASAPI cublasStatus_t CUBLASWINAPI cublasZhpr2_v2(cublasHandle_t handle, cubl
 /* ---------------- CUBLAS BLAS3 functions ---------------- */
 
 /* GEMM */
-CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t transa,
-                                                     cublasOperation_t transb, int m, int n, int k,
-                                                     const float *alpha, /* host or device pointer */
-                                                     const float *A, int lda, const float *B, int ldb,
-                                                     const float *beta, /* host or device pointer */
-                                                     float *C, int ldc) {
-  ava_async;
+cublasStatus_t __helper_cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t transa,
+                                       cublasOperation_t transb, int m, int n, int k,
+                                       const float *alpha, /* host or device pointer */
+                                       const float *A, int lda, const float *B, int ldb,
+                                       const float *beta, /* host or device pointer */
+                                       float *C, int ldc, bool alpha_is_gpu, bool beta_is_gpu) {
+  // ava_async;
   ava_argument(handle) ava_handle;
+
+  /* These are always device pointers for tensorflow ! */
   ava_argument(A) ava_opaque;
   ava_argument(B) ava_opaque;
   ava_argument(C) ava_opaque;
-  /* XXX I _think_ these are always device pointers for tensorflow ! */
-  ava_argument(alpha) {
-    ava_in;
-    ava_buffer(1);
+
+  if (alpha_is_gpu) {
+    ava_argument(alpha) {
+      ava_opaque;
+      ava_depends_on(alpha_is_gpu);
+    }
+  } else {
+    ava_argument(alpha) {
+      ava_in;
+      ava_buffer(1);
+      ava_depends_on(alpha_is_gpu);
+    }
   }
-  ava_argument(beta) {
-    ava_in;
-    ava_buffer(1);
+
+  if (beta_is_gpu) {
+    ava_argument(beta) {
+      ava_opaque;
+      ava_depends_on(beta_is_gpu);
+    }
+  } else {
+    ava_argument(beta) {
+      ava_in;
+      ava_buffer(1);
+      ava_depends_on(beta_is_gpu);
+    }
   }
 }
+
+ava_begin_replacement;
+EXPORTED CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t transa,
+                                                              cublasOperation_t transb, int m, int n, int k,
+                                                              const float *alpha, /* host or device pointer */
+                                                              const float *A, int lda, const float *B, int ldb,
+                                                              const float *beta, /* host or device pointer */
+                                                              float *C, int ldc) {
+  cudaError_t ret;
+  struct cudaPointerAttributes alpha_attr;
+  struct cudaPointerAttributes beta_attr;
+  bool alpha_is_gpu = false;
+  bool beta_is_gpu = false;
+  ret = cudaPointerGetAttributes(&alpha_attr, alpha);
+  if (ret != cudaSuccess) {
+    alpha_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(alpha));
+    cudaGetLastError();
+  } else {
+    alpha_is_gpu = (alpha_attr.type == cudaMemoryTypeDevice);
+  }
+  ret = cudaPointerGetAttributes(&beta_attr, beta);
+  if (ret != cudaSuccess) {
+    beta_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(beta));
+    cudaGetLastError();
+  } else {
+    beta_is_gpu = (beta_attr.type == cudaMemoryTypeDevice);
+  }
+  return __helper_cublasSgemm_v2(handle, transa, transb, m, n, k, alpha, A, lda, B, ldb, beta, C, ldc, alpha_is_gpu, beta_is_gpu);
+}
+ava_end_replacement;
 
 CUBLASAPI cublasStatus_t CUBLASWINAPI cublasDgemm_v2(cublasHandle_t handle, cublasOperation_t transa,
                                                      cublasOperation_t transb, int m, int n, int k,
