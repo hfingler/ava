@@ -408,3 +408,27 @@ CUresult __helper_cuDeviceGetUuid(CUuuid *uuid, CUdevice dev) {
   cuCtxGetDevice(&d);
   return cuDeviceGetUuid(uuid, d);
 }
+
+CUresult __helper_cuDevicePrimaryCtxSetFlags(CUdevice dev, unsigned int flags) {
+  CUdevice d;
+  cuCtxGetDevice(&d);
+  return cuDevicePrimaryCtxSetFlags(d, flags);
+}
+
+CUresult __helper_cuDeviceTotalMem(size_t* bytes, CUdevice dev) {
+  CUdevice d;
+  cuDeviceGet(&d, __internal_getCurrentDeviceIndex());
+  return cuDeviceTotalMem(bytes, d);
+}
+
+CUresult __helper_cuDeviceGetPCIBusId(char *pciBusId, int len, CUdevice dev) {
+  CUdevice d;
+  cuCtxGetDevice(&d);
+  return cuDeviceGetPCIBusId(pciBusId, len, d);
+}
+
+CUresult __helper_cuDeviceComputeCapability(int *major, int *minor, CUdevice device) {
+  CUdevice d;
+  cuCtxGetDevice(&d);
+  return cuDeviceComputeCapability(major, minor, d);
+}

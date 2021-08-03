@@ -1262,7 +1262,14 @@ CUresult CUDAAPI cuDevicePrimaryCtxGetState(CUdevice dev, unsigned int *flags, i
   }
 }
 
-CUresult CUDAAPI cuDevicePrimaryCtxSetFlags(CUdevice dev, unsigned int flags);
+CUresult CUDAAPI cuDevicePrimaryCtxSetFlags(CUdevice dev, unsigned int flags) {
+  ava_disable_native_call;
+  ava_argument(dev) ava_handle;
+
+  if (ava_is_worker) {
+    return __helper_cuDevicePrimaryCtxSetFlags(dev, flags);
+  }
+}
 
 CUresult CUDAAPI cuCtxCreate(CUcontext *pctx, unsigned int flags, CUdevice dev) {
   ava_argument(pctx) {

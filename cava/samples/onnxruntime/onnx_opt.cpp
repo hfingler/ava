@@ -952,6 +952,7 @@ __host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, 
     ret = __helper_launch_kernel(
         ((struct fatbin_function *)g_ptr_array_index(ava_metadata((void *)0)->fatbin_funcs, (intptr_t)func_id)),
         func_id, gridDim, blockDim, args, sharedMem, stream);
+#warning This will bypass the resource reporting routine.
     return ret;
   }
 }
@@ -1039,6 +1040,7 @@ __host__ cudaError_t CUDARTAPI cudaMemcpy(void *dst, const void *src, size_t cou
   cudaError_t ret;
   if (ava_is_worker) {
     ret = __helper_cudaMemcpy(dst, src, count, kind);
+  #warning This will bypass the resource reporting routine.
     return ret;
   }
 }
@@ -1075,6 +1077,7 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaGetDevice(int *device) {
 
   if (ava_is_worker) {
     *device = 0;
+#warning This will bypass the resource reporting routine.
     return (cudaError_t)0;
   }
 }
@@ -1087,6 +1090,7 @@ __cudart_builtin__ cudaError_t CUDARTAPI cudaGetDeviceCount(int *count) {
   }
   if (ava_is_worker) {
     *count = 1;
+#warning This will bypass the resource reporting routine.
     return (cudaError_t)0;
   }
 }
@@ -1098,6 +1102,7 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaGetDeviceProperties(struct
   }
 
   if (ava_is_worker) {
+#warning This will bypass the resource reporting routine.
     return cudaGetDeviceProperties(prop, __internal_getCurrentDeviceIndex());
   }
 }
@@ -1111,6 +1116,7 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaDeviceGetAttribute(int *va
   }
 
   if (ava_is_worker) {
+#warning This will bypass the resource reporting routine.
     return cudaDeviceGetAttribute(value, attr, __internal_getCurrentDeviceIndex());
   }
 }
@@ -1252,6 +1258,7 @@ __host__ cudaError_t CUDARTAPI cudaMemset(void *devPtr, int value, size_t count)
   if (ava_is_worker) {
     // everything that takes a device pointer must go through __translate_ptr
     ret = __helper_cudaMemset(devPtr, value, count);
+#warning This will bypass the resource reporting routine.
     return ret;
   }
 }
@@ -1487,6 +1494,7 @@ CUresult CUDAAPI cuDeviceGetCount(int *count) {
     ava_buffer(1);
   }
   if (ava_is_worker) {
+#warning This will bypass the resource reporting routine.
     *count = 1;
     return (CUresult)0;
   }
@@ -1500,6 +1508,7 @@ CUresult CUDAAPI cuDeviceGet(CUdevice *device, int ordinal) {
     ava_element ava_handle;
   }
   if (ava_is_worker) {
+#warning This will bypass the resource reporting routine.
     if (ordinal != 0) {
       return CUDA_ERROR_INVALID_VALUE;
     } else {
@@ -1543,11 +1552,13 @@ CUresult CUDAAPI cuDeviceGetName(char *name, int len, CUdevice dev) {
   CUresult ret;
   if (ava_is_worker) {
     ret = __helper_cuDeviceGetName(name, len, dev);
+  #warning This will bypass the resource reporting routine.
     return ret;
   }
 }
 
 CUresult CUDAAPI cuDeviceGetUuid(CUuuid *uuid, CUdevice dev) {
+  ava_disable_native_call;
   ava_argument(uuid) {
     ava_out;
     ava_buffer(1);
@@ -1559,6 +1570,7 @@ CUresult CUDAAPI cuDeviceGetUuid(CUuuid *uuid, CUdevice dev) {
 }
 
 CUresult CUDAAPI cuDeviceGetAttribute(int *pi, CUdevice_attribute attrib, CUdevice dev) {
+  ava_disable_native_call;
   ava_argument(pi) {
     ava_out;
     ava_buffer(1);
@@ -1586,7 +1598,14 @@ CUresult CUDAAPI cuDevicePrimaryCtxGetState(CUdevice dev, unsigned int *flags, i
   }
 }
 
-CUresult CUDAAPI cuDevicePrimaryCtxSetFlags(CUdevice dev, unsigned int flags) { ava_argument(dev) ava_handle; }
+CUresult CUDAAPI cuDevicePrimaryCtxSetFlags(CUdevice dev, unsigned int flags) {
+  ava_disable_native_call;
+  ava_argument(dev) ava_handle;
+
+  if (ava_is_worker) {
+    return __helper_cuDevicePrimaryCtxSetFlags(dev, flags);
+  }
+}
 
 CUresult CUDAAPI cuCtxCreate(CUcontext *pctx, unsigned int flags, CUdevice dev) {
   ava_disable_native_call;
@@ -1598,15 +1617,17 @@ CUresult CUDAAPI cuCtxCreate(CUcontext *pctx, unsigned int flags, CUdevice dev) 
   ava_argument(dev) ava_handle;
 
   if (ava_is_worker) {
-    return (CUresult)0;
+#warning This will bypass the resource reporting routine.
+    return CUDA_SUCCESS;
   }
 }
 
 CUresult CUDAAPI cuCtxDestroy(CUcontext ctx) {
   ava_disable_native_call;
-  // ava_argument(ctx) ava_deallocates;
+  ava_argument(ctx) ava_deallocates;
   if (ava_is_worker) {
-    return (CUresult)0;
+#warning This will bypass the resource reporting routine.
+    return CUDA_SUCCESS;
   }
 }
 
@@ -1627,7 +1648,8 @@ CUresult CUDAAPI cuCtxSetCurrent(CUcontext ctx) {
   ava_argument(ctx) ava_handle;
 
   if (ava_is_worker) {
-    return (CUresult)0;
+#warning This will bypass the resource reporting routine.
+    return CUDA_SUCCESS;
   }
 }
 
@@ -1641,6 +1663,7 @@ CUresult CUDAAPI cuDevicePrimaryCtxRetain(CUcontext *pctx, CUdevice dev) {
   ava_argument(dev) ava_handle;
   CUresult ret;
   if (ava_is_worker) {
+#warning This will bypass the resource reporting routine.
     ret = __helper_cuDevicePrimaryCtxRetain(pctx, dev);
     return ret;
   }
@@ -1857,11 +1880,7 @@ CUresult CUDAAPI cuDeviceTotalMem(size_t *bytes, CUdevice dev) {
   // TODO:  double check
 
   if (ava_is_worker) {
-    CUdevice dev2;
-    cuDeviceGet(&dev2, __internal_getCurrentDeviceIndex());
-    CUresult r;
-    r = cuDeviceTotalMem(bytes, dev2);
-    return r;
+    return __helper_cuDeviceTotalMem(bytes, dev);
   }
 }
 
@@ -1877,11 +1896,15 @@ CUresult CUDAAPI cuMemGetInfo(size_t *_free, size_t *total) {
 }
 
 CUresult CUDAAPI cuDeviceGetPCIBusId(char *pciBusId, int len, CUdevice dev) {
+  ava_disable_native_call;
   ava_argument(pciBusId) {
     ava_out;
     ava_buffer(len);
   }
   ava_argument(dev) ava_handle;
+  if (ava_is_worker) {
+    return __helper_cuDeviceGetPCIBusId(pciBusId, len, dev);
+  }
 }
 
 ava_begin_replacement;
@@ -2029,6 +2052,7 @@ CUresult cuGetErrorName(CUresult error, const char **pStr) {
 
 CUresult cuDeviceComputeCapability(int *major, int *minor, CUdevice device) {
   // untested
+  ava_disable_native_call;
   ava_argument(major) {
     ava_out;
     ava_buffer(1);
@@ -2036,6 +2060,9 @@ CUresult cuDeviceComputeCapability(int *major, int *minor, CUdevice device) {
   ava_argument(minor) {
     ava_out;
     ava_buffer(1);
+  }
+  if (ava_is_worker) {
+    return __helper_cuDeviceComputeCapability(major, minor, device);
   }
 }
 
@@ -13221,6 +13248,7 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFuncGetAttributes(struct c
     ret = __helper_func_get_attributes(
         attr, ((struct fatbin_function *)g_ptr_array_index(ava_metadata((void *)0)->fatbin_funcs, (intptr_t)func_id)),
         func_id);
+  #warning This will bypass the resource reporting routine.
     return ret;
   }
 }
@@ -13253,6 +13281,7 @@ cudaOccupancyMaxActiveBlocksPerMultiprocessor(int *numBlocks, const void *func, 
         numBlocks,
         ((struct fatbin_function *)g_ptr_array_index(ava_metadata((void *)0)->fatbin_funcs, (intptr_t)func_id)),
         func_id, blockSize, dynamicSMemSize);
+  #warning This will bypass the resource reporting routine.
     return ret;
   }
 }
@@ -13276,6 +13305,7 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaOccupancyMaxActiveBlocksPe
         numBlocks,
         ((struct fatbin_function *)g_ptr_array_index(ava_metadata((void *)0)->fatbin_funcs, (intptr_t)func_id)),
         func_id, blockSize, dynamicSMemSize, flags);
+#warning This will bypass the resource reporting routine.
     return ret;
   }
 }

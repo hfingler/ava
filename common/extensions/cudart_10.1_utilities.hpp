@@ -140,6 +140,10 @@ CUresult __helper_cuDevicePrimaryCtxRetain(CUcontext *pctx, CUdevice dev);
 CUresult __helper_cuDeviceGetName(char *name, int len, CUdevice dev);
 CUresult __helper_cuDeviceGetAttribute(int *pi, CUdevice_attribute attrib, CUdevice dev);
 CUresult __helper_cuDeviceGetUuid(CUuuid *uuid, CUdevice dev);
+CUresult __helper_cuDevicePrimaryCtxSetFlags(CUdevice dev, unsigned int flags);
+CUresult __helper_cuDeviceTotalMem(size_t* bytes, CUdevice dev);
+CUresult __helper_cuDeviceGetPCIBusId(char *pciBusId, int len, CUdevice dev);
+CUresult __helper_cuDeviceComputeCapability(int *major, int *minor, CUdevice device);
 
 #if defined(__cplusplus)
 }
