@@ -1,13 +1,13 @@
 #ifndef AVA_COMMON_EXTENSIONS_CUDART_10_1_UTILITIES_HPP_
 #define AVA_COMMON_EXTENSIONS_CUDART_10_1_UTILITIES_HPP_
 
+#include <absl/container/flat_hash_map.h>
 #include <cublas_v2.h>
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 #include <glib.h>
 
 #include <algorithm>
-#include <absl/container/flat_hash_map.h>
 
 #define MAX_KERNEL_ARG 30
 #define MAX_KERNEL_NAME_LEN 1024
@@ -43,12 +43,11 @@ struct fatbin_function {
   int argc;
   struct kernel_arg args[MAX_KERNEL_ARG];
 
-  //this is barely any space, so leave 4 as default
+  // this is barely any space, so leave 4 as default
   CUfunction cufunc[4];
   void *hostfunc[4];
   CUmodule module[4];
 };
-
 
 cudaError_t __helper_create_stream(cudaStream_t *pStream, unsigned int flag, int priority);
 
@@ -76,7 +75,7 @@ void __helper_cu_mem_host_free(void *ptr);
 void __helper_assosiate_function_dump(GHashTable *funcs, struct fatbin_function **func, void *local,
                                       const char *deviceName);
 
-void __helper_register_function(struct fatbin_function *func, const char *hostFun, CUmodule* module,
+void __helper_register_function(struct fatbin_function *func, const char *hostFun, CUmodule *module,
                                 const char *deviceName);
 
 /* Async buffer address list */
@@ -111,18 +110,14 @@ cudaError_t __helper_occupancy_max_active_blocks_per_multiprocessor_with_flags(i
 
 void __helper_print_pointer_attributes(const struct cudaPointerAttributes *attributes, const void *ptr);
 
-cudaError_t __helper_cuda_memcpy_async_host_to_host(void *dst, const void *src,
-    size_t count, cudaStream_t stream);
-cudaError_t __helper_cuda_memcpy_async_host_to_device(void *dst, const void *src,
-    size_t count, cudaStream_t stream);
-cudaError_t __helper_cuda_memcpy_async_device_to_host(void *dst, const void *src,
-    size_t count, cudaStream_t stream);
-cudaError_t __helper_cuda_memcpy_async_device_to_device(void *dst, const void *src,
-    size_t count, cudaStream_t stream);
-cudaError_t __helper_cuda_memcpy_async_default(void *dst, const void *src,
-    size_t count, cudaStream_t stream, bool dst_is_gpu, bool src_is_gpu);
+cudaError_t __helper_cuda_memcpy_async_host_to_host(void *dst, const void *src, size_t count, cudaStream_t stream);
+cudaError_t __helper_cuda_memcpy_async_host_to_device(void *dst, const void *src, size_t count, cudaStream_t stream);
+cudaError_t __helper_cuda_memcpy_async_device_to_host(void *dst, const void *src, size_t count, cudaStream_t stream);
+cudaError_t __helper_cuda_memcpy_async_device_to_device(void *dst, const void *src, size_t count, cudaStream_t stream);
+cudaError_t __helper_cuda_memcpy_async_default(void *dst, const void *src, size_t count, cudaStream_t stream,
+                                               bool dst_is_gpu, bool src_is_gpu);
 
-void __helper_record_module_path(CUmodule module, const char* fname);
+void __helper_record_module_path(CUmodule module, const char *fname);
 void __helper_parse_module_function_args(CUmodule module, const char *name, struct fatbin_function **func);
 void __helper_init_module(struct fatbin_wrapper *fatCubin, void **handle, CUmodule *module);
 CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname);
@@ -135,12 +130,16 @@ cudaError_t __internal_cudaMalloc(void **devPtr, size_t size);
 cudaError_t __internal_cudaFree(void *devPtr);
 
 uint32_t __internal_getCurrentDeviceIndex();
-cublasStatus_t __helper_cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t transa,
-                                       cublasOperation_t transb, int m, int n, int k,
-                                       const float *alpha, /* host or device pointer */
+cublasStatus_t __helper_cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m,
+                                       int n, int k, const float *alpha, /* host or device pointer */
                                        const float *A, int lda, const float *B, int ldb,
                                        const float *beta, /* host or device pointer */
                                        float *C, int ldc, bool alpha_is_gpu, bool beta_is_gpu);
+CUresult __helper_cuDevicePrimaryCtxGetState(CUdevice dev, unsigned int *flags, int *active);
+CUresult __helper_cuDevicePrimaryCtxRetain(CUcontext *pctx, CUdevice dev);
+CUresult __helper_cuDeviceGetName(char *name, int len, CUdevice dev);
+CUresult __helper_cuDeviceGetAttribute(int *pi, CUdevice_attribute attrib, CUdevice dev);
+CUresult __helper_cuDeviceGetUuid(CUuuid *uuid, CUdevice dev);
 
 #if defined(__cplusplus)
 }

@@ -11,7 +11,7 @@ ava_guestlib_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.c
 ava_worker_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/cmd_batching.cpp extensions/cudart_10.1_utilities.cpp extensions/memory_server/client.cpp);
 ava_common_utility_srcs(extensions/cudart_10.1_utilities.cpp);
 ava_export_qualifier();
-ava_soname(libcuda.so libcuda.so.1 libcudart.so.10 libcudart.so.10.1 libcublas.so.10 libcublasLt.so.10 libcudnn.so.7 libcufft.so.10 libcurand.so.10 libcusolver.so.10 libcusparse.so.10);
+ava_soname(libcuda.so libcuda.so.1 libcudart.so.10 libcudart.so.10.1 libcublas.so.10 libcublasLt.so.10 libcudnn.so.7 libcufft.so.10 libcurand.so.10 libcusolver.so.10 libcusparse.so.10 libnvrtc.so.10.1);
 // clang-format on
 
 /**
@@ -50,6 +50,7 @@ ava_begin_utility;
 #include <fatbinary.h>
 #include <fcntl.h>
 #include <glib.h>
+#include <nvrtc.h>
 #include <stdio.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -1116,19 +1117,16 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaDeviceGetAttribute(int *va
 
 __host__ cudaError_t CUDARTAPI cudaDeviceReset(void) { ava_async; }
 
-
-__host__ cudaError_t CUDARTAPI cudaSetDevice(int device) { 
-  ava_disable_native_call;
-  if (ava_is_worker) {
-    //we only show device 0
-    if (device != 0) {
-      return cudaErrorInvalidDevice;
-    }
-    else {
-      return (cudaError_t)0;
-    }
+ava_begin_replacement;
+EXPORTED __host__ cudaError_t CUDARTAPI cudaSetDevice(int device) {
+  // we only show device 0
+  if (device != 0) {
+    return cudaErrorInvalidDevice;
+  } else {
+    return cudaSuccess;
   }
 }
+ava_end_replacement;
 
 __host__ cudaError_t CUDARTAPI cudaMemcpyToSymbol(const void *symbol, const void *src, size_t count, size_t offset,
                                                   enum cudaMemcpyKind kind) {
@@ -1490,7 +1488,7 @@ CUresult CUDAAPI cuDeviceGetCount(int *count) {
   }
   if (ava_is_worker) {
     *count = 1;
-    return (CUresult) 0;
+    return (CUresult)0;
   }
 }
 
@@ -1502,10 +1500,9 @@ CUresult CUDAAPI cuDeviceGet(CUdevice *device, int ordinal) {
     ava_element ava_handle;
   }
   if (ava_is_worker) {
-    if(ordinal != 0) {
+    if (ordinal != 0) {
       return CUDA_ERROR_INVALID_VALUE;
-    }
-    else {
+    } else {
       return cuDeviceGet(device, __internal_getCurrentDeviceIndex());
     }
   }
@@ -1524,26 +1521,30 @@ CUresult CUDAAPI cuDeviceCanAccessPeer(int *canAccessPeer, CUdevice dev, CUdevic
 }
 
 CUresult CUDAAPI cuCtxEnablePeerAccess(CUcontext peerContext, unsigned int Flags) {
-  //ava_argument(peerContext) ava_handle;
+  // ava_argument(peerContext) ava_handle;
   ava_unsupported;
 }
 
 CUresult CUDAAPI cuCtxGetDevice(CUdevice *device) {
-  /*ava_argument(device) {
+  ava_argument(device) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
-  }*/
-  ava_unsupported;
+  }
 }
 
 CUresult CUDAAPI cuDeviceGetName(char *name, int len, CUdevice dev) {
+  ava_disable_native_call;
   ava_argument(name) {
     ava_out;
     ava_buffer(len);
   }
   ava_argument(dev) ava_handle;
-  //TODO
+  CUresult ret;
+  if (ava_is_worker) {
+    ret = __helper_cuDeviceGetName(name, len, dev);
+    return ret;
+  }
 }
 
 CUresult CUDAAPI cuDeviceGetUuid(CUuuid *uuid, CUdevice dev) {
@@ -1552,21 +1553,24 @@ CUresult CUDAAPI cuDeviceGetUuid(CUuuid *uuid, CUdevice dev) {
     ava_buffer(1);
   }
   ava_argument(dev) ava_handle;
-  //TODO
+  if (ava_is_worker) {
+    return __helper_cuDeviceGetUuid(uuid, dev);
+  }
 }
 
 CUresult CUDAAPI cuDeviceGetAttribute(int *pi, CUdevice_attribute attrib, CUdevice dev) {
-  /*
   ava_argument(pi) {
     ava_out;
     ava_buffer(1);
   }
   ava_argument(dev) ava_handle;
-*/
-ava_unsupported;
+  if (ava_is_worker) {
+    return __helper_cuDeviceGetAttribute(pi, attrib, dev);
+  }
 }
 
 CUresult CUDAAPI cuDevicePrimaryCtxGetState(CUdevice dev, unsigned int *flags, int *active) {
+  ava_disable_native_call;
   ava_argument(flags) {
     ava_out;
     ava_buffer(1);
@@ -1576,6 +1580,10 @@ CUresult CUDAAPI cuDevicePrimaryCtxGetState(CUdevice dev, unsigned int *flags, i
     ava_buffer(1);
   }
   ava_argument(dev) ava_handle;
+
+  if (ava_is_worker) {
+    return __helper_cuDevicePrimaryCtxGetState(dev, flags, active);
+  }
 }
 
 CUresult CUDAAPI cuDevicePrimaryCtxSetFlags(CUdevice dev, unsigned int flags) { ava_argument(dev) ava_handle; }
@@ -1594,9 +1602,9 @@ CUresult CUDAAPI cuCtxCreate(CUcontext *pctx, unsigned int flags, CUdevice dev) 
   }
 }
 
-CUresult CUDAAPI cuCtxDestroy(CUcontext ctx) { 
+CUresult CUDAAPI cuCtxDestroy(CUcontext ctx) {
   ava_disable_native_call;
-  //ava_argument(ctx) ava_deallocates; 
+  // ava_argument(ctx) ava_deallocates;
   if (ava_is_worker) {
     return (CUresult)0;
   }
@@ -1614,9 +1622,9 @@ CUresult CUDAAPI cuCtxGetCurrent(CUcontext *pctx) {
   }
 }
 
-CUresult CUDAAPI cuCtxSetCurrent(CUcontext ctx) { 
+CUresult CUDAAPI cuCtxSetCurrent(CUcontext ctx) {
   ava_disable_native_call;
-  ava_argument(ctx) ava_handle; 
+  ava_argument(ctx) ava_handle;
 
   if (ava_is_worker) {
     return (CUresult)0;
@@ -1624,12 +1632,18 @@ CUresult CUDAAPI cuCtxSetCurrent(CUcontext ctx) {
 }
 
 CUresult CUDAAPI cuDevicePrimaryCtxRetain(CUcontext *pctx, CUdevice dev) {
+  ava_disable_native_call;
   ava_argument(pctx) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
   }
   ava_argument(dev) ava_handle;
+  CUresult ret;
+  if (ava_is_worker) {
+    ret = __helper_cuDevicePrimaryCtxRetain(pctx, dev);
+    return ret;
+  }
 }
 
 CUresult CUDAAPI cuDevicePrimaryCtxRelease(CUdevice dev) { ava_argument(dev) ava_handle; }
@@ -1678,7 +1692,7 @@ CUresult CUDAAPI cuStreamQuery(CUstream hStream) { ava_argument(hStream) ava_han
 
 CUresult CUDAAPI cuStreamDestroy(CUstream hStream) { ava_argument(hStream) ava_handle; }
 
-  /*
+CUresult CUDAAPI cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
   ava_argument(dptr) {
     ava_out;
     ava_buffer(1);
@@ -1692,9 +1706,6 @@ CUresult CUDAAPI cuStreamDestroy(CUstream hStream) { ava_argument(hStream) ava_h
   if (ava_is_guest) {
     __helper_save_gpu_address_range((uint64_t)(*dptr), bytesize, static_cast<void *>(&ret));
   }
-  */
-CUresult CUDAAPI cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
-  ava_unsupported;
 }
 
 /*
@@ -1734,7 +1745,6 @@ EXPORTED CUresult CUDAAPI cuMemHostAlloc(void **pp, size_t bytesize, unsigned in
 ava_end_replacement;
 
 CUresult CUDAAPI cuMemcpyHtoD(CUdeviceptr dstDevice, const void *srcHost, size_t ByteCount) {
-  /*
   ava_argument(dstDevice) ava_opaque;
 
   ava_argument(srcHost) {
@@ -1742,12 +1752,9 @@ CUresult CUDAAPI cuMemcpyHtoD(CUdeviceptr dstDevice, const void *srcHost, size_t
     ava_buffer(ByteCount);
     if (ava_metadata(srcHost)->is_pinned) ava_lifetime_manual;
   }
-  */
- ava_unsupported;
 }
 
 CUresult CUDAAPI cuMemcpyDtoH(void *dstHost, CUdeviceptr srcDevice, size_t ByteCount) {
-  /*
   ava_argument(dstHost) {
     ava_out;
     ava_buffer(ByteCount);
@@ -1755,12 +1762,9 @@ CUresult CUDAAPI cuMemcpyDtoH(void *dstHost, CUdeviceptr srcDevice, size_t ByteC
   }
 
   ava_argument(srcDevice) ava_opaque;
-*/
-ava_unsupported;
 }
 
 CUresult CUDAAPI cuMemcpyHtoDAsync(CUdeviceptr dstDevice, const void *srcHost, size_t ByteCount, CUstream hStream) {
-  /*
   ava_async;
   ava_argument(dstDevice) ava_opaque;
 
@@ -1778,39 +1782,33 @@ CUresult CUDAAPI cuMemcpyHtoDAsync(CUdeviceptr dstDevice, const void *srcHost, s
   }
 
   ava_argument(hStream) ava_handle;
-*/
-ava_unsupported;
 }
 
 CUresult CUDAAPI cuMemcpyDtoHAsync(void *dstHost, CUdeviceptr srcDevice, size_t ByteCount, CUstream hStream) {
-//   //__helper_register_async_buffer(&ava_metadata(hStream)->async_buffers,
-//   //                            dstHost, ByteCount);
+  //__helper_register_async_buffer(&ava_metadata(hStream)->async_buffers,
+  //                            dstHost, ByteCount
+  ava_argument(dstHost) {
+#warning async buffers need to be no_copy
+    // ava_no_copy;
+    ava_out;
+    ava_buffer(ByteCount);
+    if (ava_metadata(dstHost)->is_pinned) {
+      ava_lifetime_manual;
+    } else {
+      ava_lifetime_manual;
+    }
+#warning[issue#65] deallocate the buffer for async memory copy at the \
+       synchronization point (ava_lifetime_sync).
+  }
 
+  ava_argument(srcDevice) ava_opaque;
+  ava_argument(hStream) ava_handle;
 
-//   ava_argument(dstHost) {
-// #warning async buffers need to be no_copy
-//     // ava_no_copy;
-//     ava_out;
-//     ava_buffer(ByteCount);
-//     // if (ava_metadata(dstHost)->is_pinned) {
-//     //    ava_lifetime_manual;
-//     //}
-//     // else {
-//     //    ava_lifetime_manual;
-//     //}
-// #warning[issue#65] deallocate the buffer for async memory copy at the \
-//         synchronization point (ava_lifetime_sync).
-//   }
-
-//   ava_argument(srcDevice) ava_opaque;
-//   ava_argument(hStream) ava_handle;
-
-// #warning Force synchronization of async buffers
-//   ava_execute();
-//   if (ava_is_worker) {
-//     cudaStreamSynchronize(hStream);
-//   }
-ava_unsupported;
+#warning Force synchronization of async buffers
+  ava_execute();
+  if (ava_is_worker) {
+    cudaStreamSynchronize(hStream);
+  }
 }
 
 CUresult CUDAAPI cuMemsetD32(CUdeviceptr dstDevice, unsigned int ui, size_t N) {
@@ -1856,7 +1854,7 @@ CUresult CUDAAPI cuDeviceTotalMem(size_t *bytes, CUdevice dev) {
     ava_buffer(1);
   }
   ava_argument(dev) ava_handle;
-  //TODO:  double check
+  // TODO:  double check
 
   if (ava_is_worker) {
     CUdevice dev2;
@@ -3299,9 +3297,8 @@ CUBLASAPI cublasStatus_t CUBLASWINAPI cublasZhpr2_v2(cublasHandle_t handle, cubl
 
 /* ---------------- CUBLAS BLAS3 functions ---------------- */
 
-cublasStatus_t __helper_cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t transa,
-                                       cublasOperation_t transb, int m, int n, int k,
-                                       const float *alpha, /* host or device pointer */
+cublasStatus_t __helper_cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m,
+                                       int n, int k, const float *alpha, /* host or device pointer */
                                        const float *A, int lda, const float *B, int ldb,
                                        const float *beta, /* host or device pointer */
                                        float *C, int ldc, bool alpha_is_gpu, bool beta_is_gpu) {
@@ -3377,7 +3374,8 @@ EXPORTED CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemm_v2(cublasHandle_t han
   } else {
     beta_is_gpu = (beta_attr.type == cudaMemoryTypeDevice);
   }
-  return __helper_cublasSgemm_v2(handle, transa, transb, m, n, k, alpha, A, lda, B, ldb, beta, C, ldc, alpha_is_gpu, beta_is_gpu);
+  return __helper_cublasSgemm_v2(handle, transa, transb, m, n, k, alpha, A, lda, B, ldb, beta, C, ldc, alpha_is_gpu,
+                                 beta_is_gpu);
 }
 ava_end_replacement;
 
@@ -13927,6 +13925,23 @@ void __helper_worker_init_epilogue() {
   worker_tf_opt_init();
 }
 ava_end_worker_replacement;
+
+const char *nvrtcGetErrorString(nvrtcResult result) { ava_unsupported; }
+nvrtcResult nvrtcVersion(int *major, int *minor) { ava_unsupported; }
+nvrtcResult nvrtcCreateProgram(nvrtcProgram *prog, const char *src, const char *name, int numHeaders,
+                               const char *const *headers, const char *const *includeNames) {
+  ava_unsupported;
+}
+nvrtcResult nvrtcDestroyProgram(nvrtcProgram *prog) { ava_unsupported; }
+nvrtcResult nvrtcCompileProgram(nvrtcProgram prog, int numOptions, const char *const *options) { ava_unsupported; }
+nvrtcResult nvrtcGetPTXSize(nvrtcProgram prog, size_t *ptxSizeRet) { ava_unsupported; }
+nvrtcResult nvrtcGetPTX(nvrtcProgram prog, char *ptx) { ava_unsupported; }
+nvrtcResult nvrtcGetProgramLogSize(nvrtcProgram prog, size_t *logSizeRet) { ava_unsupported; }
+nvrtcResult nvrtcGetProgramLog(nvrtcProgram prog, char *log) { ava_unsupported; }
+nvrtcResult nvrtcAddNameExpression(nvrtcProgram prog, const char *const name_expression) { ava_unsupported; }
+nvrtcResult nvrtcGetLoweredName(nvrtcProgram prog, const char *const name_expression, const char **lowered_name) {
+  ava_unsupported;
+}
 
 ava_guestlib_init_prologue(__helper_guestlib_init_prologue(this));
 ava_guestlib_fini_prologue(__helper_guestlib_fini_prologue(this));
