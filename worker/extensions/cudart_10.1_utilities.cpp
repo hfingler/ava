@@ -8,6 +8,10 @@
 #include "common/extensions/cudart_10.1_utilities.hpp"
 #include "extensions/memory_server/client.hpp"
 
+uint32_t __internal_getCurrentDeviceIndex() {
+  return __internal_getCurrentDevice();
+}
+
 cudaError_t __helper_cuda_memcpy_async_host_to_host(void *dst, const void *src,
     size_t count, cudaStream_t stream) {
   cudaError_t ret;
@@ -25,6 +29,23 @@ cudaError_t __helper_cuda_memcpy_async_host_to_device(void *dst, const void *src
 cudaError_t __helper_cuda_memcpy_async_device_to_host(void *dst, const void *src,
     size_t count, cudaStream_t stream) {
   cudaError_t ret;
+
+/*
+  GPUMemoryServer::Client::getInstance().matchCurrentGPU();
+
+  ret = cudaStreamSynchronize(stream);
+  if (ret != 0) {
+    printf("###### __helper_cuda_memcpy_async_device_to_host cudaStreamSynchronize ret %d\n", ret);
+  }
+
+  printf("__helper_cuda_memcpy_async_device_to_host   src  %p  dst  %p\n", src, dst);
+
+  cudaPointerAttributes at;
+  ret = cudaPointerGetAttributes(&at, src);
+  printf("src attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, at.type, at.device, at.devicePointer, at.hostPointer);
+
+  ret = cudaMemcpyAsync(dst, src, count, cudaMemcpyDeviceToHost, stream);
+*/
   ret = cudaMemcpyAsync(dst, __translate_ptr(src), count, cudaMemcpyDeviceToHost, stream);
   return ret;
 }
@@ -101,7 +122,7 @@ cudaError_t __helper_create_stream(cudaStream_t *pStream, unsigned int flags, in
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
                                    void **args, size_t sharedMem, cudaStream_t stream) {
   //this might trigger and to migration
-  __internal_kernelIn();
+  //__internal_kernelIn();
 
   uint32_t cur_dvc;
   if (__internal_allContextsEnabled())
@@ -109,22 +130,22 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   else
     cur_dvc = 0;
 
-  printf("__helper_launch_kernel on device [%d]\n", cur_dvc);
+  printf("__helper_launch_kernel on device slot [%d]\n", cur_dvc);
 
   if (func == NULL) {
     return (cudaError_t)CUDA_ERROR_INVALID_PTX;
   }
 
   if (func->hostfunc[cur_dvc] != hostFun) {
-    std::cerr << "search host func " << hostFun << " -> stored " << (void *)func->hostfunc[cur_dvc] << " (device func "
-              << (void *)func->cufunc[cur_dvc] << ")";
+    //std::cerr << "search host func " << hostFun << " -> stored " << (void *)func->hostfunc[cur_dvc] << " (device func "
+    //          << (void *)func->cufunc[cur_dvc] << ")";
   } else {
     std::cerr << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc[cur_dvc] << std::endl;
   }
   //__helper_print_kernel_info(func, args);
 
-  std::cerr << "function metadata (" << (void *)func << ") for local " << func->hostfunc[cur_dvc] << ", cufunc "
-            << (void *)func->cufunc[cur_dvc] << ", argc " << func->argc << std::endl;
+  //std::cerr << "function metadata (" << (void *)func << ") for local " << func->hostfunc[cur_dvc] << ", cufunc "
+  //          << (void *)func->cufunc[cur_dvc] << ", argc " << func->argc << std::endl;
 
   cudaError_t ret = (cudaError_t)CUDA_ERROR_PROFILER_ALREADY_STOPPED;
   //if we need to figure out the correct context to get function
@@ -132,7 +153,6 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
     for (int i = 0; i < func->argc; i++) {
       //TODO: I'm just throwing pointers at the dict. there is a probability that pointers collide and we mess up
       printf("  arg %d is handle? %d   size %d\n", i, func->args[i].is_handle, func->args[i].size);
-      //printf("p1 %p   p2 %p \n", args[i], *((void **)args[i]));
       //TODO: we need something that says if something is a pointer or not
       if (func->args[i].size == 8) {
         *((void**)args[i]) = __translate_ptr(*((void **)args[i]));
@@ -149,12 +169,13 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   }
   // if not with migration, just get over it and do
   else {
+    GPUMemoryServer::Client::getInstance().matchCurrentGPU();
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[0], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y, blockDim.z,
-                                      sharedMem, (CUstream)stream, args, NULL);
+                                      sharedMem, 0, args, NULL);
     printf(">>> cuLaunchKernel returned %d\n", ret);
 
     //TODO: fix
-    __internal_kernelOut();
+    //__internal_kernelOut();
     return ret;
   }
 }
@@ -176,6 +197,7 @@ void __helper_init_module(struct fatbin_wrapper *fatCubin, void **handle, CUmodu
     cudaSetDevice(__internal_getCurrentDevice());
   }
   else {
+    GPUMemoryServer::Client::getInstance().matchCurrentGPU();
     //opt passes no handles, so we have to register
     if (handle == 0) {
       handle =  __cudaRegisterFatBinary(fatCubin);
@@ -205,6 +227,7 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
     return ret;
   }
   else {
+    GPUMemoryServer::Client::getInstance().matchCurrentGPU();
     return cuModuleLoad(module, fname);
   }
 }
@@ -244,12 +267,18 @@ void __helper_register_function(struct fatbin_function *func, const char *hostFu
 
     // Only register the first host function
     //if (func->hostfunc != NULL) return;
-    if (func->hostfunc[i] != NULL) continue;
+    if (func->hostfunc[i] != NULL) {
+      std::cerr << "----------------------- func->hostfunc[i] != NULL in __helper_register_function------------"  << std::endl;
+      continue;
+    }
 
     //this call needs to be done in each context
     if (__internal_allContextsEnabled()) {
       //printf("  __helper_register_function  setting device to %d\n", i);
       cudaSetDevice(i);
+    }
+    else {
+      GPUMemoryServer::Client::getInstance().matchCurrentGPU();
     }
 
     CUresult ret = cuModuleGetFunction(&func->cufunc[i], module[i], deviceName);
@@ -257,8 +286,9 @@ void __helper_register_function(struct fatbin_function *func, const char *hostFu
       LOG_ERROR << "cuModuleGetFunction fail with " << ret;
       throw std::runtime_error("failed to get module function");
     }
-    std::cerr << "*** __helper_register_function kernel at device " << i << " host func " << std::hex << (uintptr_t)hostFun << " -> device func " << (uintptr_t)func->cufunc[i]
-      << " deviceName " << deviceName << std::endl;
+    
+    //std::cerr << "*** __helper_register_function kernel at device slot " << i << " host func " << std::hex << (uintptr_t)hostFun << " -> device func " << (uintptr_t)func->cufunc[i]
+    //  << " deviceName " << deviceName << std::endl;
     func->hostfunc[i] = (void *)hostFun;
     func->module[i] = module[i];
   }

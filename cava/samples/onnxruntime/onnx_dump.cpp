@@ -582,7 +582,7 @@ bytes\n", hostVar, deviceAddress, deviceName, size);
 ava_begin_replacement;
 EXPORTED void CUDARTAPI __cudaRegisterVar(void **fatCubinHandle, char *hostVar, char *deviceAddress,
                                           const char *deviceName, int ext, size_t size, int constant, int global) {
-  fprintf(stderr, "__cudaRegisterVar is a dummpy implementation. ");
+  fprintf(stderr, "__cudaRegisterVar is a dummy implementation. ");
   fprintf(stderr, "hostPtr=%p; deviceAddress=%s; deviceName=%s; Registering const memory of %lu bytes\n", hostVar,
           deviceAddress, deviceName, size);
 }
@@ -847,38 +847,65 @@ cudaError_t CUDARTAPI cudaLaunch(const void *func) { ava_unsupported; }
 
 cudaError_t CUDARTAPI cudaSetupArgument(const void *arg, size_t size, size_t offset) { ava_unsupported; }
 
+
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaGetDevice(int *device) {
+  ava_disable_native_call;
   ava_argument(device) {
     ava_out;
     ava_buffer(1);
   }
+
+  if (ava_is_worker) {
+    *device = 0;
+    return (cudaError_t)0;
+  }
 }
 
 __cudart_builtin__ cudaError_t CUDARTAPI cudaGetDeviceCount(int *count) {
+  ava_disable_native_call;
   ava_argument(count) {
     ava_out;
     ava_buffer(1);
   }
+  if (ava_is_worker) {
+    *count = 1;
+    return (cudaError_t)0;
+  }
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaGetDeviceProperties(struct cudaDeviceProp *prop, int device) {
+  ava_disable_native_call;
   ava_argument(prop) {
     ava_out;
     ava_buffer(1);
+  }
+
+  if (ava_is_worker) {
+    cudaGetDeviceProperties(prop, __internal_getCurrentDeviceIndex());
   }
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaDeviceGetAttribute(int *value, enum cudaDeviceAttr attr,
                                                                          int device) {
+  ava_disable_native_call;
   ava_argument(value) {
     ava_out;
     ava_buffer(1);
+  }
+
+  if (ava_is_worker) {
+    cudaDeviceGetAttribute(value, attr, __internal_getCurrentDeviceIndex());
   }
 }
 
 __host__ cudaError_t CUDARTAPI cudaDeviceReset(void);
 
-__host__ cudaError_t CUDARTAPI cudaSetDevice(int device);
+__host__ cudaError_t CUDARTAPI cudaSetDevice(int device) { 
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return (cudaError_t)0;
+  }
+}
 
 __host__ cudaError_t CUDARTAPI cudaGetSymbolAddress(void **devPtr, const void *symbol) {
   ava_argument(devPtr) {
@@ -1145,16 +1172,26 @@ CUresult CUDAAPI cuModuleLoadFatBinary(CUmodule *module, const void *fatCubin) {
 }
 
 CUresult CUDAAPI cuDeviceGetCount(int *count) {
+  ava_disable_native_call;
   ava_argument(count) {
     ava_out;
     ava_buffer(1);
   }
+  if (ava_is_worker) {
+    *count = 1;
+    return (CUresult) 0;
+  }
 }
-
 CUresult CUDAAPI cuDeviceGet(CUdevice *device, int ordinal) {
+  ava_disable_native_call;
   ava_argument(device) {
     ava_out;
     ava_buffer(1);
+    ava_element ava_handle;
+  }
+
+  if (ava_is_worker) {
+    return cuDeviceGet(device, __internal_getCurrentDeviceIndex());
   }
 }
 

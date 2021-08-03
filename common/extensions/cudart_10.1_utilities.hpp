@@ -134,6 +134,8 @@ CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned
 cudaError_t __internal_cudaMalloc(void **devPtr, size_t size);
 cudaError_t __internal_cudaFree(void *devPtr);
 
+uint32_t __internal_getCurrentDeviceIndex();
+
 #if defined(__cplusplus)
 }
 #endif /* __cplusplus */

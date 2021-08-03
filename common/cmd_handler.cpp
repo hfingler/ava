@@ -27,18 +27,26 @@ using namespace std;
 #include <time.h>
 
 #include <chrono>
+#include <thread>
 #include <condition_variable>
 #include <mutex>
 
 /*
  *   two condition variables to make thread and worker synchronize
  */
-bool received_vmid(false);
+std::atomic<bool> received_vmid(false);
 std::mutex received_vmid_mutex;
 std::condition_variable received_vmid_cv;
-bool continue_thread(false);
-std::mutex continue_thread_mutex;
-std::condition_variable continue_thread_cv;
+
+//stuff to block until load
+std::mutex cubin_loaded_mutex;
+std::atomic<bool> cubin_loaded(false);
+std::condition_variable cubin_loaded_cv;
+
+//stuff to block until load
+std::mutex threads_ready_mutex;
+std::atomic<bool> threads_ready(false);
+std::condition_variable threads_ready_cv;
 
 //helpers to synchronize threads
 void wait_for_worker_setup() {
@@ -48,16 +56,37 @@ void wait_for_worker_setup() {
       received_vmid_cv.wait(lk);
 }
 
-void notify_worker_done() {
-  std::unique_lock<std::mutex> lk(continue_thread_mutex);
-  continue_thread = true;
-  continue_thread_cv.notify_one();
+void worker_setup_done() {
+  std::unique_lock<std::mutex> lk(received_vmid_mutex);
+  received_vmid = true;
+  printf("CV: cmd_handler notifying vmid was received..\n");
+  received_vmid_cv.notify_all();
 }
 
-//stuff to block until load
-std::mutex first_thread;
-bool first_thread_done(false);
+void wait_for_cubin_loaded() {
+  //wait for worker to set up and let us go
+  std::unique_lock<std::mutex> lk(cubin_loaded_mutex);
+  while (!cubin_loaded)
+      cubin_loaded_cv.wait(lk);
+}
 
+void set_cubin_loaded() {
+  std::unique_lock<std::mutex> lk(cubin_loaded_mutex);
+  cubin_loaded = true;
+  cubin_loaded_cv.notify_all();
+}
+
+void release_shadow_threads() {
+  std::unique_lock<std::mutex> lk(threads_ready_mutex);
+  threads_ready = true;
+  threads_ready_cv.notify_all();
+}
+
+void wait_for_shadow_threads_release() {
+  std::unique_lock<std::mutex> lk(threads_ready_mutex);
+  while (!threads_ready)
+      threads_ready_cv.wait(lk);
+}
 
 // Internal flag set by the first call to init_command_handler
 EXPORTED_WEAKLY volatile int init_command_handler_executed;
@@ -145,6 +174,14 @@ void handle_command_and_notify(struct command_channel *chan, struct command_base
   auto context = ava::CommonContext::instance();
 
 #ifdef AVA_WORKER
+  //printf("before lock.  %d   %d  %d\n", int(cubin_loaded), cmd->command_id == COMMAND_HANDLER_REGISTER_VMID, cmd->command_id == COMMAND_HANDLER_REGISTER_DUMP_DIR);
+  //if cubin is not loaded we gotta wait, but let the load cmds go through
+  if (!threads_ready && cmd->command_id != COMMAND_HANDLER_REGISTER_VMID && cmd->command_id != COMMAND_HANDLER_REGISTER_DUMP_DIR) {
+    //wait for worker to set up and let us go
+    wait_for_shadow_threads_release();
+    printf("  #### shadow thread unlocked for handling!\n");
+  }
+
   if (tl_current_device == -1) {
     cudaSetDevice(context->current_device);
     tl_current_device = context->current_device;
@@ -155,6 +192,7 @@ void handle_command_and_notify(struct command_channel *chan, struct command_base
     cudaSetDevice(context->current_device);
     tl_current_device = context->current_device;
   }
+
 #endif
 
   handle_command(chan, context->nw_global_handle_pool, (struct command_channel *)nw_record_command_channel, cmd);
@@ -183,8 +221,11 @@ static void *dispatch_thread_impl(void *userdata) {
 
 EXPORTED_WEAKLY void init_command_handler(struct command_channel *(*channel_create)()) {
   //reset the loading part
-  first_thread_done = false;
-  
+  cubin_loaded = false;
+  received_vmid = false;
+  threads_ready = false;
+  //kill_all_shadow_threads();
+
   pthread_mutex_lock(&nw_handler_lock);
   if (!init_command_handler_executed) {
     nw_global_command_channel = channel_create();
@@ -424,26 +465,8 @@ void internal_api_handler(struct command_channel *chan, struct nw_handle_pool *h
 
   case COMMAND_HANDLER_REGISTER_VMID: {
     svless_vmid = std::string(cmd->reserved_area);
-
-    {
-      //notify worker that we got the data
-      std::unique_lock<std::mutex> lk(received_vmid_mutex);
-      received_vmid = true;
-      printf("CV: cmd_handler notifying vmid was received..\n");
-      received_vmid_cv.notify_one();
-    }
-
-    {
-      //wait for worker to set up and let us go
-      std::unique_lock<std::mutex> lk(continue_thread_mutex);
-      while (!continue_thread)
-          continue_thread_cv.wait(lk);
-      printf("CV: cmd_handler continuing..\n");
-    }
-
-    //loading is done
-    first_thread_done = true;
-    first_thread.unlock();
+    //notify worker we set up the vmid
+    worker_setup_done();
     break;
   }
 
@@ -463,6 +486,10 @@ void internal_api_handler(struct command_channel *chan, struct nw_handle_pool *h
 #ifdef AVA_PRELOAD_CUBIN
     ava_load_cubin_worker(dump_dir);
 #endif
+
+    printf("  !!! cubin loading done, signaling\n");
+    //loading is done
+    set_cubin_loaded();
 
     break;
   }

@@ -116,9 +116,11 @@ namespace GPUMemoryServer {
     }
 
     cudaError_t Client::localMalloc(void** devPtr, size_t size) {
+        matchCurrentGPU();
         cudaError_t err = cudaMalloc(devPtr, size);
         local_allocs.emplace((uint64_t)*devPtr, std::make_unique<Client::LocalAlloc>(*devPtr, size, current_device));
         //report to server
+        //printf("malloc: %p\n", *devPtr);
         GPUMemoryServer::Client::getInstance().reportMalloc(size); 
         return err;
     }
@@ -150,7 +152,7 @@ namespace GPUMemoryServer {
     }
 
     void Client::fullCleanup() {
-        reportCleanup();
+        reportCleanup(0);  //TODO
         local_allocs.clear();
 
         //iterate over map of maps, destroying events
@@ -163,12 +165,10 @@ namespace GPUMemoryServer {
     }
 
     //clean up all memory that are in current_device ONLY
-    void Client::cleanup() {
+    void Client::cleanup(uint32_t cd) {
         //report to server
-        reportCleanup();
+        reportCleanup(cd);
         //erase only memory in GPU current_device
-        uint32_t cd = current_device;
-
         for (auto it = local_allocs.begin(); it != local_allocs.end(); ) {
             if (it->second->device_id == cd)
                 it = local_allocs.erase(it);
@@ -177,9 +177,10 @@ namespace GPUMemoryServer {
         }
     }
 
-    void Client::reportCleanup() {
+    void Client::reportCleanup(uint32_t gpuid) {
         Request req;
         req.type = RequestType::FINISHED;
+        //TODO: report cleanup only device
         sendRequest(req);
     }
 
@@ -208,21 +209,15 @@ namespace GPUMemoryServer {
             connectToGPU(current_device);
         }
 
-        printf(" !! sending request type [%d]  to %d\n", req.type, current_device);
+        //printf(" !! sending request type [%d]  to %d\n", req.type, current_device);
         int rc = zmq_send(sockets[current_device], &req, sizeof(Request), 0);
-        printf(" !!! zmq_send ret %d, waiting for reply\n", rc);
-
         if (rc == -1) {
             printf(" !!!!!!!! zmq_send errno %d\n", errno);
         }
 
         Reply rep;
         zmq_recv(sockets[current_device], &rep, sizeof(Reply), 0);
-        printf(" !!! received\n");
-
         handleReply(rep);
-        printf(" !!! reply handled\n");
-
         sockmtx.unlock();
     }
 
@@ -231,8 +226,20 @@ namespace GPUMemoryServer {
             migrateToGPU(reply.target_device, reply.migrate);
     }
 
+    void Client::matchCurrentGPU() {
+        /*
+        int d;
+        cudaGetDevice(&d);
+        if (current_device != d) {
+            printf("  ###WRONG### !!! Worker [%s] is at the wrong GPU somehow cuda %d  client %d\n", uuid.c_str(), d, current_device);
+            setCurrentGPU(current_device);
+        }
+        */
+    }
+
     void Client::setCurrentGPU(int id) {
         cudaError_t err = cudaSetDevice(id);
+        cudaFree(0);
         if (err) {
             printf("CUDA err on cudaSetDevice(%d): %d\n", id, err);
             exit(1);
@@ -277,7 +284,7 @@ namespace GPUMemoryServer {
     }
 
     void Client::migrateToGPU(uint32_t new_gpuid, Migration migration_type) {
-        printf("GPU server told us to ask for migration\n");
+        //printf("GPU server told us to ask for migration\n");
        
         if (migration_type == Migration::KERNEL) {
             printf("Migration by kernel mode, changing device to [%d]\n", new_gpuid);
@@ -306,6 +313,7 @@ namespace GPUMemoryServer {
                 printf("  [%s] copying %d bytes GPUs [%d]  ->  [%d]\n", uuid.c_str(), al.second, og_device, new_gpuid);
                 printf("      [%p] -> %p\n", al.first, devPtr);
                 
+                /*
                 char b[8];
                 cudaMemcpy((void*)b, devPtr, 8, cudaMemcpyDeviceToHost);
                 printf("first 8 bytes of %p on new device\n      ", devPtr);
@@ -313,11 +321,11 @@ namespace GPUMemoryServer {
                     printf("%#02x ", b[i]);
                 }
                 printf("\n");
+                */
             }
 
             //now that data was moved, cleanup
-            setOriginalGPU();
-            cleanup();
+            cleanup(og_device);
             printf("Local migration: cleaned up data on old GPU\n");
             setCurrentGPU(new_gpuid);
         }

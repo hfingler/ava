@@ -46,11 +46,11 @@ void Server::run() {
     Reply rep;
     Request req;
     while(1) {
-        printf(" >> server %d waiting for request\n", gpu);
+        //printf(" >> server %d waiting for request\n", gpu);
         zmq_recv(responder, &req, sizeof(Request), 0);
-        printf(" >> server %d got a request\n", gpu);
+        //printf(" >> server %d got a request\n", gpu);
         handleRequest(req, rep);
-        printf(" >> sending response\n");
+        //printf(" >> sending response\n");
         zmq_send(responder, &rep, sizeof(Reply), 0);
     }
 }
