@@ -1,7 +1,13 @@
 #include "common/extensions/cudnn_optimization.h"
 
+#include <fmt/core.h>
 #include <glib.h>
 #include <stdint.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
+#include <gsl/gsl>
+#include <iostream>
 
 #include "common/endpoint_lib.hpp"
 
@@ -11,6 +17,8 @@ GQueue *cublas_handles;
 // TODO(#86): Better way to avoid linking issue (referenced in spec utilities).
 void guestlib_cudnn_opt_init(void) {}
 void guestlib_cudnn_opt_fini(void) {}
+
+static inline int __gettid() { return gsl::narrow_cast<int>(syscall(SYS_gettid)); }
 
 void worker_cudnn_opt_init(void) {
   cudnnHandle_t cudnn_handle;
@@ -153,15 +161,37 @@ cudnnStatus_t __pool_cudnnDestroyFilterDescriptor(cudnnFilterDescriptor_t *filte
 }
 
 cudnnStatus_t __cudnnCreate(cudnnHandle_t *handle) {
-  if (g_queue_is_empty(cudnn_handles)) return cudnnCreate(handle);
+  if (g_queue_is_empty(cudnn_handles)) {
+    cudnnStatus_t ret = cudnnCreate(handle);
+#ifndef NDEBUG
+    auto tid = __gettid();
+    std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+    return ret;
+  }
 
   *handle = (cudnnHandle_t)g_queue_pop_head(cudnn_handles);
+#ifndef NDEBUG
+  auto tid = __gettid();
+  std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, CUDNN_STATUS_SUCCESS);
+#endif
   return CUDNN_STATUS_SUCCESS;
 }
 
 cublasStatus_t __cublasCreate(cublasHandle_t *handle) {
-  if (g_queue_is_empty(cublas_handles)) return cublasCreate(handle);
+  if (g_queue_is_empty(cublas_handles)) {
+    cublasStatus_t ret = cublasCreate(handle);
+#ifndef NDEBUG
+    auto tid = __gettid();
+    std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+    return ret;
+  }
 
   *handle = (cublasHandle_t)g_queue_pop_head(cublas_handles);
+#ifndef NDEBUG
+  auto tid = __gettid();
+  std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, CUBLAS_STATUS_SUCCESS);
+#endif
   return CUBLAS_STATUS_SUCCESS;
 }

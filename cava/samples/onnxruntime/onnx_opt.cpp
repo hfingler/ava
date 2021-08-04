@@ -788,10 +788,9 @@ bytes\n", hostVar, deviceAddress, deviceName, size);
 ava_begin_replacement;
 EXPORTED void CUDARTAPI __cudaRegisterVar(void **fatCubinHandle, char *hostVar, char *deviceAddress,
                                           const char *deviceName, int ext, size_t size, int constant, int global) {
-  fprintf(stderr, "__cudaRegisterVar is a dummpy implementation\n");
-  fprintf(stderr,
-          "__cudaRegisterVar: hostPtr=%p; deviceAddress=%s; deviceName=%s; Registering const memory of %lu bytes\n",
-          hostVar, deviceAddress, deviceName, size);
+  fprintf(stderr, "__cudaRegisterVar is a dummpy implementation. ");
+  fprintf(stderr, "hostPtr=%p; deviceAddress=%s; deviceName=%s; Registering const memory of %lu bytes\n", hostVar,
+          deviceAddress, deviceName, size);
 }
 
 EXPORTED void CUDARTAPI __cudaRegisterFatBinaryEnd(void **fatCubinHandle) {
@@ -1040,7 +1039,7 @@ __host__ cudaError_t CUDARTAPI cudaMemcpy(void *dst, const void *src, size_t cou
   cudaError_t ret;
   if (ava_is_worker) {
     ret = __helper_cudaMemcpy(dst, src, count, kind);
-  #warning This will bypass the resource reporting routine.
+#warning This will bypass the resource reporting routine.
     return ret;
   }
 }
@@ -1094,6 +1093,7 @@ __cudart_builtin__ cudaError_t CUDARTAPI cudaGetDeviceCount(int *count) {
     return (cudaError_t)0;
   }
 }
+
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaGetDeviceProperties(struct cudaDeviceProp *prop, int device) {
   ava_disable_native_call;
   ava_argument(prop) {
@@ -1102,8 +1102,9 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaGetDeviceProperties(struct
   }
 
   if (ava_is_worker) {
+    cudaError_t ret = __helper_cudaGetDeviceProperties(prop, device);
 #warning This will bypass the resource reporting routine.
-    return cudaGetDeviceProperties(prop, __internal_getCurrentDeviceIndex());
+    return ret;
   }
 }
 
@@ -1116,8 +1117,9 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaDeviceGetAttribute(int *va
   }
 
   if (ava_is_worker) {
+    cudaError_t ret = __helper_cudaDeviceGetAttribute(value, attr, __internal_getCurrentDeviceIndex());
 #warning This will bypass the resource reporting routine.
-    return cudaDeviceGetAttribute(value, attr, __internal_getCurrentDeviceIndex());
+    return ret;
   }
 }
 
@@ -1394,8 +1396,8 @@ __host__ cudaError_t CUDARTAPI cudaMemGetInfo(size_t *_free, size_t *total) {
 
 /* CUDA driver API */
 
-CUresult CUDAAPI cuInit(unsigned int Flags) {
-  ava_disable_native_call;
+ava_begin_replacement;
+EXPORTED CUresult CUDAAPI cuInit(unsigned int Flags) {
   return CUDA_SUCCESS;
   /*
   if (ava_is_worker) {
@@ -1408,6 +1410,7 @@ CUresult CUDAAPI cuInit(unsigned int Flags) {
   }
   */
 }
+ava_end_replacement;
 
 CUresult CUDAAPI cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const char *name) {
   ava_argument(hfunc) {
@@ -1512,7 +1515,12 @@ CUresult CUDAAPI cuDeviceGet(CUdevice *device, int ordinal) {
     if (ordinal != 0) {
       return CUDA_ERROR_INVALID_VALUE;
     } else {
-      return cuDeviceGet(device, __internal_getCurrentDeviceIndex());
+      CUresult ret = cuDeviceGet(device, __internal_getCurrentDeviceIndex());
+#ifndef NDEBUG
+      auto tid = gsl::narrow_cast<int>(syscall(SYS_gettid));
+      std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+      return ret;
     }
   }
 }
@@ -1552,7 +1560,7 @@ CUresult CUDAAPI cuDeviceGetName(char *name, int len, CUdevice dev) {
   CUresult ret;
   if (ava_is_worker) {
     ret = __helper_cuDeviceGetName(name, len, dev);
-  #warning This will bypass the resource reporting routine.
+#warning This will bypass the resource reporting routine.
     return ret;
   }
 }
@@ -1632,14 +1640,10 @@ CUresult CUDAAPI cuCtxDestroy(CUcontext ctx) {
 }
 
 CUresult CUDAAPI cuCtxGetCurrent(CUcontext *pctx) {
-  ava_disable_native_call;
   ava_argument(pctx) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
-  }
-  if (ava_is_worker) {
-    return cuCtxGetCurrent(pctx);
   }
 }
 
@@ -13248,7 +13252,7 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaFuncGetAttributes(struct c
     ret = __helper_func_get_attributes(
         attr, ((struct fatbin_function *)g_ptr_array_index(ava_metadata((void *)0)->fatbin_funcs, (intptr_t)func_id)),
         func_id);
-  #warning This will bypass the resource reporting routine.
+#warning This will bypass the resource reporting routine.
     return ret;
   }
 }
@@ -13281,7 +13285,7 @@ cudaOccupancyMaxActiveBlocksPerMultiprocessor(int *numBlocks, const void *func, 
         numBlocks,
         ((struct fatbin_function *)g_ptr_array_index(ava_metadata((void *)0)->fatbin_funcs, (intptr_t)func_id)),
         func_id, blockSize, dynamicSMemSize);
-  #warning This will bypass the resource reporting routine.
+#warning This will bypass the resource reporting routine.
     return ret;
   }
 }

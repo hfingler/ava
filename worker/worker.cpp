@@ -6,6 +6,7 @@
 #include <execinfo.h>
 #include <fcntl.h>
 #include <fmt/core.h>
+#include <nvml.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -14,25 +15,21 @@
 #include <sys/syscall.h>
 #include <time.h>
 #include <unistd.h>
+#include <zmq.h>
 
 #include <cstdio>
 #include <gsl/gsl>
 #include <iostream>
 #include <string>
 
-#include <zmq.h>
-#include <nvml.h>
-
 #include "common/cmd_channel_impl.hpp"
 #include "common/cmd_handler.hpp"
-#include "common/socket.hpp"
+#include "common/common_context.h"
 #include "common/linkage.h"
+#include "common/socket.hpp"
+#include "extensions/memory_server/client.hpp"
 #include "plog/Initializers/RollingFileInitializer.h"
 #include "worker_context.h"
-#include "common/common_context.h"
-
-#include "extensions/memory_server/client.hpp"
-
 
 struct command_channel *chan;
 struct command_channel *chan_hv = NULL;
@@ -116,9 +113,9 @@ static void create_cuda_contexts() {
 
   __internal_setDeviceCount(device_count);
 
-  for (int i = 0 ; i < device_count ; i++) {
+  for (int i = 0; i < device_count; i++) {
     cudaSetDevice(i);
-    //this forcibly creates a primary context, which is lazily-created
+    // this forcibly creates a primary context, which is lazily-created
     cudaFree(0);
     std::cerr << "Created CUDA context on device [" << i << "]" << std::endl;
   }
@@ -138,21 +135,21 @@ int main(int argc, char *argv[]) {
   std::string gpu_device = std::string(gpu_device_str);
   /* set current device*/
   GPUMemoryServer::Client::getInstance().setCurrentGPU(std::stoi(gpu_device));
+  static auto worker_context = ava::WorkerContext::instance();
 
-  //AVA_WORKER_UUID is a unique, starting at 0, id we can use
+  // AVA_WORKER_UUID is a unique, starting at 0, id we can use
   char const *cworker_uuid = getenv("AVA_WORKER_UUID");
   std::string worker_uuid = std::string(cworker_uuid);
 
-  //check if we are enabling all device contexts
+  // check if we are enabling all device contexts
   std::string enable_all_ctx = std::string(getenv("AVA_ENABLE_ALL_CTX"));
   if (enable_all_ctx == "yes") {
     // preemptively create context on all GPUs
     create_cuda_contexts();
     __internal_setAllContextsEnabled(true);
-  }
-  else {
+  } else {
     cudaSetDevice(std::stoi(gpu_device));
-    //this forcibly creates a primary context, which is lazily-created
+    // this forcibly creates a primary context, which is lazily-created
     cudaFree(0);
     __internal_setAllContextsEnabled(false);
   }
@@ -160,8 +157,7 @@ int main(int argc, char *argv[]) {
   std::string enable_reporting = std::string(getenv("AVA_ENABLE_REPORTING"));
   if (enable_reporting == "yes") {
     GPUMemoryServer::Client::getInstance().enable_reporting = true;
-  }
-  else {
+  } else {
     GPUMemoryServer::Client::getInstance().enable_reporting = false;
   }
 
@@ -181,23 +177,22 @@ int main(int argc, char *argv[]) {
   /* parse arguments */
   listen_port = (unsigned int)atoi(argv[1]);
   wctx->set_api_server_listen_port(listen_port);
-  std::cerr << "[worker#" << listen_port << "] To check the state of AvA remoting progress, use `tail -f " << wctx->log_file
-            << "`" << std::endl;
-
+  std::cerr << "[worker#" << listen_port << "] To check the state of AvA remoting progress, use `tail -f "
+            << wctx->log_file << "`" << std::endl;
 
   if (!getenv("AVA_CHANNEL") || !strcmp(getenv("AVA_CHANNEL"), "TCP")) {
     chan_hv = NULL;
     chan = command_channel_socket_tcp_worker_new(listen_port);
     nw_record_command_channel = command_channel_log_new(listen_port);
-    //this sets API id and other stuff
+    // this sets API id and other stuff
     init_internal_command_handler();
 
-    //only loop if we are in serverless mode
+    // only loop if we are in serverless mode
     do {
-      //get a guestlib connection
+      // get a guestlib connection
       std::cerr << "[worker#" << listen_port << "] waiting for connection" << std::endl;
       chan = command_channel_listen(chan);
-      //this launches the thread that listens for commands
+      // this launches the thread that listens for commands
       init_command_handler(channel_create);
 
       /*
@@ -205,46 +200,44 @@ int main(int argc, char *argv[]) {
        */
       wait_for_worker_setup();
       printf("CV: worker was notified vmid was received..\n");
-      //if this is serverless, we need to update our id
+      // if this is serverless, we need to update our id
       if (svless_vmid == "NO_VMID" || svless_vmid == "") {
         printf("svless_vmid is default, using %s\n", worker_uuid.c_str());
         GPUMemoryServer::Client::getInstance().setUuid(worker_uuid);
-      }
-      else {
+      } else {
         printf("got vmid from cmd channel: %s\n", svless_vmid.c_str());
         GPUMemoryServer::Client::getInstance().setUuid(svless_vmid);
       }
-      
-      //now wait for cubin flag to be set
+
+      // now wait for cubin flag to be set
       wait_for_cubin_loaded();
       printf("CV: worker was notified cubin was loaded..\n");
-      //report our max memory requested
+      // report our max memory requested
       GPUMemoryServer::Client::getInstance().reportMemoryRequested(requested_gpu_mem);
 
       std::cerr << "[worker#" << listen_port << "] is free to work now" << std::endl;
-      //and now all threads can work
+      // and now all threads can work
       release_shadow_threads();
 
       wait_for_command_handler();
       destroy_command_handler(false);
       std::cerr << "[worker#" << listen_port << "] worker is done, looping." << std::endl;
 
-      //clean up allocations, local and remote
+      // clean up allocations, local and remote
       GPUMemoryServer::Client::getInstance().fullCleanup();
-      
-      //explode and reset cuda contexts
+
+      // explode and reset cuda contexts
       cudaDeviceReset();
-      if (enable_all_ctx == "yes") 
+      if (enable_all_ctx == "yes")
         create_cuda_contexts();
       else {
         cudaSetDevice(std::stoi(gpu_device));
         cudaFree(0);
       }
 
-
-      //go back to original GPU
+      // go back to original GPU
       GPUMemoryServer::Client::getInstance().setOriginalGPU();
-    } while(std::getenv("SERVERLESS_MODE"));
+    } while (std::getenv("SERVERLESS_MODE"));
 
     std::cerr << "[worker#" << listen_port << "] freeing channel and quiting." << std::endl;
     command_channel_free(chan);
@@ -255,7 +248,7 @@ int main(int argc, char *argv[]) {
     return 0;
   }
 
-  //nw_record_command_channel = command_channel_log_new(listen_port);
+  // nw_record_command_channel = command_channel_log_new(listen_port);
   init_internal_command_handler();
   init_command_handler(channel_create);
   LOG_INFO << "[worker#" << listen_port << "] start polling tasks";

@@ -144,6 +144,9 @@ CUresult __helper_cuDevicePrimaryCtxSetFlags(CUdevice dev, unsigned int flags);
 CUresult __helper_cuDeviceTotalMem(size_t* bytes, CUdevice dev);
 CUresult __helper_cuDeviceGetPCIBusId(char *pciBusId, int len, CUdevice dev);
 CUresult __helper_cuDeviceComputeCapability(int *major, int *minor, CUdevice device);
+cudaError_t __helper_cudaGetDeviceProperties(struct cudaDeviceProp *prop, int device);
+cudaError_t __helper_cudaDeviceGetAttribute(int *value, enum cudaDeviceAttr attr,
+                                            int device);
 
 #if defined(__cplusplus)
 }

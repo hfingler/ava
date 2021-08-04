@@ -3,13 +3,19 @@
 #include <cublas_v2.h>
 #include <cuda.h>
 #include <cuda_runtime_api.h>
+#include <fmt/core.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 
+#include <gsl/gsl>
 #include <iostream>
 
 #include "common/declaration.h"
 #include "common/logging.h"
 #include "cudart_nw_internal.h"
 #include "extensions/memory_server/client.hpp"
+
+static inline int __gettid() { return gsl::narrow_cast<int>(syscall(SYS_gettid)); }
 
 uint32_t __internal_getCurrentDeviceIndex() { return __internal_getCurrentDevice(); }
 
@@ -79,8 +85,13 @@ cublasStatus_t __helper_cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t 
                                        const float *A, int lda, const float *B, int ldb,
                                        const float *beta, /* host or device pointer */
                                        float *C, int ldc, bool alpha_is_gpu, bool beta_is_gpu) {
-  return cublasSgemm(handle, transa, transb, m, n, k, alpha_is_gpu ? __translate_ptr(alpha) : alpha, A, lda, B, ldb,
-                     beta_is_gpu ? __translate_ptr(beta) : beta, C, ldc);
+  auto ret = cublasSgemm(handle, transa, transb, m, n, k, alpha_is_gpu ? __translate_ptr(alpha) : alpha, A, lda, B, ldb,
+                         beta_is_gpu ? __translate_ptr(beta) : beta, C, ldc);
+#ifndef NDEBUG
+  auto tid = __gettid();
+  std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+  return ret;
 }
 
 cudaError_t __helper_create_stream(cudaStream_t *pStream, unsigned int flags, int priority) {
@@ -167,7 +178,10 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
     GPUMemoryServer::Client::getInstance().matchCurrentGPU();
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[0], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
                                       blockDim.z, sharedMem, 0, args, NULL);
-    printf(">>> cuLaunchKernel returned %d\n", ret);
+#ifndef NDEBUG
+    auto tid = __gettid();
+    std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
 
     // TODO: fix
     //__internal_kernelOut();
@@ -226,11 +240,21 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
 }
 
 cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind) {
-  return cudaMemcpy(__translate_ptr(dst), __translate_ptr(src), count, kind);
+  cudaError_t ret = cudaMemcpy(__translate_ptr(dst), __translate_ptr(src), count, kind);
+#ifndef NDEBUG
+  auto tid = __gettid();
+  std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+  return ret;
 }
 
 cudaError_t __helper_cudaMemset(void *devPtr, int value, size_t count) {
-  return cudaMemset(__translate_ptr(devPtr), value, count);
+  cudaError_t ret = cudaMemset(__translate_ptr(devPtr), value, count);
+#ifndef NDEBUG
+  auto tid = __gettid();
+  std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+  return ret;
 }
 
 /**
@@ -324,7 +348,10 @@ cudaError_t __helper_func_get_attributes(struct cudaFuncAttributes *attr, struct
                            func->cufunc[cur_dvc]);
   ret = cuFuncGetAttribute(&attr->preferredShmemCarveout, CU_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT,
                            func->cufunc[cur_dvc]);
-
+#ifndef NDEBUG
+  auto tid = __gettid();
+  std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
   return static_cast<cudaError_t>(ret);
 }
 
@@ -348,8 +375,13 @@ cudaError_t __helper_occupancy_max_active_blocks_per_multiprocessor(int *numBloc
   } else {
     LOG_DEBUG << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc[cur_dvc];
   }
-  return static_cast<cudaError_t>(
+  cudaError_t ret = static_cast<cudaError_t>(
       cuOccupancyMaxActiveBlocksPerMultiprocessor(numBlocks, func->cufunc[cur_dvc], blockSize, dynamicSMemSize));
+#ifndef NDEBUG
+  auto tid = __gettid();
+  std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+  return ret;
 }
 
 cudaError_t __helper_occupancy_max_active_blocks_per_multiprocessor_with_flags(int *numBlocks,
@@ -375,60 +407,128 @@ cudaError_t __helper_occupancy_max_active_blocks_per_multiprocessor_with_flags(i
     LOG_DEBUG << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc[cur_dvc];
   }
 
-  return static_cast<cudaError_t>(cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
+  cudaError_t ret = static_cast<cudaError_t>(cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
       numBlocks, func->cufunc[cur_dvc], blockSize, dynamicSMemSize, flags));
+#ifndef NDEBUG
+  auto tid = __gettid();
+  std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+  return ret;
 }
 
 CUresult __helper_cuDevicePrimaryCtxGetState(CUdevice dev, unsigned int *flags, int *active) {
   CUdevice d;
   cuCtxGetDevice(&d);
-  return cuDevicePrimaryCtxGetState(d, flags, active);
+  CUresult ret = cuDevicePrimaryCtxGetState(d, flags, active);
+#ifndef NDEBUG
+  auto tid = __gettid();
+  std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+  return ret;
 }
 
 CUresult __helper_cuDevicePrimaryCtxRetain(CUcontext *pctx, CUdevice dev) {
   CUdevice d;
   cuCtxGetDevice(&d);
-  return cuDevicePrimaryCtxRetain(pctx, d);
+  CUresult ret = cuDevicePrimaryCtxRetain(pctx, d);
+#ifndef NDEBUG
+  auto tid = __gettid();
+  std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+  return ret;
 }
 
 CUresult __helper_cuDeviceGetName(char *name, int len, CUdevice dev) {
   CUdevice d;
   cuCtxGetDevice(&d);
-  return cuDeviceGetName(name, len, d);
+  CUresult ret = cuDeviceGetName(name, len, d);
+#ifndef NDEBUG
+  auto tid = __gettid();
+  std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+  return ret;
 }
 
 CUresult __helper_cuDeviceGetAttribute(int *pi, CUdevice_attribute attrib, CUdevice dev) {
   CUdevice d;
   cuCtxGetDevice(&d);
-  return cuDeviceGetAttribute(pi, attrib, d);
+  CUresult ret = cuDeviceGetAttribute(pi, attrib, d);
+#ifndef NDEBUG
+  auto tid = __gettid();
+  std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+  return ret;
 }
 
 CUresult __helper_cuDeviceGetUuid(CUuuid *uuid, CUdevice dev) {
   CUdevice d;
   cuCtxGetDevice(&d);
-  return cuDeviceGetUuid(uuid, d);
+  CUresult ret = cuDeviceGetUuid(uuid, d);
+#ifndef NDEBUG
+  auto tid = __gettid();
+  std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+  return ret;
 }
 
 CUresult __helper_cuDevicePrimaryCtxSetFlags(CUdevice dev, unsigned int flags) {
   CUdevice d;
   cuCtxGetDevice(&d);
-  return cuDevicePrimaryCtxSetFlags(d, flags);
+  CUresult ret = cuDevicePrimaryCtxSetFlags(d, flags);
+#ifndef NDEBUG
+  auto tid = __gettid();
+  std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+  return ret;
 }
 
-CUresult __helper_cuDeviceTotalMem(size_t* bytes, CUdevice dev) {
+CUresult __helper_cuDeviceTotalMem(size_t *bytes, CUdevice dev) {
   CUdevice d;
   cuDeviceGet(&d, __internal_getCurrentDeviceIndex());
-  return cuDeviceTotalMem(bytes, d);
+  CUresult ret = cuDeviceTotalMem(bytes, d);
+#ifndef NDEBUG
+  auto tid = __gettid();
+  std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+  return ret;
 }
 
 CUresult __helper_cuDeviceGetPCIBusId(char *pciBusId, int len, CUdevice dev) {
   CUdevice d;
   cuCtxGetDevice(&d);
-  return cuDeviceGetPCIBusId(pciBusId, len, d);
+  CUresult ret = cuDeviceGetPCIBusId(pciBusId, len, d);
+#ifndef NDEBUG
+  auto tid = __gettid();
+  std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+  return ret;
 }
 
 CUresult __helper_cuDeviceComputeCapability(int *major, int *minor, CUdevice device) {
   CUdevice d;
   cuCtxGetDevice(&d);
-  return cuDeviceComputeCapability(major, minor, d);
+  CUresult ret = cuDeviceComputeCapability(major, minor, d);
+#ifndef NDEBUG
+  auto tid = __gettid();
+  std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+  return ret;
+}
+
+cudaError_t __helper_cudaGetDeviceProperties(struct cudaDeviceProp *prop, int device) {
+  cudaError_t ret = cudaGetDeviceProperties(prop, __internal_getCurrentDeviceIndex());
+#ifndef NDEBUG
+  auto tid = __gettid();
+  std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+  return ret;
+}
+
+cudaError_t __helper_cudaDeviceGetAttribute(int *value, enum cudaDeviceAttr attr, int device) {
+  cudaError_t ret = cudaDeviceGetAttribute(value, attr, __internal_getCurrentDeviceIndex());
+#ifndef NDEBUG
+  auto tid = gsl::narrow_cast<int>(syscall(SYS_gettid));
+  std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+  return ret;
 }
