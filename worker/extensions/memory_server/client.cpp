@@ -133,10 +133,15 @@ namespace GPUMemoryServer {
     }
     
     cudaError_t Client::localFree(void* devPtr) {
+        // cudaFree with nullptr does no operation
+        if (devPtr == nullptr) {
+            return cudaSuccess;
+        }
         auto it = local_allocs.find((uint64_t)devPtr);
         if (it == local_allocs.end()) {
-            printf("ILLEGAL cudaFree call!\n");
-            return 1;
+            fprintf(stderr, "ILLEGAL cudaFree call on devPtr %x\n", (uint64_t)devPtr);
+            cudaFree(devPtr);
+            return (cudaError_t)0;
         }
         //report to server
         GPUMemoryServer::Client::getInstance().reportFree(it->second->size); 
