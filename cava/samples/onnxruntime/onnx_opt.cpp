@@ -13908,6 +13908,9 @@ ava_begin_worker_replacement;
 void ava_load_cubin_worker(absl::string_view dump_dir) {
   /* Preload CUDA fat binaries */
   // fatbin_handle_list = g_ptr_array_new();
+#ifdef __AVA_ENABLE_STAT
+  auto begin_ts = ava::GetMonotonicNanoTimestamp();
+#endif
   ava_metadata_reset(&__ava_endpoint, NULL);
   /* Read cubin number */
   int fd;
@@ -13937,6 +13940,10 @@ void ava_load_cubin_worker(absl::string_view dump_dir) {
     // g_ptr_array_add(fatbin_handle_list, (gpointer)fatbin_handle);
   }
   close(fd);
+#ifdef __AVA_ENABLE_STAT
+  auto end_ts = ava::GetMonotonicNanoTimestamp();
+  AVA_DEBUG << fmt::format("LoadFatbin from {}, {}\n", dump_dir, gsl::narrow_cast<int32_t>(end_ts - begin_ts));
+#endif
 }
 
 void __helper_worker_init_epilogue() {
