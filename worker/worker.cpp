@@ -32,6 +32,7 @@
 #include "worker_context.h"
 
 #include "common/extensions/cudnn_optimization.h"
+#include "common/extensions/tcp_timeline_client.hpp"
 
 struct command_channel *chan;
 struct command_channel *chan_hv = NULL;
@@ -135,12 +136,20 @@ int main(int argc, char *argv[]) {
   }
   absl::InitializeSymbolizer(argv[0]);
 
+  char const *ttc_str = getenv("TTC_ADDR");
+  if(ttc_str) {
+    ttc.connect_to(std::string(ttc_str));
+  }
+  //ttc.notify(0);
+
   char const *gpu_device_str = getenv("GPU_DEVICE");
   std::string gpu_device = std::string(gpu_device_str);
   /* set current device*/
   GPUMemoryServer::Client::getInstance().setCurrentGPU(std::stoi(gpu_device));
   //read device count from nvml and set it internally
   nvml_setDeviceCount();
+
+  //ttc.notify(1);
 
   // AVA_WORKER_UUID is a unique, starting at 0, id we can use
   char const *cworker_uuid = getenv("AVA_WORKER_UUID");
@@ -159,12 +168,16 @@ int main(int argc, char *argv[]) {
     __internal_setAllContextsEnabled(false);
   }
 
+  //ttc.notify(2);
+
   //now that we have possibly all contexts created, init stuff
     static auto worker_context = ava::WorkerContext::instance();
 
 #ifdef AVA_PRELOAD_CUBIN
   worker_cudnn_opt_init(2);
 #endif
+
+  //ttc.notify(3);
 
   std::string enable_reporting = std::string(getenv("AVA_ENABLE_REPORTING"));
   if (enable_reporting == "yes") {
@@ -193,24 +206,34 @@ int main(int argc, char *argv[]) {
   std::cerr << "[worker#" << listen_port << "] To check the state of AvA remoting progress, use `tail -f "
             << wctx->log_file << "`" << std::endl;
 
+  //ttc.notify(4);
+
   if (!getenv("AVA_CHANNEL") || !strcmp(getenv("AVA_CHANNEL"), "TCP")) {
     chan_hv = NULL;
     chan = command_channel_socket_tcp_worker_new(listen_port);
     nw_record_command_channel = command_channel_log_new(listen_port);
+
+    //ttc.notify(5);
+
     // this sets API id and other stuff
     init_internal_command_handler();
+
+    //ttc.notify(6);
 
     // only loop if we are in serverless mode
     do {
       // get a guestlib connection
       std::cerr << "[worker#" << listen_port << "] waiting for connection" << std::endl;
+      //ttc.notify(7);
       chan = command_channel_listen(chan);
+      //ttc.notify(8);
       // this launches the thread that listens for commands
       init_command_handler(channel_create);
-
+      //ttc.notify(9);
       /*
        *  sync with worker until we get vmid and memory requested
        */
+      
       wait_for_worker_setup();
       printf("CV: worker was notified vmid was received..\n");
       // if this is serverless, we need to update our id
@@ -224,6 +247,7 @@ int main(int argc, char *argv[]) {
 
       // now wait for cubin flag to be set
       wait_for_cubin_loaded();
+      
       printf("CV: worker was notified cubin was loaded..\n");
       // report our max memory requested
       GPUMemoryServer::Client::getInstance().reportMemoryRequested(requested_gpu_mem);
@@ -231,8 +255,10 @@ int main(int argc, char *argv[]) {
       std::cerr << "[worker#" << listen_port << "] is free to work now" << std::endl;
       // and now all threads can work
       release_shadow_threads();
+      //ttc.notify(10);
 
       wait_for_command_handler();
+      //ttc.notify(11);
       destroy_command_handler(false);
       std::cerr << "[worker#" << listen_port << "] worker is done, looping." << std::endl;
 
@@ -250,6 +276,7 @@ int main(int argc, char *argv[]) {
 
       // go back to original GPU
       GPUMemoryServer::Client::getInstance().setOriginalGPU();
+      //ttc.notify(12);
     } while (std::getenv("SERVERLESS_MODE"));
 
     std::cerr << "[worker#" << listen_port << "] freeing channel and quiting." << std::endl;

@@ -148,6 +148,9 @@ cudaError_t __helper_cudaGetDeviceProperties(struct cudaDeviceProp *prop, int de
 cudaError_t __helper_cudaDeviceGetAttribute(int *value, enum cudaDeviceAttr attr,
                                             int device);
 
+cudaStream_t __helper_translate_stream(cudaStream_t stream);
+void* __helper_translate_ptr(void* ptr);
+
 #if defined(__cplusplus)
 }
 #endif /* __cplusplus */

@@ -13075,52 +13075,44 @@ __host__ cudaError_t CUDARTAPI cudaSetDeviceFlags(unsigned int flags) { ava_unsu
 __host__ cudaError_t CUDARTAPI cudaGetDeviceFlags(unsigned int *flags) { ava_unsupported; }
 
 __host__ cudaError_t CUDARTAPI cudaStreamCreate(cudaStream_t *pStream) {
-  // ava_disable_native_call;
+  ava_disable_native_call;
   ava_argument(pStream) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
   }
-  /*
-    cudaError_t ret;
-    if (ava_is_worker) {
-      ret = __helper_create_stream(pStream, 0, 0);
-      return ret;
-    }
-    */
+
+  if (ava_is_worker) {
+    return __helper_create_stream(pStream, 0, 0);
+  }
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamCreateWithFlags(cudaStream_t *pStream, unsigned int flags) {
-  // ava_disable_native_call;
+  ava_disable_native_call;
   ava_argument(pStream) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
   }
-  /*
-    cudaError_t ret;
-    if (ava_is_worker) {
-      ret = __helper_create_stream(pStream, flags, 0);
-      return ret;
-    }
-    */
+
+  if (ava_is_worker) {
+    return __helper_create_stream(pStream, flags, 0);
+  }
+
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamCreateWithPriority(cudaStream_t *pStream,
                                                                                unsigned int flags, int priority) {
-  // ava_disable_native_call;
+  ava_disable_native_call;
   ava_argument(pStream) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
   }
-  /*
-    cudaError_t ret;
-    if (ava_is_worker) {
-      ret = __helper_create_stream(pStream, flags, priority);
-      return ret;
-    }
-    */
+  
+  if (ava_is_worker) {
+    return __helper_create_stream(pStream, flags, priority);
+  }
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamGetPriority(cudaStream_t hStream, int *priority) {
@@ -13149,7 +13141,13 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamWaitEvent(cudaStream
   ava_argument(event) ava_handle;
 }
 
-__host__ cudaError_t CUDARTAPI cudaStreamSynchronize(cudaStream_t stream) { ava_argument(stream) ava_handle; }
+__host__ cudaError_t CUDARTAPI cudaStreamSynchronize(cudaStream_t stream) {
+  ava_disable_native_call;
+  ava_argument(stream) ava_handle; 
+  if (ava_is_worker) {
+    return cudaStreamSynchronize(__helper_translate_stream(stream));
+  }
+}
 
 __host__ cudaError_t CUDARTAPI cudaStreamQuery(cudaStream_t stream) { ava_argument(stream) ava_handle; }
 

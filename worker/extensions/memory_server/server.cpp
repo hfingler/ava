@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <random>
 #include <zmq.h>
 #include "server.hpp"
 #include "extensions/memory_server/common.hpp"
@@ -13,6 +14,10 @@
 namespace GPUMemoryServer {
 
 static uint32_t debug_kernel_count = 0;
+std::random_device rdd;
+std::mt19937 rgen(rdd());
+std::uniform_real_distribution<> dis01(0, 1);
+std::uniform_int_distribution<int> intdist(0,3);
 
 Server::Server(uint16_t gpu, uint64_t total_memory, std::string unix_socket_path, std::string resmngr_address) {
     this->gpu = gpu;
@@ -148,6 +153,21 @@ void Server::handleKernelIn(Request& req, Reply& rep) {
                 printf("SG_DEBUG_MIGRATION:  setting MEMORY migration on\n");
                 rep.migrate = Migration::MEMORY;
                 rep.target_device = gpu == 2 ? 3 : 2;
+            }
+            
+            //3 means randomly chosen over a %
+            else if (!strcmp(dbg_mig, "3")) {
+                //10% change of migration
+                if (dis01(rgen) <= 0.1) { 
+                    rep.migrate = Migration::KERNEL;
+                    uint32_t dg;
+                    while (1) {
+                        dg = intdist(rgen);
+                        if (dg != gpu) break;
+                    }
+                    rep.target_device = dg;
+                    printf("SG_DEBUG_MIGRATION: random migration triggered [%d] -> [%d]\n", gpu, dg);
+                }  
             }
         }
         else 
