@@ -97,12 +97,34 @@ void guest_write_stats(const char *data, size_t size) {
   ava::support::WriteData(guest_stats_fd, data, size);
 }
 
+void GuestThread::RegisterSelfAsGuestThread(std::string guest_stats_path, std::string guest_stats_prefix) {
+  auto tid = gsl::narrow_cast<int>(syscall(SYS_gettid));
+  GuestThread *thread = new GuestThread(fmt::format("{}", tid), nullptr);
+  thread->state_.store(kRunning);
+  thread->tid_ = tid;
+  thread->pthread_ = pthread_self();
+  thread->guest_stats_path_ = guest_stats_path;
+  thread->guest_stats_prefix_ = guest_stats_prefix;
+  auto ret = pthread_once(&support::once, create_key);
+  if (ret != 0) {
+    AVA_FATAL << fmt::format("pthread_once: {}", strerror(errno));
+    abort();
+  }
+  pthread_setspecific(support::thread_key, thread);
+  AVA_LOG_F(INFO, "Register thread as guest thread: tid={}", thread->tid_);
+}
+
 int get_guest_stats_fd() {
   auto gthread = (GuestThread *)GuestThread::current();
+  if (gthread == nullptr) {
+    GuestThread::RegisterSelfAsGuestThread(ava::GuestThread::kGuestStatsPath, ava::GuestThread::kGuestStatsPrefix);
+  }
+  gthread = (GuestThread *)GuestThread::current();
   return gthread->GetGuestStatsFd();
 }
 
 void register_guestlib_main_thread(std::string guest_stats_path, std::string guest_stats_prefix) {
   GuestThread::RegisterMainThread(guest_stats_path, guest_stats_prefix);
 }
+
 }  // namespace ava

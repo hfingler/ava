@@ -6,6 +6,7 @@
 #define AVA_SHADOWN_THREAD_POOL_HPP
 
 #include <stdint.h>
+#include <stdlib.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -74,6 +75,8 @@ void shadow_thread_pool_dispatch(struct shadow_thread_pool_t *pool, struct comma
     assert(r == 0 && ("Thread exit requested while waiting for " #predicate)); \
     (void)r;                                                                   \
   }
+
+void worker_write_stats(struct shadow_thread_pool_t *pool, const char *data, size_t size);
 
 #ifdef __cplusplus
 }

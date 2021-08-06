@@ -25,6 +25,7 @@ class EXPORTED GuestThread : public ava::support::Thread {
   static void RegisterMainThread(std::string guest_stats_path, std::string guest_stats_prefix);
   void Start() override;
   static GuestThread *current();
+  static void RegisterSelfAsGuestThread(std::string guest_stats_path, std::string guest_stats_prefix);
 
  protected:
   std::string guest_stats_path_;

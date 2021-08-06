@@ -247,6 +247,21 @@ def call_function_wrapper(f: Function) -> ExprOrStr:
             f"{f.return_value.type.nonconst.attach_to(f.return_value.name)}; "
             f"{f.return_value.name} = ({f.return_value.type.nonconst.spelling})"
         )
+    collect_stats = ""
+    if f.generate_stats_code:
+        collect_stats = f"""
+        #ifdef __AVA_ENABLE_STAT
+        fmt::memory_buffer output;
+        fmt::format_to(output, \"WorkerStat {{}}, {{}}\\n\",
+            __FUNCTION__,
+            gsl::narrow_cast<int32_t>({str(f.name)}_end_ts - {str(f.name)}_begin_ts));
+        worker_write_stats(common_context->nw_shadow_thread_pool, output.data(), output.size());
+        #endif
+        """.strip()
     return f"""
+        auto common_context = ava::CommonContext::instance();
+        {time_stamp_begin(str(f.name), f.generate_stats_code)}
         {capture_ret}__wrapper_{f.name}({", ".join(f"({a.type.spelling}){a.name}" for a in f.arguments)});
+        {time_stamp_end(str(f.name), f.generate_stats_code)}
+        {collect_stats}
     """.strip()

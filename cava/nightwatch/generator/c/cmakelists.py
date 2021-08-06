@@ -71,6 +71,7 @@ add_executable(${{SUBPROJECT_PREFIX}}_worker
   ${{CMAKE_SOURCE_DIR}}/common/shadow_thread_pool.cpp
   ${{CMAKE_SOURCE_DIR}}/common/cmd_channel_socket_utilities.cpp
   ${{CMAKE_SOURCE_DIR}}/common/cmd_channel_socket_tcp.cpp
+  ${{CMAKE_SOURCE_DIR}}/common/support/fs.cpp
 )
 target_link_libraries(${{SUBPROJECT_PREFIX}}_worker
   glib2.0

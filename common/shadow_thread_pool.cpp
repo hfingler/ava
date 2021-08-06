@@ -8,14 +8,22 @@
 #include <plog/Log.h>
 #include <stdio.h>
 
+#include <fmt/core.h>
 #include <gsl/gsl>
+#include <unistd.h>
+#include <sys/syscall.h>
 
 #include "common/cmd_handler.hpp"
 #include "common/endpoint_lib.hpp"
 #include "common/linkage.h"
 #include "common/logging.h"
+#include "common/support/fs.h"
+#include "common/support/io.h"
 
 #include <mutex>
+
+static constexpr const char* kWorkerStatsPath = "/tmp";
+static constexpr const char* kWorkerStatsPrefix = "worker_stats";
 
 struct shadow_thread_pool_t {
   GHashTable *threads; /* Keys are ava IDs, values are shadow_thread_t* */
@@ -28,6 +36,7 @@ struct shadow_thread_t {
   GAsyncQueue *queue;
   pthread_t thread;
   struct shadow_thread_pool_t *pool;
+  int cmd_stat_fd;
 };
 
 struct shadow_thread_command_t {
@@ -44,6 +53,7 @@ struct shadow_thread_t *shadow_thread_new(struct shadow_thread_pool_t *pool, uin
   t->ava_id = ava_id;
   t->queue = g_async_queue_new_full(NULL);
   t->pool = pool;
+  t->cmd_stat_fd = -1;
   int r = pthread_create(&t->thread, NULL, shadow_thread_loop, t);
   assert(r == 0);
   assert(t->thread != ava_id);  // TODO: This may spuriously fail.
@@ -63,6 +73,14 @@ struct shadow_thread_t *shadow_thread_self(struct shadow_thread_pool_t *pool) {
     t->queue = g_async_queue_new_full(NULL);
     t->pool = pool;
     t->thread = pthread_self();
+    auto stat_fname = fmt::format("{}/{}_{}", kWorkerStatsPath, kWorkerStatsPrefix, 
+                                  gsl::narrow_cast<int>(syscall(SYS_gettid)));
+    auto stat_path = ava::support::GetRealPath(stat_fname);
+    if (auto fd = ava::support::Create(stat_path)) {
+      t->cmd_stat_fd = *fd;
+    } else {
+      t->cmd_stat_fd = STDOUT_FILENO;
+    }
     gboolean r = g_hash_table_insert(pool->threads, (gpointer)ava_id, t);
     assert(r);
     (void)r;
@@ -129,6 +147,16 @@ int shadow_thread_handle_single_command(struct shadow_thread_pool_t *pool) {
 
 static void *shadow_thread_loop(void *arg) {
   struct shadow_thread_t *t = (struct shadow_thread_t *)arg;
+  if (t->cmd_stat_fd == -1) {
+    auto stat_fname = fmt::format("{}/{}_{}", kWorkerStatsPath, kWorkerStatsPrefix, 
+                                  gsl::narrow_cast<int>(syscall(SYS_gettid)));
+    auto stat_path = ava::support::GetRealPath(stat_fname);
+    if (auto fd = ava::support::Create(stat_path)) {
+      t->cmd_stat_fd = *fd;
+    } else {
+      t->cmd_stat_fd = STDOUT_FILENO;
+    }
+  }
   pthread_setspecific(t->pool->key, t);
   
   int exit_thread_flag;
@@ -137,6 +165,9 @@ static void *shadow_thread_loop(void *arg) {
   } while (!exit_thread_flag);
 
   printf(" !!!!  shadow thread exited\n");
+  if (t->cmd_stat_fd != STDOUT_FILENO) {
+    close(t->cmd_stat_fd);
+  }
   return NULL;
 }
 
@@ -177,4 +208,9 @@ void delete_shadow_thread(gpointer key, gpointer value, gpointer userdata) {
 void kill_all_shadow_threads() {
   auto context = ava::CommonContext::instance();
   g_hash_table_foreach(context->nw_shadow_thread_pool->threads, delete_shadow_thread, NULL);
+}
+
+void worker_write_stats(struct shadow_thread_pool_t *pool, const char *data, size_t size) {
+  struct shadow_thread_t *t = shadow_thread_self(pool);
+  ava::support::WriteData(t->cmd_stat_fd, data, size);
 }
