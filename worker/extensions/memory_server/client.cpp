@@ -29,7 +29,6 @@ bool __internal_setAllContextsEnabled(bool f) {
     allContextsEnabled = f;
 }
 
-
 int32_t __internal_getDeviceCount() {
     return GPUMemoryServer::Client::getInstance().device_count;
 }
@@ -43,11 +42,17 @@ uint32_t __internal_getCurrentDevice() {
 }
 
 void* __translate_ptr(void* ptr) {
-    return GPUMemoryServer::Client::getInstance().translate_ptr(ptr);
+    if (__internal_allContextsEnabled())
+        return GPUMemoryServer::Client::getInstance().translate_ptr(ptr);
+    else
+        return ptr;
 }
 
 const void* __translate_ptr(const void* ptr) {
-    return const_cast<const void*>(GPUMemoryServer::Client::getInstance().translate_ptr(ptr));
+    if (__internal_allContextsEnabled()) 
+        return const_cast<const void*>(GPUMemoryServer::Client::getInstance().translate_ptr(ptr));
+    else
+        return ptr;
 }
 
 void __internal_kernelIn() {
@@ -77,6 +82,17 @@ cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
 
 cudaError_t __internal_cudaFree(void *devPtr) {
     return GPUMemoryServer::Client::getInstance().localFree(devPtr);
+}
+
+cudaStream_t __translate_stream(cudaStream_t key) {
+    if (__internal_allContextsEnabled()) {
+        uint32_t cur_dvc = __internal_getCurrentDevice();
+        auto v = GPUMemoryServer::Client::getInstance().streams_map[key];
+        return v[cur_dvc];
+    }
+    else {
+        return key;
+    }
 }
 
 /**************************************
@@ -116,7 +132,6 @@ namespace GPUMemoryServer {
     }
 
     cudaError_t Client::localMalloc(void** devPtr, size_t size) {
-        matchCurrentGPU();
         cudaError_t err = cudaMalloc(devPtr, size);
         local_allocs.emplace((uint64_t)*devPtr, std::make_unique<Client::LocalAlloc>(*devPtr, size, current_device));
         //report to server
@@ -227,7 +242,8 @@ namespace GPUMemoryServer {
     }
 
     void Client::handleReply(Reply& reply) {
-        if (reply.migrate != Migration::NOPE)
+        //only migrate if server told us so and we haven't migrated before
+        if (reply.migrate != Migration::NOPE && current_device == og_device)
             migrateToGPU(reply.target_device, reply.migrate);
     }
 
@@ -289,8 +305,7 @@ namespace GPUMemoryServer {
     }
 
     void Client::migrateToGPU(uint32_t new_gpuid, Migration migration_type) {
-        //printf("GPU server told us to ask for migration\n");
-       
+        printf("[[[MIGRATION]]]\n");
         if (migration_type == Migration::KERNEL) {
             printf("Migration by kernel mode, changing device to [%d]\n", new_gpuid);
             setCurrentGPU(new_gpuid);
@@ -332,7 +347,6 @@ namespace GPUMemoryServer {
             //now that data was moved, cleanup
             cleanup(og_device);
             printf("Local migration: cleaned up data on old GPU\n");
-            setCurrentGPU(new_gpuid);
         }
     }
 }

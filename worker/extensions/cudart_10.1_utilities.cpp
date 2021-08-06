@@ -28,33 +28,29 @@ cudaError_t __helper_cuda_memcpy_async_host_to_host(void *dst, const void *src, 
 cudaError_t __helper_cuda_memcpy_async_host_to_device(void *dst, const void *src, size_t count, cudaStream_t stream) {
   cudaError_t ret;
   ret = cudaMemcpyAsync(__translate_ptr(dst), src, count, cudaMemcpyHostToDevice, stream);
+  
+  /*
+  struct cudaPointerAttributes at;
+  ret = cudaPointerGetAttributes(&at, dst);
+  printf("curdvc %d  dst attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(), ret, at.type, 
+      at.device, at.devicePointer, at.hostPointer);
+
+  ret = cudaPointerGetAttributes(&at, __translate_ptr(dst));
+  printf("curdvc %d  __translate_ptr(dst) attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(), ret, at.type, 
+      at.device, at.devicePointer, at.hostPointer);
+
+  ret = cudaPointerGetAttributes(&at, src);
+  printf("curdvc %d  src attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(), ret, at.type, 
+      at.device, at.devicePointer, at.hostPointer);
+
+  ret = cudaMemcpyAsync(dst, src, count, cudaMemcpyHostToDevice, stream);
+  */
   return ret;
 }
 
 cudaError_t __helper_cuda_memcpy_async_device_to_host(void *dst, const void *src, size_t count, cudaStream_t stream) {
-  cudaError_t ret;
-
-/*
-    //GPUMemoryServer::Client::getInstance().matchCurrentGPU();
-
-    printf(" peek at last error before memcpy async: %d\n", cudaPeekAtLastError);
-
-    ret = cudaStreamSynchronize(stream);
-    if (ret != 0) {
-      printf("###### __helper_cuda_memcpy_async_device_to_host cudaStreamSynchronize ret %d\n", ret);
-    }
-
-    printf("__helper_cuda_memcpy_async_device_to_host   src  %p  dst  %p\n", src, dst);
-
-    cudaPointerAttributes at;
-    ret = cudaPointerGetAttributes(&at, src);
-    printf("src attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, at.type, at.device, at.devicePointer,
-    at.hostPointer);
-*/
-  
-    ret = cudaMemcpyAsync(dst, src, count, cudaMemcpyDeviceToHost, stream);
-  
-  //ret = cudaMemcpyAsync(dst, __translate_ptr(src), count, cudaMemcpyDeviceToHost, stream);
+  cudaError_t ret; 
+  ret = cudaMemcpyAsync(dst, __translate_ptr(src), count, cudaMemcpyDeviceToHost, stream);
   return ret;
 }
 
@@ -117,8 +113,7 @@ cudaError_t __helper_create_stream(cudaStream_t *pStream, unsigned int flags, in
       cudaStreamCreateWithPriority(&new_stream, flags, priority);
       v[i] = new_stream;
     }
-
-    // reset back
+    // reset back device and return OK
     cudaSetDevice(__internal_getCurrentDevice());
     return (cudaError_t)0;
   } else {
@@ -539,4 +534,12 @@ cudaError_t __helper_cudaDeviceGetAttribute(int *value, enum cudaDeviceAttr attr
   std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
 #endif
   return ret;
+}
+
+cudaStream_t __helper_translate_stream(cudaStream_t stream) {
+  return __translate_stream(stream);
+}
+
+void* __helper_translate_ptr(void* ptr) {
+  return __translate_ptr(ptr);
 }

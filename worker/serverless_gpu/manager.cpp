@@ -23,7 +23,8 @@ ABSL_FLAG(std::string, resmngr_addr, "",
 ABSL_FLAG(std::string, keepworkeralive, "no", "(OPTIONAL) (debug) forcefully make the worker not die when not in serverlss mode");
 ABSL_FLAG(std::string, allctx, "no", "(OPTIONAL) turn on setting up all device ctx on workers (required for migration)");
 ABSL_FLAG(std::string, reporting, "no", "(OPTIONAL) turn on client reports to gpu server (required for migration)");
-ABSL_FLAG(std::string, debug_migration, "no", "(OPTIONAL) turn on debug migration (1 for execution, 2 for memory)");
+ABSL_FLAG(std::string, debug_migration, "no", "(OPTIONAL) turn on debug migration (1 for execution, 2 for memory, 3 for random)");
+ABSL_FLAG(std::string, ttc_addr, "0", "(OPTIONAL) address of ttc server for timeline creation)");
 
 int main(int argc, const char *argv[]) {
   absl::ParseCommandLine(argc, const_cast<char **>(argv));
@@ -84,6 +85,14 @@ int main(int argc, const char *argv[]) {
   else {
     std::cerr << "[SVLESS-MNGR]: Reporting is not enabled, no GPU servers will be launched" << std::endl;
     worker_env.push_back("AVA_ENABLE_REPORTING=no");
+  }
+
+  //check ttc addr argument
+  if (absl::GetFlag(FLAGS_ttc_addr) != "0") {
+    std::cerr << "[SVLESS-MNGR]: Setting ttc address to " << absl::GetFlag(FLAGS_ttc_addr) << std::endl;
+    std::string kmd = "TTC_ADDR=";
+    kmd += absl::GetFlag(FLAGS_ttc_addr);
+    worker_env.push_back(kmd);
   }
 
   /*
