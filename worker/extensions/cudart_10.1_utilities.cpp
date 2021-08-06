@@ -138,7 +138,9 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   else
     cur_dvc = 0;
 
+#ifndef NDEBUG
   printf("__helper_launch_kernel on device slot [%d]\n", cur_dvc);
+#endif
 
   if (func == NULL) {
     return (cudaError_t)CUDA_ERROR_INVALID_PTX;
@@ -149,7 +151,9 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
     // "
     //          << (void *)func->cufunc[cur_dvc] << ")";
   } else {
+#ifndef NDEBUG
     std::cerr << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc[cur_dvc] << std::endl;
+#endif
   }
   //__helper_print_kernel_info(func, args);
 
@@ -182,7 +186,6 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[0], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
                                       blockDim.z, sharedMem,  (CUstream)stream, args, NULL);
                                       //blockDim.z, sharedMem, 0, args, NULL); //thsi is for debugging, use stream 0
-    printf(">>> cuLaunchKernel returned %d\n", ret);
 #ifndef NDEBUG
     auto tid = __gettid();
     std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
