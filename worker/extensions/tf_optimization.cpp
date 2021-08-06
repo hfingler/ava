@@ -14,7 +14,7 @@ GTree *gpu_address_set; /* Not used but referenced in utility function */
 void guestlib_tf_opt_init(void) {}
 void guestlib_tf_opt_fini(void) {}
 
-void worker_tf_opt_init(void) { worker_cudnn_opt_init(); }
+void worker_tf_opt_init(void) { worker_cudnn_opt_init(2); }
 
 CUresult __pool_cuEventCreate(CUevent *phEvent, size_t count) {
   size_t i;

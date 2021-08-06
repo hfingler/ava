@@ -3392,16 +3392,20 @@ EXPORTED CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemm_v2(cublasHandle_t han
   bool alpha_is_gpu = false;
   bool beta_is_gpu = false;
   ret = cudaPointerGetAttributes(&alpha_attr, alpha);
+  //printf("alpha attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, alpha_attr.type, alpha_attr.device, alpha_attr.devicePointer, alpha_attr.hostPointer);
   if (ret != cudaSuccess) {
     alpha_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(alpha));
     cudaGetLastError();
+    //printf(" alpha on GPU? %d\n", alpha_is_gpu);
   } else {
     alpha_is_gpu = (alpha_attr.type == cudaMemoryTypeDevice);
   }
   ret = cudaPointerGetAttributes(&beta_attr, beta);
+  //printf("beta attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, beta_attr.type, beta_attr.device, beta_attr.devicePointer, beta_attr.hostPointer);
   if (ret != cudaSuccess) {
     beta_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(beta));
     cudaGetLastError();
+    //printf(" beta on GPU? %d\n", alpha_is_gpu);
   } else {
     beta_is_gpu = (beta_attr.type == cudaMemoryTypeDevice);
   }
@@ -13947,6 +13951,8 @@ void ava_load_cubin_worker(absl::string_view dump_dir) {
 }
 
 void __helper_worker_init_epilogue() {
+    //this is now empty since all initialization is done explicitly by worker.cpp and cmd_handler.cpp (internal API)
+
   /*
 // this prevents ava_load_cubin_worker from being called twice if a dump dir is specified
 #ifndef AVA_RECV_DUMP_FROM_GUESTLIB
@@ -13963,7 +13969,7 @@ void __helper_worker_init_epilogue() {
   ava_load_cubin_worker(dump_dir);
 #endif
 */
-  worker_tf_opt_init();
+  //worker_tf_opt_init();
 }
 ava_end_worker_replacement;
 

@@ -34,8 +34,10 @@ cudaError_t __helper_cuda_memcpy_async_host_to_device(void *dst, const void *src
 cudaError_t __helper_cuda_memcpy_async_device_to_host(void *dst, const void *src, size_t count, cudaStream_t stream) {
   cudaError_t ret;
 
-  /*
-    GPUMemoryServer::Client::getInstance().matchCurrentGPU();
+/*
+    //GPUMemoryServer::Client::getInstance().matchCurrentGPU();
+
+    printf(" peek at last error before memcpy async: %d\n", cudaPeekAtLastError);
 
     ret = cudaStreamSynchronize(stream);
     if (ret != 0) {
@@ -48,10 +50,11 @@ cudaError_t __helper_cuda_memcpy_async_device_to_host(void *dst, const void *src
     ret = cudaPointerGetAttributes(&at, src);
     printf("src attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, at.type, at.device, at.devicePointer,
     at.hostPointer);
-
+*/
+  
     ret = cudaMemcpyAsync(dst, src, count, cudaMemcpyDeviceToHost, stream);
-  */
-  ret = cudaMemcpyAsync(dst, __translate_ptr(src), count, cudaMemcpyDeviceToHost, stream);
+  
+  //ret = cudaMemcpyAsync(dst, __translate_ptr(src), count, cudaMemcpyDeviceToHost, stream);
   return ret;
 }
 
@@ -177,7 +180,9 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   else {
     GPUMemoryServer::Client::getInstance().matchCurrentGPU();
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[0], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
-                                      blockDim.z, sharedMem, 0, args, NULL);
+                                      blockDim.z, sharedMem,  (CUstream)stream, args, NULL);
+                                      //blockDim.z, sharedMem, 0, args, NULL); //thsi is for debugging, use stream 0
+    printf(">>> cuLaunchKernel returned %d\n", ret);
 #ifndef NDEBUG
     auto tid = __gettid();
     std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);

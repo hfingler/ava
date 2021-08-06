@@ -17,12 +17,10 @@ extern "C" {
 #endif
 
 #define DESCRITPOR_POOL_SIZE 64
-#define CUDNN_HANDLE_POOL_SIZE 2
-#define CUBLAS_HANDLE_POOL_SIZE 2
 
 void guestlib_cudnn_opt_init(void);
 void guestlib_cudnn_opt_fini(void);
-void worker_cudnn_opt_init(void);
+void worker_cudnn_opt_init(uint32_t n_handles);
 
 cudnnStatus_t __pool_cudnnCreateConvolutionDescriptor(cudnnConvolutionDescriptor_t *convDesc, size_t count);
 cudnnStatus_t __pool_cudnnDestroyConvolutionDescriptor(cudnnConvolutionDescriptor_t *convDesc, size_t count);

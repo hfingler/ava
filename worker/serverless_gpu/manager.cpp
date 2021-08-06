@@ -70,7 +70,7 @@ int main(int argc, const char *argv[]) {
     worker_env.push_back("AVA_ENABLE_ALL_CTX=yes");
   }
   else {
-    std::cerr << "[SVLESS-MNGR]: All context init is DISABLE." << std::endl;
+    std::cerr << "[SVLESS-MNGR]: All context init is DISABLED." << std::endl;
     worker_env.push_back("AVA_ENABLE_ALL_CTX=no");
   }
 

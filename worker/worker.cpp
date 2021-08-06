@@ -31,6 +31,8 @@
 #include "plog/Initializers/RollingFileInitializer.h"
 #include "worker_context.h"
 
+#include "common/extensions/cudnn_optimization.h"
+
 struct command_channel *chan;
 struct command_channel *chan_hv = NULL;
 extern int nw_global_vm_id;
@@ -90,7 +92,7 @@ EXPORTED_WEAKLY std::string worker_init_log() {
   return log_file;
 }
 
-static void create_cuda_contexts() {
+static void nvml_setDeviceCount() {
   nvmlReturn_t result;
   uint32_t device_count;
   result = nvmlInit();
@@ -112,8 +114,10 @@ static void create_cuda_contexts() {
   }
 
   __internal_setDeviceCount(device_count);
+}
 
-  for (int i = 0; i < device_count; i++) {
+static void create_cuda_contexts() {
+  for (int i = 0; i < __internal_getDeviceCount(); i++) {
     cudaSetDevice(i);
     // this forcibly creates a primary context, which is lazily-created
     cudaFree(0);
@@ -135,7 +139,8 @@ int main(int argc, char *argv[]) {
   std::string gpu_device = std::string(gpu_device_str);
   /* set current device*/
   GPUMemoryServer::Client::getInstance().setCurrentGPU(std::stoi(gpu_device));
-  static auto worker_context = ava::WorkerContext::instance();
+  //read device count from nvml and set it internally
+  nvml_setDeviceCount();
 
   // AVA_WORKER_UUID is a unique, starting at 0, id we can use
   char const *cworker_uuid = getenv("AVA_WORKER_UUID");
@@ -154,6 +159,13 @@ int main(int argc, char *argv[]) {
     __internal_setAllContextsEnabled(false);
   }
 
+  //now that we have possibly all contexts created, init stuff
+    static auto worker_context = ava::WorkerContext::instance();
+
+#ifdef AVA_PRELOAD_CUBIN
+  worker_cudnn_opt_init(2);
+#endif
+
   std::string enable_reporting = std::string(getenv("AVA_ENABLE_REPORTING"));
   if (enable_reporting == "yes") {
     GPUMemoryServer::Client::getInstance().enable_reporting = true;
@@ -171,6 +183,7 @@ int main(int argc, char *argv[]) {
 
   /* define arguments */
   auto wctx = ava::WorkerContext::instance();
+
   unsigned int listen_port;
   nw_worker_id = 0;
 
