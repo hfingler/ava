@@ -252,8 +252,7 @@ def call_function_wrapper(f: Function) -> ExprOrStr:
         collect_stats = f"""
         #ifdef __AVA_ENABLE_STAT
         fmt::memory_buffer output;
-        fmt::format_to(output, \"WorkerStat {{}}, {{}}\\n\",
-            __FUNCTION__,
+        fmt::format_to(output, \"WorkerStat {str(f.name)}, {{}}\\n\",
             gsl::narrow_cast<int32_t>({str(f.name)}_end_ts - {str(f.name)}_begin_ts));
         worker_write_stats(common_context->nw_shadow_thread_pool, output.data(), output.size());
         #endif
