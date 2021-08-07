@@ -226,6 +226,36 @@ cudnnStatus_t __pool_cudnnDestroyFilterDescriptor(cudnnFilterDescriptor_t *filte
   return res;
 }
 
+cudnnStatus_t __pool_cudnnCreateReduceTensorDescriptor(cudnnReduceTensorDescriptor_t *reduceTensorDesc, size_t count) {
+  size_t i;
+  cudnnReduceTensorDescriptor_t *desc;
+  cudnnStatus_t res = CUDNN_STATUS_SUCCESS;
+
+  for (i = 0; i < count; i++) {
+    desc = &reduceTensorDesc[i];
+    res = cudnnCreateReduceTensorDescriptor(desc);
+    if (res != CUDNN_STATUS_SUCCESS) {
+      return res;
+    }
+  }
+
+  return res;
+}
+
+cudnnStatus_t __pool_cudnnDestroyReduceTensorDescriptor(cudnnReduceTensorDescriptor_t *reduceTensorDesc, size_t count) {
+  size_t i;
+  cudnnStatus_t res;
+
+  for (i = 0; i < count; i++) {
+    res = cudnnDestroyReduceTensorDescriptor(reduceTensorDesc[i]);
+    if (res != CUDNN_STATUS_SUCCESS) {
+      return res;
+    }
+  }
+
+  return res;
+}
+
 cudnnStatus_t __cudnnCreate(cudnnHandle_t *handle) {
   //printf("### ### ### __cudnnCreate\n");
   uint32_t gpuid = __internal_getCurrentDevice();

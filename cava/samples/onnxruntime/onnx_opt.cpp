@@ -3,9 +3,9 @@ ava_name("CUDA Runtime for ONNX");
 ava_version("10.1.0");
 ava_identifier(ONNX_OPT);
 ava_number(10);
-ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN);
+// ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN);
 // To enable stat collecting, use the below line and uncomment the ava_stats definition
-// ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN -D__AVA_ENABLE_STAT);
+ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN -D__AVA_ENABLE_STAT);
 ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver zmq nvidia-ml absl::flat_hash_map absl::hash absl::strings);
 ava_guestlib_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/guest_cmd_batching_queue.cpp extensions/extension_api.cpp extensions/gpu_address_tracking.cpp);
 ava_worker_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/cmd_batching.cpp extensions/cudart_10.1_utilities.cpp extensions/memory_server/client.cpp);
@@ -26,7 +26,7 @@ ava_soname(libcuda.so libcuda.so.1 libcudart.so.10 libcudart.so.10.1 libcublas.s
 
 ava_non_transferable_types { ava_handle; }
 
-// ava_functions { ava_stats; }
+ava_functions { ava_stats; }
 
 size_t __args_index_0;
 size_t __kernelParams_index_0;
@@ -97,14 +97,28 @@ struct call_configuration {
 };
 
 extern GQueue *call_configuration_stack;
+
+extern absl::Mutex conv_desc_pool_mu;
 extern GQueue *convolution_descriptor_pool;
 extern GQueue *idle_convolution_descriptor_pool;
+
+extern absl::Mutex pooling_desc_pool_mu;
 extern GQueue *pooling_descriptor_pool;
 extern GQueue *idle_pooling_descriptor_pool;
+
+extern absl::Mutex tensor_desc_pool_mu;
 extern GQueue *tensor_descriptor_pool;
 extern GQueue *idle_tensor_descriptor_pool;
+
+extern absl::Mutex filter_desc_pool_mu;
 extern GQueue *filter_descriptor_pool;
 extern GQueue *idle_filter_descriptor_pool;
+
+extern absl::Mutex reduce_tensor_desc_pool_mu;
+extern GQueue *reduce_tensor_descriptor_pool;
+extern GQueue *idle_reduce_tensor_descriptor_pool;
+
+extern absl::Mutex cu_event_pool_mu;
 extern GQueue *cu_event_pool;
 extern GQueue *idle_cu_event_pool;
 
@@ -260,6 +274,23 @@ cudnnStatus_t __pool_cudnnCreateTensorDescriptor(cudnnTensorDescriptor_t *tensor
 cudnnStatus_t __pool_cudnnDestroyTensorDescriptor(cudnnTensorDescriptor_t *tensorDesc, size_t count) {
   ava_async;
   ava_argument(tensorDesc) {
+    ava_in;
+    ava_buffer(count);
+    ava_element ava_handle;
+  }
+}
+
+cudnnStatus_t __pool_cudnnCreateReduceTensorDescriptor(cudnnReduceTensorDescriptor_t *reduceTensorDesc, size_t count) {
+  ava_argument(reduceTensorDesc) {
+    ava_out;
+    ava_buffer(count);
+    ava_element ava_handle;
+  }
+}
+
+cudnnStatus_t __pool_cudnnDestroyReduceTensorDescriptor(cudnnReduceTensorDescriptor_t *reduceTensorDesc, size_t count) {
+  ava_async;
+  ava_argument(reduceTensorDesc) {
     ava_in;
     ava_buffer(count);
     ava_element ava_handle;
@@ -1919,6 +1950,7 @@ EXPORTED CUresult CUDAAPI cuEventCreate(CUevent *phEvent, unsigned int Flags) {
 
   CUresult res = CUDA_SUCCESS;
 
+  cu_event_pool_mu.Lock();
   if (g_queue_is_empty(cu_event_pool)) {
     size_t count = DESCRITPOR_POOL_SIZE;
     CUevent *desc = (CUevent *)malloc(sizeof(CUevent) * count);
@@ -1934,6 +1966,7 @@ EXPORTED CUresult CUDAAPI cuEventCreate(CUevent *phEvent, unsigned int Flags) {
 #ifdef __AVA_ENABLE_STAT
     ava::support::stats_end(__FUNCTION__, begin_ts);
 #endif
+    cu_event_pool_mu.Unlock();
     return res;
   }
 
@@ -1942,6 +1975,7 @@ EXPORTED CUresult CUDAAPI cuEventCreate(CUevent *phEvent, unsigned int Flags) {
 #ifdef __AVA_ENABLE_STAT
   ava::support::stats_end(__FUNCTION__, begin_ts);
 #endif
+  cu_event_pool_mu.Unlock();
   return res;
 }
 ava_end_replacement;
@@ -2011,16 +2045,21 @@ EXPORTED CUresult cuEventDestroy(CUevent hEvent) {
 #ifdef __AVA_ENABLE_STAT
   auto begin_ts = ava::GetMonotonicNanoTimestamp();
 #endif
+
+  cu_event_pool_mu.Lock();
   g_queue_push_tail(idle_cu_event_pool, (gpointer)hEvent);
   if (idle_cu_event_pool->length >= DESCRITPOR_POOL_SIZE) {
 #ifdef __AVA_ENABLE_STAT
     ava::support::stats_end(__FUNCTION__, begin_ts);
 #endif
-    return (CUresult)free_cu_event_pool(idle_cu_event_pool);
+    auto ret = (CUresult)free_cu_event_pool(idle_cu_event_pool);
+    cu_event_pool_mu.Unlock();
+    return ret;
   }
 #ifdef __AVA_ENABLE_STAT
   ava::support::stats_end(__FUNCTION__, begin_ts);
 #endif
+  cu_event_pool_mu.Unlock();
   return CUDA_SUCCESS;
 }
 ava_end_replacement;
@@ -4451,8 +4490,11 @@ cudnnStatus_t CUDNNWINAPI cudnnDestroy(cudnnHandle_t handle) { ava_argument(hand
 
 ava_begin_replacement;
 EXPORTED cudnnStatus_t CUDNNWINAPI cudnnCreateConvolutionDescriptor(cudnnConvolutionDescriptor_t *convDesc) {
+#ifdef __AVA_ENABLE_STAT
+  auto begin_ts = ava::GetMonotonicNanoTimestamp();
+#endif
   cudnnStatus_t res = CUDNN_STATUS_SUCCESS;
-
+  conv_desc_pool_mu.Lock();
   if (g_queue_is_empty(convolution_descriptor_pool)) {
     size_t count = DESCRITPOR_POOL_SIZE;
     cudnnConvolutionDescriptor_t *desc =
@@ -4465,15 +4507,29 @@ EXPORTED cudnnStatus_t CUDNNWINAPI cudnnCreateConvolutionDescriptor(cudnnConvolu
     }
   }
 
-  if (res != CUDNN_STATUS_SUCCESS) return res;
+  if (res != CUDNN_STATUS_SUCCESS) {
+    conv_desc_pool_mu.Unlock();
+    #ifdef __AVA_ENABLE_STAT
+      ava::support::stats_end(__FUNCTION__, begin_ts);
+    #endif
+    return res;
+  }
 
   *convDesc = (cudnnConvolutionDescriptor_t)g_queue_pop_head(convolution_descriptor_pool);
+  conv_desc_pool_mu.Unlock();
+#ifdef __AVA_ENABLE_STAT
+  ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
   return res;
 }
 
 EXPORTED cudnnStatus_t CUDNNWINAPI cudnnCreateFilterDescriptor(cudnnFilterDescriptor_t *filterDesc) {
+#ifdef __AVA_ENABLE_STAT
+  auto begin_ts = ava::GetMonotonicNanoTimestamp();
+#endif
   cudnnStatus_t res = CUDNN_STATUS_SUCCESS;
 
+  filter_desc_pool_mu.Lock();
   if (g_queue_is_empty(filter_descriptor_pool)) {
     size_t count = DESCRITPOR_POOL_SIZE;
     cudnnFilterDescriptor_t *desc = (cudnnFilterDescriptor_t *)malloc(sizeof(cudnnFilterDescriptor_t) * count);
@@ -4485,15 +4541,28 @@ EXPORTED cudnnStatus_t CUDNNWINAPI cudnnCreateFilterDescriptor(cudnnFilterDescri
     }
   }
 
-  if (res != CUDNN_STATUS_SUCCESS) return res;
+  if (res != CUDNN_STATUS_SUCCESS) {
+    filter_desc_pool_mu.Unlock();
+#ifdef __AVA_ENABLE_STAT
+    ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
+    return res;
+  }
 
   *filterDesc = (cudnnFilterDescriptor_t)g_queue_pop_head(filter_descriptor_pool);
+  filter_desc_pool_mu.Unlock();
+#ifdef __AVA_ENABLE_STAT
+  ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
   return res;
 }
 
 EXPORTED cudnnStatus_t CUDNNWINAPI cudnnCreatePoolingDescriptor(cudnnPoolingDescriptor_t *poolingDesc) {
+#ifdef __AVA_ENABLE_STAT
+  auto begin_ts = ava::GetMonotonicNanoTimestamp();
+#endif
   cudnnStatus_t res = CUDNN_STATUS_SUCCESS;
-
+  pooling_desc_pool_mu.Lock();
   if (g_queue_is_empty(pooling_descriptor_pool)) {
     size_t count = DESCRITPOR_POOL_SIZE;
     cudnnPoolingDescriptor_t *desc = (cudnnPoolingDescriptor_t *)malloc(sizeof(cudnnPoolingDescriptor_t) * count);
@@ -4505,15 +4574,29 @@ EXPORTED cudnnStatus_t CUDNNWINAPI cudnnCreatePoolingDescriptor(cudnnPoolingDesc
     }
   }
 
-  if (res != CUDNN_STATUS_SUCCESS) return res;
+  if (res != CUDNN_STATUS_SUCCESS) {
+    pooling_desc_pool_mu.Unlock();
+#ifdef __AVA_ENABLE_STAT
+    ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
+    return res;
+  }
 
   *poolingDesc = (cudnnPoolingDescriptor_t)g_queue_pop_head(pooling_descriptor_pool);
+  pooling_desc_pool_mu.Unlock();
+#ifdef __AVA_ENABLE_STAT
+  ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
   return res;
 }
 
 EXPORTED cudnnStatus_t CUDNNWINAPI cudnnCreateTensorDescriptor(cudnnTensorDescriptor_t *tensorDesc) {
+#ifdef __AVA_ENABLE_STAT
+  auto begin_ts = ava::GetMonotonicNanoTimestamp();
+#endif
   cudnnStatus_t res = CUDNN_STATUS_SUCCESS;
 
+  tensor_desc_pool_mu.Lock();
   if (g_queue_is_empty(tensor_descriptor_pool)) {
     size_t count = DESCRITPOR_POOL_SIZE;
     cudnnTensorDescriptor_t *desc = (cudnnTensorDescriptor_t *)malloc(sizeof(cudnnTensorDescriptor_t) * count);
@@ -4525,40 +4608,163 @@ EXPORTED cudnnStatus_t CUDNNWINAPI cudnnCreateTensorDescriptor(cudnnTensorDescri
     }
   }
 
-  if (res != CUDNN_STATUS_SUCCESS) return res;
+  if (res != CUDNN_STATUS_SUCCESS) {
+    tensor_desc_pool_mu.Unlock();
+#ifdef __AVA_ENABLE_STAT
+    ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
+    return res;
+  }
 
   *tensorDesc = (cudnnTensorDescriptor_t)g_queue_pop_head(tensor_descriptor_pool);
+  tensor_desc_pool_mu.Unlock();
+#ifdef __AVA_ENABLE_STAT
+  ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
+  return res;
+}
+
+EXPORTED cudnnStatus_t CUDNNWINAPI cudnnCreateReduceTensorDescriptor(cudnnReduceTensorDescriptor_t *reduceTensorDesc) {
+#ifdef __AVA_ENABLE_STAT
+  auto begin_ts = ava::GetMonotonicNanoTimestamp();
+#endif
+  cudnnStatus_t res = CUDNN_STATUS_SUCCESS;
+
+  reduce_tensor_desc_pool_mu.Lock();
+  if (g_queue_is_empty(reduce_tensor_descriptor_pool)) {
+    size_t count = DESCRITPOR_POOL_SIZE;
+    std::array<cudnnReduceTensorDescriptor_t, DESCRITPOR_POOL_SIZE> desc;
+    size_t i;
+    res = __pool_cudnnCreateReduceTensorDescriptor(desc.data(), count);
+    if (res == CUDNN_STATUS_SUCCESS) {
+      for (i = 0; i < count; i++) {
+        g_queue_push_tail(reduce_tensor_descriptor_pool, (gpointer)desc[i]);
+      }
+    }
+  }
+
+  if (res != CUDNN_STATUS_SUCCESS) {
+    reduce_tensor_desc_pool_mu.Unlock();
+#ifdef __AVA_ENABLE_STAT
+    ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
+    return res;
+  }
+
+  *reduceTensorDesc = (cudnnReduceTensorDescriptor_t)g_queue_pop_head(reduce_tensor_descriptor_pool);
+  reduce_tensor_desc_pool_mu.Unlock();
+#ifdef __AVA_ENABLE_STAT
+  ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
   return res;
 }
 
 EXPORTED cudnnStatus_t CUDNNWINAPI cudnnDestroyConvolutionDescriptor(cudnnConvolutionDescriptor_t convDesc) {
+#ifdef __AVA_ENABLE_STAT
+  auto begin_ts = ava::GetMonotonicNanoTimestamp();
+#endif
+  reduce_tensor_desc_pool_mu.Lock();
   g_queue_push_tail(idle_convolution_descriptor_pool, (gpointer)convDesc);
-  if (idle_convolution_descriptor_pool->length >= DESCRITPOR_POOL_SIZE)
-    return (cudnnStatus_t)free_convolution_descriptor_pool(idle_convolution_descriptor_pool);
+  if (idle_convolution_descriptor_pool->length >= DESCRITPOR_POOL_SIZE) {
+    auto ret = (cudnnStatus_t)free_convolution_descriptor_pool(idle_convolution_descriptor_pool);
+    reduce_tensor_desc_pool_mu.Unlock();
+#ifdef __AVA_ENABLE_STAT
+    ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
+    return ret;
+  }
+  reduce_tensor_desc_pool_mu.Unlock();
+#ifdef __AVA_ENABLE_STAT
+  ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
   return CUDNN_STATUS_SUCCESS;
 }
 
 EXPORTED cudnnStatus_t CUDNNWINAPI cudnnDestroyFilterDescriptor(cudnnFilterDescriptor_t filterDesc) {
+#ifdef __AVA_ENABLE_STAT
+  auto begin_ts = ava::GetMonotonicNanoTimestamp();
+#endif
+  filter_desc_pool_mu.Lock();
   g_queue_push_tail(idle_filter_descriptor_pool, (gpointer)filterDesc);
-  if (idle_filter_descriptor_pool->length >= DESCRITPOR_POOL_SIZE)
-    return (cudnnStatus_t)free_filter_descriptor_pool(idle_filter_descriptor_pool);
+  if (idle_filter_descriptor_pool->length >= DESCRITPOR_POOL_SIZE) {
+    auto ret = (cudnnStatus_t)free_filter_descriptor_pool(idle_filter_descriptor_pool);
+    filter_desc_pool_mu.Unlock();
+#ifdef __AVA_ENABLE_STAT
+    ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
+    return ret;
+  }
+  filter_desc_pool_mu.Unlock();
+#ifdef __AVA_ENABLE_STAT
+  ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
   return CUDNN_STATUS_SUCCESS;
 }
 
 EXPORTED cudnnStatus_t CUDNNWINAPI cudnnDestroyPoolingDescriptor(cudnnPoolingDescriptor_t poolingDesc) {
+#ifdef __AVA_ENABLE_STAT
+  auto begin_ts = ava::GetMonotonicNanoTimestamp();
+#endif
+  pooling_desc_pool_mu.Lock();
   g_queue_push_tail(idle_pooling_descriptor_pool, (gpointer)poolingDesc);
-  if (idle_pooling_descriptor_pool->length >= DESCRITPOR_POOL_SIZE)
-    return (cudnnStatus_t)free_pooling_descriptor_pool(idle_pooling_descriptor_pool);
+  if (idle_pooling_descriptor_pool->length >= DESCRITPOR_POOL_SIZE) {
+    auto ret = (cudnnStatus_t)free_pooling_descriptor_pool(idle_pooling_descriptor_pool);
+    pooling_desc_pool_mu.Unlock();
+#ifdef __AVA_ENABLE_STAT
+    ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
+    return ret;
+  }
+  pooling_desc_pool_mu.Unlock();
+#ifdef __AVA_ENABLE_STAT
+  ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
   return CUDNN_STATUS_SUCCESS;
 }
 
 EXPORTED cudnnStatus_t CUDNNWINAPI cudnnDestroyTensorDescriptor(cudnnTensorDescriptor_t tensorDesc) {
+#ifdef __AVA_ENABLE_STAT
+  auto begin_ts = ava::GetMonotonicNanoTimestamp();
+#endif
+  tensor_desc_pool_mu.Lock();
   g_queue_push_tail(idle_tensor_descriptor_pool, (gpointer)tensorDesc);
-  if (idle_tensor_descriptor_pool->length >= DESCRITPOR_POOL_SIZE)
-    return (cudnnStatus_t)free_tensor_descriptor_pool(idle_tensor_descriptor_pool);
+  if (idle_tensor_descriptor_pool->length >= DESCRITPOR_POOL_SIZE) {
+    auto ret = (cudnnStatus_t)free_tensor_descriptor_pool(idle_tensor_descriptor_pool);
+    tensor_desc_pool_mu.Unlock();
+#ifdef __AVA_ENABLE_STAT
+    ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
+    return ret;
+  }
+  tensor_desc_pool_mu.Unlock();
+#ifdef __AVA_ENABLE_STAT
+  ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
+  return CUDNN_STATUS_SUCCESS;
+}
+
+EXPORTED cudnnStatus_t CUDNNWINAPI cudnnDestroyReduceTensorDescriptor(cudnnReduceTensorDescriptor_t reduceTensorDesc) {
+#ifdef __AVA_ENABLE_STAT
+  auto begin_ts = ava::GetMonotonicNanoTimestamp();
+#endif
+  reduce_tensor_desc_pool_mu.Lock();
+  g_queue_push_tail(idle_reduce_tensor_descriptor_pool, (gpointer)reduceTensorDesc);
+  if (idle_reduce_tensor_descriptor_pool->length >= DESCRITPOR_POOL_SIZE) {
+    auto ret = (cudnnStatus_t)free_reduce_tensor_descriptor_pool(idle_reduce_tensor_descriptor_pool);
+    reduce_tensor_desc_pool_mu.Unlock();
+#ifdef __AVA_ENABLE_STAT
+    ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
+    return ret;
+  }
+  reduce_tensor_desc_pool_mu.Unlock();
+#ifdef __AVA_ENABLE_STAT
+  ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
   return CUDNN_STATUS_SUCCESS;
 }
 ava_end_replacement;
+
 
 cudnnStatus_t CUDNNWINAPI cudnnGetBatchNormalizationForwardTrainingExWorkspaceSize(
     cudnnHandle_t handle, cudnnBatchNormMode_t mode, cudnnBatchNormOps_t bnOps, const cudnnTensorDescriptor_t xDesc,
@@ -5274,6 +5480,7 @@ cudnnStatus_t CUDNNWINAPI cudnnOpTensor(cudnnHandle_t handle, const cudnnOpTenso
   ava_unsupported;
 }
 
+/*
 cudnnStatus_t CUDNNWINAPI cudnnCreateReduceTensorDescriptor(cudnnReduceTensorDescriptor_t *reduceTensorDesc) {
   ava_argument(reduceTensorDesc) {
     ava_out;
@@ -5281,6 +5488,7 @@ cudnnStatus_t CUDNNWINAPI cudnnCreateReduceTensorDescriptor(cudnnReduceTensorDes
     ava_element ava_handle;
   }
 }
+*/
 
 cudnnStatus_t CUDNNWINAPI cudnnSetReduceTensorDescriptor(cudnnReduceTensorDescriptor_t reduceTensorDesc,
                                                          cudnnReduceTensorOp_t reduceTensorOp,
@@ -5320,9 +5528,11 @@ cudnnStatus_t CUDNNWINAPI cudnnGetReduceTensorDescriptor(const cudnnReduceTensor
   }
 }
 
+/*
 cudnnStatus_t CUDNNWINAPI cudnnDestroyReduceTensorDescriptor(cudnnReduceTensorDescriptor_t reduceTensorDesc) {
   ava_argument(reduceTensorDesc) ava_handle;
 }
+*/
 
 /* Helper function to return the minimum size of the index space to be passed to the reduction given the input and
  * output tensors */

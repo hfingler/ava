@@ -8,11 +8,13 @@
 #include "guestlib/extensions/guest_cmd_batching_queue.h"
 #include "guestlib/guest_context.h"
 #include "guestlib/guest_thread.h"
+#include <absl/synchronization/mutex.h>
 
 GQueue *call_configuration_stack;
 
-GQueue *cu_event_pool;
-GQueue *idle_cu_event_pool;
+absl::Mutex cu_event_pool_mu;
+GQueue *cu_event_pool ABSL_GUARDED_BY(cu_event_pool_mu);
+GQueue *idle_cu_event_pool ABSL_GUARDED_BY(cu_event_pool_mu);
 
 cudaError_t cuda_last_error;
 
@@ -59,7 +61,11 @@ int free_cu_event_pool(GQueue *pool) {
   CUevent *desc;
   int i = 0;
 
-  if (g_queue_is_empty(pool)) return CUDA_SUCCESS;
+  cu_event_pool_mu.Lock();
+  if (g_queue_is_empty(pool)) {
+    cu_event_pool_mu.Unlock();
+    return CUDA_SUCCESS;
+  }
 
   desc = (CUevent *)malloc(sizeof(CUevent) * pool->length);
 
@@ -67,5 +73,7 @@ int free_cu_event_pool(GQueue *pool) {
     desc[i++] = (CUevent)element;
   }
 
-  return __pool_cuEventDestroy(desc, i);
+  auto ret = __pool_cuEventDestroy(desc, i);
+  cu_event_pool_mu.Unlock();
+  return ret;
 }

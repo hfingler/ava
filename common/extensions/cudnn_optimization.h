@@ -11,6 +11,7 @@
 #include <cuda.h>
 #include <cudnn.h>
 #include <glib.h>
+#include <deque>
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,6 +38,10 @@ int free_tensor_descriptor_pool(GQueue *pool);
 cudnnStatus_t __pool_cudnnCreateFilterDescriptor(cudnnFilterDescriptor_t *filterDesc, size_t count);
 cudnnStatus_t __pool_cudnnDestroyFilterDescriptor(cudnnFilterDescriptor_t *filterDesc, size_t count);
 int free_filter_descriptor_pool(GQueue *pool);
+
+cudnnStatus_t __pool_cudnnCreateReduceTensorDescriptor(cudnnReduceTensorDescriptor_t *reduceTensorDesc, size_t count);
+cudnnStatus_t __pool_cudnnDestroyReduceTensorDescriptor(cudnnReduceTensorDescriptor_t *reduceTensorDesc, size_t count);
+int free_reduce_tensor_descriptor_pool(GQueue *pool);
 
 cudnnStatus_t __cudnnCreate(cudnnHandle_t *handle);
 cublasStatus_t __cublasCreate(cublasHandle_t *handle);
