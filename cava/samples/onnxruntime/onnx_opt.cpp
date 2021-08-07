@@ -1320,8 +1320,13 @@ __host__ cudaError_t CUDARTAPI cudaEventCreate(cudaEvent_t *event) {
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaEventRecord(cudaEvent_t event, cudaStream_t stream) {
+  ava_disable_native_call;
   ava_argument(event) ava_handle;
   ava_argument(stream) ava_handle;
+
+  if (ava_is_worker) {
+    return cudaEventRecord(event, __helper_translate_stream(stream));
+  }
 }
 
 __host__ cudaError_t CUDARTAPI cudaEventQuery(cudaEvent_t event) { ava_argument(event) ava_handle; }
@@ -1512,16 +1517,7 @@ CUresult CUDAAPI cuDeviceGet(CUdevice *device, int ordinal) {
   }
   if (ava_is_worker) {
 #warning This will bypass the resource reporting routine.
-    if (ordinal != 0) {
-      return CUDA_ERROR_INVALID_VALUE;
-    } else {
-      CUresult ret = cuDeviceGet(device, __internal_getCurrentDeviceIndex());
-#ifndef NDEBUG
-      auto tid = gsl::narrow_cast<int>(syscall(SYS_gettid));
-      std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
-#endif
-      return ret;
-    }
+    return __helper_cuDeviceGet(device, ordinal);
   }
 }
 

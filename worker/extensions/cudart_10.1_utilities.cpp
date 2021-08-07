@@ -536,6 +536,20 @@ cudaError_t __helper_cudaDeviceGetAttribute(int *value, enum cudaDeviceAttr attr
   return ret;
 }
 
+CUresult __helper_cuDeviceGet(CUdevice *device, int ordinal) {
+  
+  if (ordinal != 0) {
+    return CUDA_ERROR_INVALID_VALUE;
+  } else {
+    CUresult ret = cuDeviceGet(device, __internal_getCurrentDeviceIndex());
+#ifndef NDEBUG
+    auto tid = gsl::narrow_cast<int>(syscall(SYS_gettid));
+    std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
+#endif
+    return ret;
+  }
+}
+
 cudaStream_t __helper_translate_stream(cudaStream_t stream) {
   return __translate_stream(stream);
 }
