@@ -147,6 +147,7 @@ CUresult __helper_cuDeviceComputeCapability(int *major, int *minor, CUdevice dev
 cudaError_t __helper_cudaGetDeviceProperties(struct cudaDeviceProp *prop, int device);
 cudaError_t __helper_cudaDeviceGetAttribute(int *value, enum cudaDeviceAttr attr,
                                             int device);
+CUresult __helper_cuDeviceGet(CUdevice *device, int ordinal);
 
 cudaStream_t __helper_translate_stream(cudaStream_t stream);
 void* __helper_translate_ptr(void* ptr);

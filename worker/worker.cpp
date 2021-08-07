@@ -117,6 +117,11 @@ static void nvml_setDeviceCount() {
   __internal_setDeviceCount(device_count);
 }
 
+static void destroy_cuda_contexts(){
+  for (int i = 0; i < __internal_getDeviceCount(); i++)
+    cudaDeviceReset();
+}
+
 static void create_cuda_contexts() {
   for (int i = 0; i < __internal_getDeviceCount(); i++) {
     cudaSetDevice(i);
@@ -266,10 +271,12 @@ int main(int argc, char *argv[]) {
       GPUMemoryServer::Client::getInstance().fullCleanup();
 
       // explode and reset cuda contexts
-      cudaDeviceReset();
-      if (enable_all_ctx == "yes")
+      if (enable_all_ctx == "yes") {
+        destroy_cuda_contexts();
         create_cuda_contexts();
+      }
       else {
+        cudaDeviceReset();
         cudaSetDevice(std::stoi(gpu_device));
         cudaFree(0);
       }
