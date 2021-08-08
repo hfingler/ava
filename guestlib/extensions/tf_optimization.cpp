@@ -10,6 +10,7 @@
 #include "guestlib/guest_thread.h"
 #include <absl/synchronization/mutex.h>
 
+absl::Mutex call_configuration_stack_mu;
 GQueue *call_configuration_stack;
 
 absl::Mutex cu_event_pool_mu;
