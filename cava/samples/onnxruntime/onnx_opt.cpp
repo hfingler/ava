@@ -5841,6 +5841,7 @@ cudnnStatus_t CUDNNWINAPI cudnnConvolutionBiasActivationForward(
     cudnnConvolutionFwdAlgo_t algo, void *workSpace, size_t workSpaceSizeInBytes, const void *alpha2,
     const cudnnTensorDescriptor_t zDesc, const void *z, const cudnnTensorDescriptor_t biasDesc, const void *bias,
     const cudnnActivationDescriptor_t activationDesc, const cudnnTensorDescriptor_t yDesc, void *y) {
+  ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(alpha1) {
     ava_in;
