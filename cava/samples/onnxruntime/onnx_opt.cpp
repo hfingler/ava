@@ -1263,14 +1263,14 @@ EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMemcpyAsync(void 
     struct cudaPointerAttributes src_attr;
     bool dst_is_gpu = false;
     bool src_is_gpu = false;
-    ret = cudaPointerGetAttributes(&dst_attr, dst);
+    ret = __helper_cudaPointerGetAttributes(&dst_attr, dst);
     if (ret != cudaSuccess) {
       dst_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(dst));
       cudaGetLastError();  // reset error to cudaSuccess
     } else {
       dst_is_gpu = (dst_attr.type == cudaMemoryTypeDevice);
     }
-    ret = cudaPointerGetAttributes(&src_attr, src);
+    ret = __helper_cudaPointerGetAttributes(&src_attr, src);
     if (ret != cudaSuccess) {
       src_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(src));
       cudaGetLastError();  // reset error to cudaSuccess
@@ -1296,7 +1296,7 @@ __host__ cudaError_t CUDARTAPI cudaMemset(void *devPtr, int value, size_t count)
   }
 }
 
-__host__ cudaError_t CUDARTAPI cudaPointerGetAttributes(struct cudaPointerAttributes *attributes, const void *ptr) {
+cudaError_t __helper_cudaPointerGetAttributes(struct cudaPointerAttributes *attributes, const void *ptr) {
   ava_argument(attributes) {
     ava_out;
     ava_buffer(1);
@@ -1310,35 +1310,34 @@ __host__ cudaError_t CUDARTAPI cudaPointerGetAttributes(struct cudaPointerAttrib
   //__helper_print_pointer_attributes(attributes, ptr);
 }
 
-// ava_begin_replacement;
-// EXPORTED __host__ cudaError_t CUDARTAPI cudaPointerGetAttributes(struct cudaPointerAttributes *attributes,
-//                                                                  const void *ptr) {
-// #ifdef __AVA_ENABLE_STAT
-//   auto begin_ts = ava::GetMonotonicNanoTimestamp();
-// #endif
-//
-//   if (!attributes) return cudaErrorInvalidDevice;
-//
-//   /* Search in gpu_address_set */
-//   if (is_gpu_address(reinterpret_cast<uint64_t>(ptr))) {
-//     attributes->type = cudaMemoryTypeDevice;  // maybe cudaMemoryTypeManaged?
-//     attributes->memoryType = cudaMemoryTypeDevice;
-// #ifdef __AVA_ENABLE_STAT
-//     ava::support::stats_end(__FUNCTION__, begin_ts);
-// #endif
-//     return cudaSuccess;
-//   }
-//
-//   attributes->type = cudaMemoryTypeUnregistered;
-//   attributes->memoryType = cudaMemoryTypeUnregistered;
-//   cuda_last_error = cudaErrorInvalidValue;
-//
-// #ifdef __AVA_ENABLE_STAT
-//   ava::support::stats_end(__FUNCTION__, begin_ts);
-// #endif
-//   return cudaErrorInvalidValue;
-// }
-// ava_end_replacement;
+ava_begin_replacement;
+EXPORTED __host__ cudaError_t CUDARTAPI cudaPointerGetAttributes(struct cudaPointerAttributes *attributes,
+                                                                 const void *ptr) {
+#ifdef __AVA_ENABLE_STAT
+  auto begin_ts = ava::GetMonotonicNanoTimestamp();
+#endif
+
+  if (!attributes) return cudaErrorInvalidDevice;
+
+  /* Search in gpu_address_set */
+  if (is_gpu_address(reinterpret_cast<uint64_t>(ptr))) {
+    attributes->type = cudaMemoryTypeDevice;  // maybe cudaMemoryTypeManaged?
+    attributes->memoryType = cudaMemoryTypeDevice;
+#ifdef __AVA_ENABLE_STAT
+    ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
+    return cudaSuccess;
+  }
+
+  attributes->type = cudaMemoryTypeUnregistered;
+  attributes->memoryType = cudaMemoryTypeUnregistered;
+  cuda_last_error = cudaErrorInvalidValue;
+#ifdef __AVA_ENABLE_STAT
+  ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
+  return cudaErrorInvalidValue;
+}
+ava_end_replacement;
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaDeviceSynchronize(void);
 
@@ -3426,7 +3425,7 @@ EXPORTED CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemm_v2(cublasHandle_t han
   struct cudaPointerAttributes beta_attr;
   bool alpha_is_gpu = false;
   bool beta_is_gpu = false;
-  ret = cudaPointerGetAttributes(&alpha_attr, alpha);
+  ret = __helper_cudaPointerGetAttributes(&alpha_attr, alpha);
   //printf("alpha attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, alpha_attr.type, alpha_attr.device, alpha_attr.devicePointer, alpha_attr.hostPointer);
   if (ret != cudaSuccess) {
     alpha_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(alpha));
@@ -3435,7 +3434,7 @@ EXPORTED CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemm_v2(cublasHandle_t han
   } else {
     alpha_is_gpu = (alpha_attr.type == cudaMemoryTypeDevice);
   }
-  ret = cudaPointerGetAttributes(&beta_attr, beta);
+  ret = __helper_cudaPointerGetAttributes(&beta_attr, beta);
   //printf("beta attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, beta_attr.type, beta_attr.device, beta_attr.devicePointer, beta_attr.hostPointer);
   if (ret != cudaSuccess) {
     beta_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(beta));

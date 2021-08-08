@@ -557,3 +557,7 @@ cudaStream_t __helper_translate_stream(cudaStream_t stream) {
 void* __helper_translate_ptr(void* ptr) {
   return __translate_ptr(ptr);
 }
+
+cudaError_t __helper_cudaPointerGetAttributes(struct cudaPointerAttributes *attributes, const void *ptr) {
+  return cudaPointerGetAttributes(attributes, ptr);
+}
