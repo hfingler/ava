@@ -31,15 +31,32 @@ EXPORTED_WEAKLY void nw_init_log() {
 #ifdef DEBUG
   guestconfig::config->print();
 #endif
+  auto logger_severity = guestconfig::config->logger_severity_;
+  auto env_log = ava::support::GetEnvVariable("AVA_LOG_LEVEL");
+  if (env_log != "") {
+    if ((env_log == "verbose") || (env_log == "VERBOSE")) {
+      logger_severity = plog::verbose;
+    } else if ((env_log == "debug") || (env_log == "DEBUG")) {
+      logger_severity = plog::debug;
+    } else if ((env_log == "info") || (env_log == "INFO")) {
+      logger_severity = plog::info;
+    } else if ((env_log == "warning") || (env_log == "WARNING")) {
+      logger_severity = plog::warning;
+    } else if ((env_log == "error") || (env_log == "ERROR")) {
+      logger_severity = plog::error;
+    } else if ((env_log == "fatal") || (env_log == "FATAL")) {
+      logger_severity = plog::fatal;
+    }
+  }
   // Initialize logger
   int use_console = ava::support::GetEnvVariableAsInt("AVA_LOG_CONSOLE", 0);
   if (use_console == 1) {
     static plog::ConsoleAppender<plog::TxtFormatter> consoleAppender;
-    plog::init(guestconfig::config->logger_severity_, &consoleAppender);
+    plog::init(logger_severity, &consoleAppender);
     std::cerr << "AvA log to console" << std::endl;
   } else {
     std::string log_file = std::tmpnam(nullptr);
-    plog::init(guestconfig::config->logger_severity_, log_file.c_str());
+    plog::init(logger_severity, log_file.c_str());
     std::cerr << "To check the state of AvA remoting progress, use `tail -f " << log_file << "`" << std::endl;
   }
 }

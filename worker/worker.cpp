@@ -27,6 +27,7 @@
 #include "common/common_context.h"
 #include "common/linkage.h"
 #include "common/socket.hpp"
+#include "common/support/env_variables.h"
 #include "extensions/memory_server/client.hpp"
 #include "plog/Initializers/RollingFileInitializer.h"
 #include "worker_context.h"
@@ -88,7 +89,24 @@ EXPORTED_WEAKLY std::string worker_init_log() {
   std::ios_base::Init();
   // Initialize logger
   std::string log_file = std::tmpnam(nullptr);
-  plog::init(plog::debug, log_file.c_str());
+  auto logger_severity = plog::debug;
+  auto env_log = ava::support::GetEnvVariable("AVA_LOG_LEVEL");
+  if (env_log != "") {
+    if ((env_log == "verbose") || (env_log == "VERBOSE")) {
+      logger_severity = plog::verbose;
+    } else if ((env_log == "debug") || (env_log == "DEBUG")) {
+      logger_severity = plog::debug;
+    } else if ((env_log == "info") || (env_log == "INFO")) {
+      logger_severity = plog::info;
+    } else if ((env_log == "warning") || (env_log == "WARNING")) {
+      logger_severity = plog::warning;
+    } else if ((env_log == "error") || (env_log == "ERROR")) {
+      logger_severity = plog::error;
+    } else if ((env_log == "fatal") || (env_log == "FATAL")) {
+      logger_severity = plog::fatal;
+    }
+  }
+  plog::init(logger_severity, log_file.c_str());
   std::cerr << "To check the state of AvA remoting progress, use `tail -f " << log_file << "`" << std::endl;
   return log_file;
 }
