@@ -561,3 +561,13 @@ void* __helper_translate_ptr(void* ptr) {
 cudaError_t __helper_cudaPointerGetAttributes(struct cudaPointerAttributes *attributes, const void *ptr) {
   return cudaPointerGetAttributes(attributes, ptr);
 }
+
+cudnnStatus_t __helper_cudnnConvolutionForward(cudnnHandle_t handle, cudnnDataType_t tensorType, const void *alpha,
+                                               const cudnnTensorDescriptor_t xDesc, const void *x,
+                                               const cudnnFilterDescriptor_t wDesc, const void *w,
+                                               const cudnnConvolutionDescriptor_t convDesc,
+                                               cudnnConvolutionFwdAlgo_t algo, void *workSpace,
+                                               size_t workSpaceSizeInBytes, const void *beta,
+                                               const cudnnTensorDescriptor_t yDesc, void *y) {
+  return cudnnConvolutionForward(handle, alpha, xDesc, x, wDesc, w, convDesc, algo, workSpace, workSpaceSizeInBytes, beta, yDesc, y);
+}

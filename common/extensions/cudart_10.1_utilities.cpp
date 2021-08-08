@@ -7,12 +7,37 @@
 #include <deque>
 #include "worker/extensions/memory_server/client.hpp"
 #include <iostream>
+#include <memory>
 #include <fmt/core.h>
 #include "common/logging.h"
 #include <absl/synchronization/mutex.h>
 
 absl::Mutex module_path_mu;
 absl::flat_hash_map<CUmodule, std::string> module_path_map ABSL_GUARDED_BY(module_path_mu);
+
+struct tensor_desc {
+  cudnnDataType_t data_type;
+  tensor_desc(cudnnDataType_t data_type): data_type(data_type) {}
+};
+
+absl::Mutex tensor_desc_map_mu;
+absl::flat_hash_map<cudnnTensorDescriptor_t, std::unique_ptr<tensor_desc>> tensor_desc_map ABSL_GUARDED_BY(tensor_desc_map_mu);
+
+void __helper_record_tensor_desc(cudnnTensorDescriptor_t desc, cudnnDataType_t data_type) {
+  absl::MutexLock lk(&tensor_desc_map_mu);
+  tensor_desc_map[desc] = std::make_unique<tensor_desc>(data_type);
+}
+
+bool __helper_get_tensor_type(cudnnTensorDescriptor_t desc, cudnnDataType_t *data_type) {
+  absl::MutexLock lk(&tensor_desc_map_mu);
+  auto search = tensor_desc_map.find(desc);
+  if (search != tensor_desc_map.end()) {
+    *data_type = search->second->data_type;
+    return true;
+  } else {
+    return false;
+  }
+}
 
 int deference_int_pointer(int *p) {
   if (p)
