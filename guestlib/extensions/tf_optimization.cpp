@@ -61,9 +61,7 @@ int free_cu_event_pool(GQueue *pool) {
   CUevent *desc;
   int i = 0;
 
-  cu_event_pool_mu.Lock();
   if (g_queue_is_empty(pool)) {
-    cu_event_pool_mu.Unlock();
     return CUDA_SUCCESS;
   }
 
@@ -74,6 +72,5 @@ int free_cu_event_pool(GQueue *pool) {
   }
 
   auto ret = __pool_cuEventDestroy(desc, i);
-  cu_event_pool_mu.Unlock();
   return ret;
 }
