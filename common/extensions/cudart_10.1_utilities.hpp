@@ -152,13 +152,20 @@ CUresult __helper_cuDeviceGet(CUdevice *device, int ordinal);
 cudaError_t __helper_cudaPointerGetAttributes(struct cudaPointerAttributes *attributes, const void *ptr);
 void __helper_record_tensor_desc(cudnnTensorDescriptor_t desc, cudnnDataType_t data_type);
 bool __helper_get_tensor_type(cudnnTensorDescriptor_t desc, cudnnDataType_t *data_type);
-cudnnStatus_t __helper_cudnnConvolutionForward(cudnnHandle_t handle, cudnnDataType_t tensorType, const void *alpha,
-                                               const cudnnTensorDescriptor_t xDesc, const void *x,
-                                               const cudnnFilterDescriptor_t wDesc, const void *w,
-                                               const cudnnConvolutionDescriptor_t convDesc,
-                                               cudnnConvolutionFwdAlgo_t algo, void *workSpace,
-                                               size_t workSpaceSizeInBytes, const void *beta,
-                                               const cudnnTensorDescriptor_t yDesc, void *y);
+cudnnStatus_t __helper_cudnnConvolutionForward_double(cudnnHandle_t handle, const double *alpha,
+                                                      const cudnnTensorDescriptor_t xDesc, const void *x,
+                                                      const cudnnFilterDescriptor_t wDesc, const void *w,
+                                                      const cudnnConvolutionDescriptor_t convDesc,
+                                                      cudnnConvolutionFwdAlgo_t algo, void *workSpace,
+                                                      size_t workSpaceSizeInBytes, const double *beta,
+                                                      const cudnnTensorDescriptor_t yDesc, void *y);
+cudnnStatus_t __helper_cudnnConvolutionForward_float(cudnnHandle_t handle, const float *alpha,
+                                                     const cudnnTensorDescriptor_t xDesc, const void *x,
+                                                     const cudnnFilterDescriptor_t wDesc, const void *w,
+                                                     const cudnnConvolutionDescriptor_t convDesc,
+                                                     cudnnConvolutionFwdAlgo_t algo, void *workSpace,
+                                                     size_t workSpaceSizeInBytes, const float *beta,
+                                                     const cudnnTensorDescriptor_t yDesc, void *y);
 
 cudaStream_t __helper_translate_stream(cudaStream_t stream);
 void* __helper_translate_ptr(void* ptr);

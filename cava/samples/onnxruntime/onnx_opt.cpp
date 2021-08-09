@@ -3,9 +3,9 @@ ava_name("CUDA Runtime for ONNX");
 ava_version("10.1.0");
 ava_identifier(ONNX_OPT);
 ava_number(10);
-// ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN);
+ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN);
 // To enable stat collecting, use the below line and uncomment the ava_stats definition
-ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN -D__AVA_ENABLE_STAT);
+// ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN -D__AVA_ENABLE_STAT);
 ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver zmq nvidia-ml absl::flat_hash_map absl::hash absl::strings);
 ava_guestlib_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/guest_cmd_batching_queue.cpp extensions/extension_api.cpp extensions/gpu_address_tracking.cpp);
 ava_worker_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/cmd_batching.cpp extensions/cudart_10.1_utilities.cpp extensions/memory_server/client.cpp);
@@ -26,7 +26,7 @@ ava_soname(libcuda.so libcuda.so.1 libcudart.so.10 libcudart.so.10.1 libcublas.s
 
 ava_non_transferable_types { ava_handle; }
 
-ava_functions { ava_stats; }
+// ava_functions { ava_stats; }
 
 size_t __args_index_0;
 size_t __kernelParams_index_0;
@@ -4457,43 +4457,54 @@ cudnnStatus_t CUDNNWINAPI cudnnBatchNormalizationForwardInference(
   ava_argument(estimatedVariance) ava_opaque;
 }
 
-cudnnStatus_t __helper_cudnnConvolutionForward(cudnnHandle_t handle, cudnnDataType_t tensorType, const void *alpha,
-                                               const cudnnTensorDescriptor_t xDesc, const void *x,
-                                               const cudnnFilterDescriptor_t wDesc, const void *w,
-                                               const cudnnConvolutionDescriptor_t convDesc,
-                                               cudnnConvolutionFwdAlgo_t algo, void *workSpace,
-                                               size_t workSpaceSizeInBytes, const void *beta,
-                                               const cudnnTensorDescriptor_t yDesc, void *y) {
+cudnnStatus_t __helper_cudnnConvolutionForward_double(cudnnHandle_t handle, const double *alpha,
+                                                      const cudnnTensorDescriptor_t xDesc, const void *x,
+                                                      const cudnnFilterDescriptor_t wDesc, const void *w,
+                                                      const cudnnConvolutionDescriptor_t convDesc,
+                                                      cudnnConvolutionFwdAlgo_t algo, void *workSpace,
+                                                      size_t workSpaceSizeInBytes, const double *beta,
+                                                      const cudnnTensorDescriptor_t yDesc, void *y) {
   ava_async;
   ava_argument(handle) ava_handle;
-  if ((tensorType == CUDNN_DATA_FLOAT) || (tensorType == CUDNN_DATA_HALF)) {
-    ava_argument(alpha) {
-      ava_type_cast(const float *);
-      ava_in;
-      ava_buffer(1);
-      ava_depends_on(tensorType);
-    }
-    ava_argument(beta) {
-      ava_type_cast(const float *);
-      ava_in;
-      ava_buffer(1);
-      ava_depends_on(tensorType);
-    }
-  } else {
-    ava_argument(alpha) {
-      ava_type_cast(const double *);
-      ava_in;
-      ava_buffer(1);
-      ava_depends_on(tensorType);
-    }
-    ava_argument(beta) {
-      ava_type_cast(const double *);
-      ava_in;
-      ava_buffer(1);
-      ava_depends_on(tensorType);
-    }
+  ava_argument(alpha) {
+    ava_type_cast(const double *);
+    ava_in;
+    ava_buffer(1);
   }
-  
+  ava_argument(beta) {
+    ava_type_cast(const double *);
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(xDesc) ava_handle;
+  ava_argument(x) ava_opaque;
+  ava_argument(wDesc) ava_handle;
+  ava_argument(w) ava_opaque;
+  ava_argument(convDesc) ava_handle;
+  ava_argument(workSpace) ava_opaque;
+  ava_argument(yDesc) ava_handle;
+  ava_argument(y) ava_opaque;
+}
+
+cudnnStatus_t __helper_cudnnConvolutionForward_float(cudnnHandle_t handle, const float *alpha,
+                                                     const cudnnTensorDescriptor_t xDesc, const void *x,
+                                                     const cudnnFilterDescriptor_t wDesc, const void *w,
+                                                     const cudnnConvolutionDescriptor_t convDesc,
+                                                     cudnnConvolutionFwdAlgo_t algo, void *workSpace,
+                                                     size_t workSpaceSizeInBytes, const float *beta,
+                                                     const cudnnTensorDescriptor_t yDesc, void *y) {
+  ava_async;
+  ava_argument(handle) ava_handle;
+  ava_argument(alpha) {
+    ava_type_cast(const float *);
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(beta) {
+    ava_type_cast(const float *);
+    ava_in;
+    ava_buffer(1);
+  }
   ava_argument(xDesc) ava_handle;
   ava_argument(x) ava_opaque;
   ava_argument(wDesc) ava_handle;
@@ -4533,11 +4544,50 @@ EXPORTED cudnnStatus_t CUDNNWINAPI cudnnConvolutionForward(cudnnHandle_t handle,
   } else {
     data_type = CUDNN_DATA_DOUBLE;
   }
-  
-  return __helper_cudnnConvolutionForward(handle, data_type, alpha, xDesc, x, wDesc, w, convDesc, 
-                                          algo, workSpace, workSpaceSizeInBytes, beta, yDesc, y);
+  if (data_type == CUDNN_DATA_DOUBLE) {
+    return __helper_cudnnConvolutionForward_double(handle, (const double *)alpha, xDesc, x, wDesc, w, convDesc, 
+                                                   algo, workSpace, workSpaceSizeInBytes, (const double *)beta, yDesc, y);
+  } else {
+    return __helper_cudnnConvolutionForward_float(handle, (const float *)alpha, xDesc, x, wDesc, w, convDesc, 
+                                                  algo, workSpace, workSpaceSizeInBytes, (const float *)beta, yDesc, y);
+  }
 }
 ava_end_replacement;
+
+
+/*
+cudnnStatus_t CUDNNWINAPI cudnnConvolutionForward(cudnnHandle_t handle, const void *alpha,
+                                                  const cudnnTensorDescriptor_t xDesc, const void *x,
+                                                  const cudnnFilterDescriptor_t wDesc, const void *w,
+                                                  const cudnnConvolutionDescriptor_t convDesc,
+                                                  cudnnConvolutionFwdAlgo_t algo, void *workSpace,
+                                                  size_t workSpaceSizeInBytes, const void *beta,
+                                                  const cudnnTensorDescriptor_t yDesc, void *y) {
+
+  ava_async;
+  ava_argument(handle) ava_handle;
+  
+  ava_argument(alpha) {
+    ava_type_cast(const float *);
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(beta) {
+    ava_type_cast(const float *);
+    ava_in;
+    ava_buffer(1);
+  }
+  
+  ava_argument(xDesc) ava_handle;
+  ava_argument(x) ava_opaque;
+  ava_argument(wDesc) ava_handle;
+  ava_argument(w) ava_opaque;
+  ava_argument(convDesc) ava_handle;
+  ava_argument(workSpace) ava_opaque;
+  ava_argument(yDesc) ava_handle;
+  ava_argument(y) ava_opaque;
+}
+*/
 
 cudnnStatus_t CUDNNWINAPI cudnnDestroy(cudnnHandle_t handle) { ava_argument(handle) ava_handle; }
 
