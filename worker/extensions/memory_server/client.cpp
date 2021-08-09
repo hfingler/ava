@@ -10,6 +10,8 @@
 #include <memory>
 #include <chrono>
 #include <thread>
+#include <condition_variable>
+#include <mutex>
 #include "common/extensions/cudart_10.1_utilities.hpp"
 #include "common/common_context.h"
 #include "extensions/memory_server/client.hpp"
@@ -20,6 +22,37 @@
  *    Global functions, used by spec and helper functions. Mostly translate a global call to a client call
  * 
  * ************************************/
+std::atomic<uint32_t> pending_cmds(0);
+std::atomic<bool> thread_block(false);
+std::mutex thread_block_mutex;
+std::condition_variable thread_block_cv;
+
+void wait_for_cmd_drain() {
+    thread_block = true;
+    //we count as a cmd, so wait for 1 pending
+    while (pending_cmds != 1) ;
+}
+
+void release_cmd_handlers() {
+  std::unique_lock<std::mutex> lk(thread_block_mutex);
+  thread_block = false;
+  thread_block_cv.notify_all();
+}
+
+void __cmd_handle_in() {
+    if (thread_block) {
+        std::unique_lock<std::mutex> lk(thread_block_mutex);
+        while (thread_block)
+            thread_block_cv.wait(lk);
+    }
+    pending_cmds++;
+    std::cerr << "in: " << pending_cmds << " pending cmds.." << std::endl;
+}
+
+void __cmd_handle_out() {
+    pending_cmds--;
+    std::cerr << "out: " << pending_cmds << " pending cmds.." << std::endl;
+}
 
 bool allContextsEnabled;
 bool __internal_allContextsEnabled() {
@@ -43,25 +76,23 @@ uint32_t __internal_getCurrentDevice() {
 
 void* __translate_ptr(void* ptr) {
     if (__internal_allContextsEnabled())
-        return GPUMemoryServer::Client::getInstance().translate_ptr(ptr);
+        return GPUMemoryServer::Client::getInstance().translateDevicePointer(ptr);
     else
         return ptr;
 }
 
 const void* __translate_ptr(const void* ptr) {
     if (__internal_allContextsEnabled()) 
-        return const_cast<const void*>(GPUMemoryServer::Client::getInstance().translate_ptr(ptr));
+        return const_cast<const void*>(GPUMemoryServer::Client::getInstance().translateDevicePointer(ptr));
     else
         return ptr;
 }
 
 void __internal_kernelIn() {
-    //printf("__internal_kernelIn\n");
     GPUMemoryServer::Client::getInstance().kernelIn();
 }
 
 void __internal_kernelOut() {
-    //printf("__internal_kernelOut\n");
     GPUMemoryServer::Client::getInstance().kernelOut();
 }
 
@@ -88,6 +119,17 @@ cudaStream_t __translate_stream(cudaStream_t key) {
     if (__internal_allContextsEnabled()) {
         uint32_t cur_dvc = __internal_getCurrentDevice();
         auto v = GPUMemoryServer::Client::getInstance().streams_map[key];
+        return v[cur_dvc];
+    }
+    else {
+        return key;
+    }
+}
+
+cudaEvent_t __translate_event(cudaEvent_t key) {
+    if (__internal_allContextsEnabled()) {
+        uint32_t cur_dvc = __internal_getCurrentDevice();
+        auto v = GPUMemoryServer::Client::getInstance().events_map[key];
         return v[cur_dvc];
     }
     else {
@@ -132,11 +174,28 @@ namespace GPUMemoryServer {
     }
 
     cudaError_t Client::localMalloc(void** devPtr, size_t size) {
+        int d;
+        cudaGetDevice(&d);
         cudaError_t err = cudaMalloc(devPtr, size);
         local_allocs.emplace((uint64_t)*devPtr, std::make_unique<Client::LocalAlloc>(*devPtr, size, current_device));
-        //report to server
-        //printf("malloc: %p\n", *devPtr);
-        GPUMemoryServer::Client::getInstance().reportMalloc(size); 
+        printf("  malloc %p  size %d  at device %d\n", *devPtr, size, d);
+        
+        //TODO add memory if we do it
+        if (migrated_type == Migration::TOTAL) {
+            //here's the issue.. if we have migrated memory, cudaMalloc may return a pointer that was
+            //previously returned for the previous GPU. That's a conflict that messes us up pretty bad
+            if (isInPointerMap(*devPtr)) {
+                std::cerr << "### Pointer conflict after memory migration ..." << std::endl;
+                uint64_t optr = *devPtr;
+                while (isInPointerMap(optr)) { optr += 1; }
+                //add to the map
+                pointer_map[optr] = *devPtr;
+                //we now have a pointer that is not in the map
+                *devPtr = optr;
+            }
+        }
+        
+        reportMalloc(size); 
         return err;
     }
 
@@ -152,16 +211,29 @@ namespace GPUMemoryServer {
         if (devPtr == nullptr) {
             return cudaSuccess;
         }
+
         auto it = local_allocs.find((uint64_t)devPtr);
-        if (it == local_allocs.end()) {
-            fprintf(stderr, "ILLEGAL cudaFree call on devPtr %x\n", (uint64_t)devPtr);
-            cudaFree(devPtr);
-            return (cudaError_t)0;
+        //found it, remove and get out
+        if (it != local_allocs.end()) {
+            tryRemoveFromPointerMap(devPtr);
+            GPUMemoryServer::Client::getInstance().reportFree(it->second->size); 
+            local_allocs.erase(it); //this calls cudaFree
+            return (cudaError_t)0;   
         }
-        //report to server
-        GPUMemoryServer::Client::getInstance().reportFree(it->second->size); 
-        local_allocs.erase(it);
-        return (cudaError_t)0;   
+
+        //we could have migrated memory, check
+        void* optr = translateDevicePointer(devPtr);
+        it = local_allocs.find((uint64_t)optr);
+        if (it != local_allocs.end()) {
+            fprintf(stderr, "### ERASE BY MAP\n");
+            tryRemoveFromPointerMap(devPtr);
+            GPUMemoryServer::Client::getInstance().reportFree(it->second->size); 
+            local_allocs.erase(it); //this calls cudaFree
+            return (cudaError_t)0;   
+        }
+
+        fprintf(stderr, "### ILLEGAL cudaFree call on devPtr %x\n", (uint64_t)devPtr);
+        return (cudaError_t)1;   
     }
 
     void Client::reportFree(uint64_t size) {
@@ -171,17 +243,163 @@ namespace GPUMemoryServer {
         sendRequest(req);
     }
 
-    void Client::fullCleanup() {
-        reportCleanup(0);  //TODO
-        local_allocs.clear();
+    void Client::reportMemoryRequested(uint64_t mem_mb) {
+        Request req;
+        req.type = RequestType::MEMREQUESTED;
+        req.data.size = mem_mb;
+        sendRequest(req);
+    }
 
-        //iterate over map of maps, destroying events
-        for (auto& kv : streams_map) {
-            for (auto& idx_st : kv.second) {
-                cudaStreamDestroy(idx_st.second);
-            }
+    void Client::sendRequest(Request &req) {
+        //just quit if we are not reporting to gpu server
+        if (enable_reporting == false) {
+            return;
         }
-        streams_map.clear();
+
+        sockmtx.lock();
+        strncpy(req.worker_id, uuid.c_str(), MAX_UUID_LEN);
+        if (strlen(uuid.c_str()) > MAX_UUID_LEN) {
+            printf(" ### uuid %S IS LONGER THAN %d, THIS IS AN ISSUE\n", uuid.c_str(), MAX_UUID_LEN);
+        }
+        //if not connected yet, do it
+        if (sockets[current_device] == 0) {
+            connectToGPU(current_device);
+        }
+        if (zmq_send(sockets[current_device], &req, sizeof(Request), 0) == -1) {
+            printf(" ### zmq_send errno %d\n", errno);
+        }
+        Reply rep;
+        zmq_recv(sockets[current_device], &rep, sizeof(Reply), 0);
+        sockmtx.unlock();
+        //unlock and handle it
+        handleReply(rep);
+    }
+
+    void Client::handleReply(Reply& reply) {
+        //only migrate if server told us so and we haven't migrated before
+        if (reply.migrate != Migration::NOPE && current_device == og_device)
+            migrateToGPU(reply.target_device, reply.migrate);
+    }
+
+    void Client::setCurrentGPU(int id) {
+        cudaError_t err = cudaSetDevice(id);
+        if (err) {
+            printf("### CUDA err on cudaSetDevice(%d): %d\n", id, err);
+            exit(1);
+        }
+        printf("Worker [%s] setting current device to %d\n", uuid.c_str(), id);
+        if (og_device == -1) 
+            og_device = id;
+        current_device = id;
+
+        //set on context so shadow threads also change context
+        auto ccontext = ava::CommonContext::instance();
+        ccontext->current_device = id;
+    }
+
+    void Client::resetCurrentGPU() {
+        if (og_device != current_device) {
+            setCurrentGPU(og_device);
+            current_device = og_device;
+        }
+        migrated_type = Migration::NOPE;
+    }
+
+    void Client::kernelIn() {
+        Request req;
+        req.type = RequestType::KERNEL_IN;
+        sendRequest(req);
+    }
+    
+    void Client::kernelOut() {
+        Request req;
+        req.type = RequestType::KERNEL_OUT;
+        sendRequest(req);
+    }
+
+    bool Client::isInPointerMap(void* ptr) {
+        auto it = pointer_map.find((uint64_t)ptr);
+        return it != pointer_map.end();
+    }
+
+    void Client::tryRemoveFromPointerMap(void* ptr) {
+        auto it = pointer_map.find((uint64_t)ptr);
+        if (it != pointer_map.end()) {
+            pointer_map.erase(it);
+        }
+    }
+
+    void* Client::translateDevicePointer(void* ptr) {
+        auto it = pointer_map.find((uint64_t)ptr);
+        if (it == pointer_map.end()) {
+            return ptr;
+        }
+        //lets double check we need to translate
+        void* optr = it->second;
+        cudaError_t ret;
+        struct cudaPointerAttributes at;
+        ret = cudaPointerGetAttributes(&at, optr);
+        //if it really is a device pointer
+        if (ret == 0 && at.type == 2) {
+            std::cerr << "translated " << ptr << " to " << optr  << std::endl;
+            return optr;
+        }
+        else {
+            std::cerr << "### WE DODGED A BULLET" << std::endl;
+            return ptr;
+        }
+    }
+
+    void Client::migrateToGPU(uint32_t new_gpuid, Migration migration_type) {
+        std::cerr << "[[[MIGRATION]]]\n" << std::endl;
+
+        //wait for all cmd handlers to stop
+        wait_for_cmd_drain();
+        std::cerr << "All cmd handlers are stopped.. migrating\n" << std::endl;
+        //mark that we migrated
+        migrated_type = migration_type;
+
+        //cudaDeviceSynchronize();
+        if (migration_type == Migration::KERNEL) {
+            printf("Migration by kernel mode, changing device to [%d]\n", new_gpuid);
+            //cudaDeviceEnablePeerAccess(new_gpuid, 0);
+            cudaDeviceSynchronize();
+            setCurrentGPU(new_gpuid);
+            printf("cudaDeviceEnablePeerAccess: new device [%d] can access memory on old [%d]\n", new_gpuid, og_device);
+            cudaDeviceEnablePeerAccess(og_device, 0);
+        }
+        else if (migration_type == Migration::TOTAL) {
+            std::cerr << "Full migration, changing device to" << new_gpuid << std::endl;
+            setCurrentGPU(new_gpuid);
+
+            //make a copy since we will modify ours during migration
+            std::map<uint64_t, uint64_t> current_allocs;
+            for (auto& al : local_allocs) {
+                current_allocs[al.first] = al.second->size;
+                //printf( "   [%p] -> sized %p\n", al.first, al.second->size);
+            }
+
+            for (auto const& al : current_allocs) {
+                void* devPtr;
+                //malloc on new device
+                localMalloc(&devPtr, al.second);
+                //update map
+                pointer_map[al.first] = devPtr;
+                //async might not help much since they are not parallel
+                cudaMemcpyPeer(devPtr, new_gpuid, al.first, og_device, al.second);
+                //printf("  [%s] copying %d bytes GPUs [%d]  ->  [%d]\n", uuid.c_str(), al.second, og_device, new_gpuid);
+                //printf("      [%p] -> %p\n", al.first, devPtr);
+            }
+
+            //now that data was moved, cleanup
+            cudaSetDevice(og_device);
+            cleanup(og_device);
+            cudaSetDevice(new_gpuid);
+            //printf("Local migration: cleaned up data on old GPU\n");
+        }
+
+        //release handlers
+        release_cmd_handlers();
     }
 
     //clean up all memory that are in current_device ONLY
@@ -201,152 +419,28 @@ namespace GPUMemoryServer {
         Request req;
         req.type = RequestType::FINISHED;
         //TODO: report cleanup only device
-        sendRequest(req);
+        //sendRequest(req);
     }
 
-    void Client::reportMemoryRequested(uint64_t mem_mb) {
-        Request req;
-        req.type = RequestType::MEMREQUESTED;
-        req.data.size = mem_mb;
-        sendRequest(req);
-    }
+    void Client::fullCleanup() {
+        reportCleanup(0);  //TODO
+        local_allocs.clear();
 
-    void Client::sendRequest(Request &req) {
-        //just quit if we are not reporting to gpu server
-        if (enable_reporting == false) {
-            return;
-        }
-
-        sockmtx.lock();
-
-        strncpy(req.worker_id, uuid.c_str(), MAX_UUID_LEN);
-        if (strlen(uuid.c_str()) > MAX_UUID_LEN) {
-            printf(" @@@@ uuid %S IS LONGER THAN %d, THIS IS AN ISSUE\n", uuid.c_str(), MAX_UUID_LEN);
-        }
-
-        //if not connected yet, do it
-        if (sockets[current_device] == 0) {
-            connectToGPU(current_device);
-        }
-
-        //printf(" !! sending request type [%d]  to %d\n", req.type, current_device);
-        int rc = zmq_send(sockets[current_device], &req, sizeof(Request), 0);
-        if (rc == -1) {
-            printf(" !!!!!!!! zmq_send errno %d\n", errno);
-        }
-
-        Reply rep;
-        zmq_recv(sockets[current_device], &rep, sizeof(Reply), 0);
-        handleReply(rep);
-        sockmtx.unlock();
-    }
-
-    void Client::handleReply(Reply& reply) {
-        //only migrate if server told us so and we haven't migrated before
-        if (reply.migrate != Migration::NOPE && current_device == og_device)
-            migrateToGPU(reply.target_device, reply.migrate);
-    }
-
-    void Client::matchCurrentGPU() {
-        /*
-        int d;
-        cudaGetDevice(&d);
-        if (current_device != d) {
-            printf("  ###WRONG### !!! Worker [%s] is at the wrong GPU somehow cuda %d  client %d\n", uuid.c_str(), d, current_device);
-            setCurrentGPU(current_device);
-        }
-        */
-    }
-
-    void Client::setCurrentGPU(int id) {
-        cudaError_t err = cudaSetDevice(id);
-        cudaFree(0);
-        if (err) {
-            printf("CUDA err on cudaSetDevice(%d): %d\n", id, err);
-            exit(1);
-        }
-        printf("Worker [%s] setting current device to %d\n", uuid.c_str(), id);
-        if (og_device == -1) 
-            og_device = id;
-        current_device = id;
-
-        //set on context so shadow threads also change context
-        auto ccontext = ava::CommonContext::instance();
-        ccontext->current_device = id;
-    }
-
-    void Client::setOriginalGPU() {
-        if (og_device != current_device)
-            setCurrentGPU(og_device);
-    }
-
-    void Client::kernelIn() {
-        Request req;
-        req.type = RequestType::KERNEL_IN;
-        sendRequest(req);
-    }
-    
-    void Client::kernelOut() {
-        Request req;
-        req.type = RequestType::KERNEL_OUT;
-        sendRequest(req);
-    }
-
-    void* Client::translate_ptr(void* ptr) {
-        auto it = pointer_map.find((uint64_t)ptr);
-        if (it == pointer_map.end()) {
-            //printf("**pointer NOT found in map, returning  %p\n", ptr);
-            return ptr;
-        }
-        else {
-            printf("**pointer found in map, translating: %p  ->  %p\n", ptr, it->second);
-            return it->second;
-        }
-    }
-
-    void Client::migrateToGPU(uint32_t new_gpuid, Migration migration_type) {
-        printf("[[[MIGRATION]]]\n");
-        if (migration_type == Migration::KERNEL) {
-            printf("Migration by kernel mode, changing device to [%d]\n", new_gpuid);
-            setCurrentGPU(new_gpuid);
-            printf("cudaDeviceEnablePeerAccess: new device [%d] can access memory on old [%d]\n", new_gpuid, og_device);
-            cudaDeviceEnablePeerAccess(og_device, 0);
-        }
-        else if (migration_type == Migration::MEMORY) {
-            printf("Migration by memory mode, changing device to [%d]\n", new_gpuid);
-            setCurrentGPU(new_gpuid);
-
-            //make a copy since we will modify ours during migration
-            std::map<uint64_t, uint64_t> current_allocs;
-            for (auto& al : local_allocs) {
-                current_allocs[al.first] = al.second->size;
+        //iterate over map of maps, destroying streams
+        for (auto& kv : streams_map) {
+            for (auto& idx_st : kv.second) {
+                cudaStreamDestroy(idx_st.second);
             }
-
-            for (auto const& al : current_allocs) {
-                void* devPtr;
-                //malloc on new device
-                __internal_cudaMalloc(&devPtr, al.second);
-                //update map
-                pointer_map[al.first] = devPtr;
-                //async might not help much since they are not parallel
-                cudaMemcpyPeer(devPtr, new_gpuid, al.first, og_device, al.second);
-                printf("  [%s] copying %d bytes GPUs [%d]  ->  [%d]\n", uuid.c_str(), al.second, og_device, new_gpuid);
-                printf("      [%p] -> %p\n", al.first, devPtr);
-                
-                /*
-                char b[8];
-                cudaMemcpy((void*)b, devPtr, 8, cudaMemcpyDeviceToHost);
-                printf("first 8 bytes of %p on new device\n      ", devPtr);
-                for (int i = 0 ; i < 8 ; i++) {
-                    printf("%#02x ", b[i]);
-                }
-                printf("\n");
-                */
-            }
-
-            //now that data was moved, cleanup
-            cleanup(og_device);
-            printf("Local migration: cleaned up data on old GPU\n");
         }
+        streams_map.clear();
+
+        //clear leftover events
+        for (auto& kv : events_map) {
+            for (auto& idx_st : kv.second) {
+                cudaEventDestroy(idx_st.second);
+            }
+        }
+        events_map.clear();
     }
+
 }

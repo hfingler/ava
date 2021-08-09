@@ -10,6 +10,10 @@
 #include <gsl/gsl>
 #include <iostream>
 
+#include <chrono>
+#include <thread>
+
+
 #include "common/declaration.h"
 #include "common/logging.h"
 #include "cudart_nw_internal.h"
@@ -28,23 +32,6 @@ cudaError_t __helper_cuda_memcpy_async_host_to_host(void *dst, const void *src, 
 cudaError_t __helper_cuda_memcpy_async_host_to_device(void *dst, const void *src, size_t count, cudaStream_t stream) {
   cudaError_t ret;
   ret = cudaMemcpyAsync(__translate_ptr(dst), src, count, cudaMemcpyHostToDevice, stream);
-  
-  /*
-  struct cudaPointerAttributes at;
-  ret = cudaPointerGetAttributes(&at, dst);
-  printf("curdvc %d  dst attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(), ret, at.type, 
-      at.device, at.devicePointer, at.hostPointer);
-
-  ret = cudaPointerGetAttributes(&at, __translate_ptr(dst));
-  printf("curdvc %d  __translate_ptr(dst) attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(), ret, at.type, 
-      at.device, at.devicePointer, at.hostPointer);
-
-  ret = cudaPointerGetAttributes(&at, src);
-  printf("curdvc %d  src attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(), ret, at.type, 
-      at.device, at.devicePointer, at.hostPointer);
-
-  ret = cudaMemcpyAsync(dst, src, count, cudaMemcpyHostToDevice, stream);
-  */
   return ret;
 }
 
@@ -70,12 +57,12 @@ cudaError_t __helper_cuda_memcpy_async_default(void *dst, const void *src, size_
 
 void __helper_print_kernel_info(struct fatbin_function *func, void **args) {
   std::cerr << "function metadata (" << (void *)func << ") for local " << func->hostfunc[0] << ", cufunc "
-            << (void *)func->cufunc[0] << ", argc " << func->argc;
+            << (void *)func->cufunc[0] << ", argc " << func->argc << std::endl;
   int i;
   for (i = 0; i < func->argc; i++) {
-    LOG_DEBUG << "arg[" << i << "] is " << (func->args[i].is_handle ? "" : "not ")
+    std::cerr << "arg[" << i << "] is " << (func->args[i].is_handle ? "" : "not ")
               << "a handle, size = " << func->args[i].size << ", ptr = " << args[i]
-              << ", content = " << *((void **)args[i]);
+              << ", content = " << *((void **)args[i]) << std::endl;
   }
 }
 
@@ -98,20 +85,16 @@ cudaError_t __helper_create_stream(cudaStream_t *pStream, unsigned int flags, in
 
   if (__internal_allContextsEnabled()) {
     uint32_t cur_dvc = __internal_getCurrentDevice();
-    cudaStream_t cur_stream;
-    cudaStreamCreateWithPriority(&cur_stream, flags, priority);
-    // get the map for this stream
-    auto v = GPUMemoryServer::Client::getInstance().streams_map[cur_stream];
+    cudaStreamCreateWithPriority(pStream, flags, priority);
     // add current text
-    v[cur_dvc] = cur_stream;
+    GPUMemoryServer::Client::getInstance().streams_map[*pStream][cur_dvc] = *pStream;
 
     for (int i = 0; i < __internal_getDeviceCount(); i++) {
       if (i == cur_dvc) continue;
-
       cudaSetDevice(i);
       cudaStream_t new_stream;
       cudaStreamCreateWithPriority(&new_stream, flags, priority);
-      v[i] = new_stream;
+      GPUMemoryServer::Client::getInstance().streams_map[*pStream][i] = new_stream;
     }
     // reset back device and return OK
     cudaSetDevice(__internal_getCurrentDevice());
@@ -124,8 +107,11 @@ cudaError_t __helper_create_stream(cudaStream_t *pStream, unsigned int flags, in
 
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
                                    void **args, size_t sharedMem, cudaStream_t stream) {
+  cudaError_t ret2 = cudaGetLastError();
+  printf(" culaunch peek error:  %d\n", ret2);
+
   // this might trigger and to migration
-  //__internal_kernelIn();
+  __internal_kernelIn();
 
   uint32_t cur_dvc;
   if (__internal_allContextsEnabled())
@@ -150,8 +136,7 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
     std::cerr << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc[cur_dvc] << std::endl;
 #endif
   }
-  //__helper_print_kernel_info(func, args);
-
+  __helper_print_kernel_info(func, args);
   // std::cerr << "function metadata (" << (void *)func << ") for local " << func->hostfunc[cur_dvc] << ", cufunc "
   //          << (void *)func->cufunc[cur_dvc] << ", argc " << func->argc << std::endl;
 
@@ -159,16 +144,15 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   // if we need to figure out the correct context to get function
   if (__internal_allContextsEnabled()) {
     for (int i = 0; i < func->argc; i++) {
-      // TODO: I'm just throwing pointers at the dict. there is a probability that pointers collide and we mess up
-      printf("  arg %d is handle? %d   size %d\n", i, func->args[i].is_handle, func->args[i].size);
+      //printf("  arg %d is handle? %d   size %d  ptr  %p\n", i, func->args[i].is_handle, func->args[i].size, *((void **)args[i]));
       // TODO: we need something that says if something is a pointer or not
       if (func->args[i].size == 8) {
-        *((void **)args[i]) = __translate_ptr(*((void **)args[i]));
+          *((void **)args[i]) = __translate_ptr(*((void **)args[i]));
       }
     }
     // BIG TODOs: need to map streams on new GPU when migrating
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[cur_dvc], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
-                                      blockDim.z, sharedMem, (CUstream)stream, args, NULL);
+                                      blockDim.z, sharedMem, (CUstream)  __helper_translate_stream(stream), args, NULL);
     printf(">>> cuLaunchKernel returned %d\n", ret);
 
     // TODO: fix
@@ -177,17 +161,13 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   }
   // if not with migration, just get over it and do
   else {
-    GPUMemoryServer::Client::getInstance().matchCurrentGPU();
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[0], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
                                       blockDim.z, sharedMem,  (CUstream)stream, args, NULL);
-                                      //blockDim.z, sharedMem, 0, args, NULL); //thsi is for debugging, use stream 0
 #ifndef NDEBUG
     auto tid = __gettid();
     std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
 #endif
 
-    // TODO: fix
-    //__internal_kernelOut();
     return ret;
   }
 }
@@ -208,7 +188,6 @@ void __helper_init_module(struct fatbin_wrapper *fatCubin, void **handle, CUmodu
     // reset back
     cudaSetDevice(__internal_getCurrentDevice());
   } else {
-    GPUMemoryServer::Client::getInstance().matchCurrentGPU();
     // opt passes no handles, so we have to register
     if (handle == 0) {
       handle = __cudaRegisterFatBinary(fatCubin);
@@ -237,13 +216,38 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
     cudaSetDevice(__internal_getCurrentDevice());
     return ret;
   } else {
-    GPUMemoryServer::Client::getInstance().matchCurrentGPU();
     return cuModuleLoad(module, fname);
   }
 }
 
 cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind) {
-  cudaError_t ret = cudaMemcpy(__translate_ptr(dst), __translate_ptr(src), count, kind);
+  /*
+  cudaError_t ret;
+  cudaDeviceSynchronize();
+  ret = cudaGetLastError();
+  printf("peek error:  %d\n", ret);
+  if(ret) {
+    printf("\n\n\n ### MEMCPY ERROR \n\n\n");
+  }
+  */
+
+  int device;
+  cudaGetDevice(&device);
+  printf("__helper_cudaMemcpy at device [%d]\n", device);
+  
+  struct cudaPointerAttributes at;
+  ret = cudaPointerGetAttributes(&at, __translate_ptr(dst));
+  printf("curdvc %d  dst attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(), ret, at.type, 
+      at.device, at.devicePointer, at.hostPointer);
+
+  ret = cudaPointerGetAttributes(&at, __translate_ptr(src));
+  printf("curdvc %d  src attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(), ret, at.type, 
+      at.device, at.devicePointer, at.hostPointer);
+  cudaGetLastError();
+
+
+
+  ret = cudaMemcpy(__translate_ptr(dst), __translate_ptr(src), count, kind);
 #ifndef NDEBUG
   auto tid = __gettid();
   std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
@@ -252,7 +256,13 @@ cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum c
 }
 
 cudaError_t __helper_cudaMemset(void *devPtr, int value, size_t count) {
+  cudaError_t ret2;
+  ret2 = cudaGetLastError();
+  printf("__helper_cudaMemset  peek error:  %d\n", ret2);
+
   cudaError_t ret = cudaMemset(__translate_ptr(devPtr), value, count);
+  printf("memset ret %d   input %p  val %d  count %u\n", ret, __translate_ptr(devPtr), value, count);
+
 #ifndef NDEBUG
   auto tid = __gettid();
   std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
@@ -295,9 +305,7 @@ void __helper_register_function(struct fatbin_function *func, const char *hostFu
     if (__internal_allContextsEnabled()) {
       // printf("  __helper_register_function  setting device to %d\n", i);
       cudaSetDevice(i);
-    } else {
-      GPUMemoryServer::Client::getInstance().matchCurrentGPU();
-    }
+    } 
 
     CUresult ret = cuModuleGetFunction(&func->cufunc[i], module[i], deviceName);
     if (ret != CUDA_SUCCESS) {
@@ -548,6 +556,87 @@ CUresult __helper_cuDeviceGet(CUdevice *device, int ordinal) {
 #endif
     return ret;
   }
+}
+
+cudaError_t __helper_cudaEventCreateWithFlags(cudaEvent_t *event, unsigned int flags) {
+  if (__internal_allContextsEnabled()) {
+    /*
+    cudaEventCreateWithFlags(event, flags);
+    printf("------ return event %p\n", *event);
+    
+    // add current
+    uint32_t cur_dvc = __internal_getCurrentDevice();
+    GPUMemoryServer::Client::getInstance().events_map[*event][cur_dvc] = *event;
+    printf("------event dev [%d] :  %p\n", cur_dvc, *event);
+
+    for (int i = 0; i < __internal_getDeviceCount(); i++) {
+      if (i == cur_dvc) continue;
+      cudaSetDevice(i);
+      cudaEvent_t new_event;
+      cudaEventCreateWithFlags(&new_event, flags);
+      GPUMemoryServer::Client::getInstance().events_map[*event][i] = new_event;
+
+      printf("------event dev [%d] :  %p\n", i, new_event);
+    }
+    // reset back device and return OK
+    cudaSetDevice(cur_dvc);
+    */
+    return (cudaError_t)0;
+  }
+  else
+    return cudaEventCreateWithFlags(event, flags);
+}
+
+cudaError_t __helper_cudaEventDestroy(cudaEvent_t event) {
+  if (__internal_allContextsEnabled()) {
+    /*
+    auto v = GPUMemoryServer::Client::getInstance().events_map[event];
+    for (int i = 0; i < __internal_getDeviceCount(); i++) {
+      cudaSetDevice(i);
+      cudaEventDestroy(v[i]);
+    }
+    GPUMemoryServer::Client::getInstance().events_map.erase(event);
+    cudaSetDevice(__internal_getCurrentDevice());
+    */
+    return (cudaError_t)0;
+  }
+  else
+    return cudaEventDestroy(event);
+}
+
+cudaError_t  __helper_cudaEventRecord(cudaEvent_t event, cudaStream_t stream) {
+  if (__internal_allContextsEnabled()) {
+    /*
+    printf("input event:  %p\n", event);
+
+    for (int i = 0; i < __internal_getDeviceCount(); i++) {
+      cudaSetDevice(i);
+      printf("------ record at %d :  %p -> %p\n", i, event, GPUMemoryServer::Client::getInstance().events_map[event][i]);
+      cudaEventRecord(GPUMemoryServer::Client::getInstance().events_map[event][i], GPUMemoryServer::Client::getInstance().streams_map[stream][i]);
+      cudaError_t  ret = cudaGetLastError();
+      if (ret)
+        printf("__helper_cudaEventRecord last error:  %d\n", ret);
+    }
+    cudaSetDevice(__internal_getCurrentDevice());
+    */
+    return (cudaError_t)0;
+  }
+  else
+    return cudaEventRecord(event, stream);
+}
+
+cudaError_t  __helper_cudaEventSynchronize(cudaEvent_t event) {
+  if (__internal_allContextsEnabled()) {
+    cudaDeviceSynchronize();
+    return (cudaError_t)0;
+  }
+  else {
+    return cudaEventSynchronize(event);
+  }
+}
+
+cudaEvent_t __helper_translate_event(cudaEvent_t event) {
+  return __translate_event(event);
 }
 
 cudaStream_t __helper_translate_stream(cudaStream_t stream) {

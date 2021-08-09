@@ -9,15 +9,16 @@
 #include <zmq.h>
 #include "server.hpp"
 #include "extensions/memory_server/common.hpp"
-
+#include <iostream>
 
 namespace GPUMemoryServer {
 
 static uint32_t debug_kernel_count = 0;
-std::random_device rdd;
-std::mt19937 rgen(rdd());
-std::uniform_real_distribution<> dis01(0, 1);
-std::uniform_int_distribution<int> intdist(0,3);
+//std::random_device rdd;
+//std::mt19937 rgen(rdd());
+std::mt19937 rgen{0};
+std::uniform_real_distribution<float> dis01(0, 1);
+std::uniform_int_distribution<int> intdist(0,1);
 
 Server::Server(uint16_t gpu, uint64_t total_memory, std::string unix_socket_path, std::string resmngr_address) {
     this->gpu = gpu;
@@ -51,11 +52,11 @@ void Server::run() {
     Reply rep;
     Request req;
     while(1) {
-        //printf(" >> server %d waiting for request\n", gpu);
+        std::cerr << " >> server " << gpu <<  " waiting for request" << std::endl;
         zmq_recv(responder, &req, sizeof(Request), 0);
-        //printf(" >> server %d got a request\n", gpu);
+        std::cerr << " >> server " << gpu <<  " got a request" << std::endl;
         handleRequest(req, rep);
-        //printf(" >> sending response\n");
+        std::cerr << " >> sending response" << std::endl;
         zmq_send(responder, &rep, sizeof(Reply), 0);
     }
 }
@@ -135,43 +136,46 @@ void Server::handleFinish(Request& req, Reply& rep) {
 
 void Server::handleKernelIn(Request& req, Reply& rep) {
     kernels_queued++;
-    printf(" >>in: there are now %d kernels queued\n", kernels_queued);
+    std::cerr << " >>in: there are now" <<  kernels_queued << "kernels queued" <<std::endl;
 
     //check if we are just debugging
     char* dbg_mig = std::getenv("SG_DEBUG_MIGRATION");
     if (dbg_mig) {
         debug_kernel_count += 1;
-        if (debug_kernel_count % 2 == 0) {
+
+        //if debug type 1 or 2 and multiple of 2
+        if (!strcmp(dbg_mig, "1") && !strcmp(dbg_mig, "2")  &&  debug_kernel_count % 2 == 0) {
             printf("SG_DEBUG_MIGRATION:  kernel #%d, setting migration on\n", debug_kernel_count);
 
             if (!strcmp(dbg_mig, "1")) {
-                printf("SG_DEBUG_MIGRATION:  setting EXEECUTION migration on\n");
+                printf("SG_DEBUG_MIGRATION:  setting EXECUTION migration on\n");
                 rep.migrate = Migration::KERNEL;
-                rep.target_device = gpu == 2 ? 3 : 2;
+                rep.target_device = gpu == 1 ? 2 : 1;
             }
             else if (!strcmp(dbg_mig, "2")) {
                 printf("SG_DEBUG_MIGRATION:  setting MEMORY migration on\n");
-                rep.migrate = Migration::MEMORY;
-                rep.target_device = gpu == 2 ? 3 : 2;
-            }
-            
-            //3 means randomly chosen over a %
-            else if (!strcmp(dbg_mig, "3")) {
-                //10% change of migration
-                if (dis01(rgen) <= 0.1) { 
-                    rep.migrate = Migration::KERNEL;
-                    uint32_t dg;
-                    while (1) {
-                        dg = intdist(rgen);
-                        if (dg != gpu) break;
-                    }
-                    rep.target_device = dg;
-                    printf("SG_DEBUG_MIGRATION: random migration triggered [%d] -> [%d]\n", gpu, dg);
-                }  
+                rep.migrate = Migration::TOTAL;
+                rep.target_device = gpu == 1 ? 2 : 1;
             }
         }
-        else 
-            rep.migrate = Migration::NOPE;
+        //3 means randomly chosen over a %
+        else if (!strcmp(dbg_mig, "3")) {
+            //10% change of migration
+            //if (dis01(rgen) <= 0.02) { 
+            if (1) {
+                rep.migrate = Migration::KERNEL;
+                //rep.migrate = Migration::TOTAL;
+                uint32_t dg;
+                //while (1) {
+                //    dg = intdist(rgen);
+                //    if (dg != gpu) break;
+                //}
+                dg = gpu == 0 ? 1 : 0;
+
+                rep.target_device = dg;
+                std::cerr << " SG_DEBUG_MIGRATION: random migration triggered:  " << gpu  << " -> " << dg << std::endl;
+            }  
+        }
     }
 
     (void)req;
@@ -180,7 +184,7 @@ void Server::handleKernelIn(Request& req, Reply& rep) {
 void Server::handleKernelOut(Request& req, Reply& rep) {
     (void)req; (void)rep;
     kernels_queued--;
-    printf(" <<out: there are now %d kernels queued\n", kernels_queued);
+    //printf(" <<out: there are now %d kernels queued\n", kernels_queued);
 }
 
 //end of namespace

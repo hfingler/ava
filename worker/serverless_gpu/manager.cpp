@@ -47,7 +47,7 @@ int main(int argc, const char *argv[]) {
     std::string kmd = "SG_DEBUG_MIGRATION=";
     kmd += absl::GetFlag(FLAGS_debug_migration);
     worker_env.push_back(kmd);
-    setenv("SG_DEBUG_MIGRATION", "1", 1);
+    setenv("SG_DEBUG_MIGRATION", absl::GetFlag(FLAGS_debug_migration).c_str(), 1);
   }
 
   char *rm_addr = std::getenv("RESMNGR_ADDR");

@@ -132,6 +132,7 @@ static void nvml_setDeviceCount() {
     std::exit(1);
   }
 
+  printf("Setting internal device count to %d\n", device_count);
   __internal_setDeviceCount(device_count);
 }
 
@@ -171,7 +172,6 @@ int main(int argc, char *argv[]) {
   GPUMemoryServer::Client::getInstance().setCurrentGPU(std::stoi(gpu_device));
   //read device count from nvml and set it internally
   nvml_setDeviceCount();
-
   //ttc.notify(1);
 
   // AVA_WORKER_UUID is a unique, starting at 0, id we can use
@@ -190,14 +190,13 @@ int main(int argc, char *argv[]) {
     cudaFree(0);
     __internal_setAllContextsEnabled(false);
   }
-
   //ttc.notify(2);
 
   //now that we have possibly all contexts created, init stuff
     static auto worker_context = ava::WorkerContext::instance();
 
 #ifdef AVA_PRELOAD_CUBIN
-  worker_cudnn_opt_init(2);
+  worker_cudnn_opt_init(0);
 #endif
 
   //ttc.notify(3);
@@ -228,19 +227,16 @@ int main(int argc, char *argv[]) {
   wctx->set_api_server_listen_port(listen_port);
   std::cerr << "[worker#" << listen_port << "] To check the state of AvA remoting progress, use `tail -f "
             << wctx->log_file << "`" << std::endl;
-
   //ttc.notify(4);
 
   if (!getenv("AVA_CHANNEL") || !strcmp(getenv("AVA_CHANNEL"), "TCP")) {
     chan_hv = NULL;
     chan = command_channel_socket_tcp_worker_new(listen_port);
     nw_record_command_channel = command_channel_log_new(listen_port);
-
     //ttc.notify(5);
 
     // this sets API id and other stuff
     init_internal_command_handler();
-
     //ttc.notify(6);
 
     // only loop if we are in serverless mode
@@ -289,6 +285,7 @@ int main(int argc, char *argv[]) {
       GPUMemoryServer::Client::getInstance().fullCleanup();
 
       // explode and reset cuda contexts
+      /*
       if (enable_all_ctx == "yes") {
         destroy_cuda_contexts();
         create_cuda_contexts();
@@ -298,9 +295,10 @@ int main(int argc, char *argv[]) {
         cudaSetDevice(std::stoi(gpu_device));
         cudaFree(0);
       }
+      */
 
       // go back to original GPU
-      GPUMemoryServer::Client::getInstance().setOriginalGPU();
+      GPUMemoryServer::Client::getInstance().resetCurrentGPU();
       //ttc.notify(12);
     } while (std::getenv("SERVERLESS_MODE"));
 

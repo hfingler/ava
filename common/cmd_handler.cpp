@@ -8,6 +8,7 @@
 #include "common/shadow_thread_pool.hpp"
 #include <cuda_runtime_api.h>
 #ifdef AVA_WORKER
+#include "extensions/memory_server/client.hpp"
 #include "worker/worker_context.h"
 #include "worker/worker.h"
 uint32_t requested_gpu_mem;
@@ -174,6 +175,8 @@ void handle_command_and_notify(struct command_channel *chan, struct command_base
   auto context = ava::CommonContext::instance();
 
 #ifdef AVA_WORKER
+  __cmd_handle_in();
+
   //printf("before lock.  %d   %d  %d\n", int(cubin_loaded), cmd->command_id == COMMAND_HANDLER_REGISTER_VMID, cmd->command_id == COMMAND_HANDLER_REGISTER_DUMP_DIR);
   //if cubin is not loaded we gotta wait, but let the load cmds go through
   if (!threads_ready && cmd->command_id != COMMAND_HANDLER_REGISTER_VMID && cmd->command_id != COMMAND_HANDLER_REGISTER_DUMP_DIR) {
@@ -196,6 +199,11 @@ void handle_command_and_notify(struct command_channel *chan, struct command_base
 #endif
 
   handle_command(chan, context->nw_global_handle_pool, (struct command_channel *)nw_record_command_channel, cmd);
+
+#ifdef AVA_WORKER
+  __cmd_handle_out();
+#endif
+
 }
 
 static void *dispatch_thread_impl(void *userdata) {

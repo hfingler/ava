@@ -16,7 +16,7 @@ namespace GPUMemoryServer {
     enum RequestType { ALLOC, FREE, FINISHED, MEMREQUESTED,
         KERNEL_IN, KERNEL_OUT};
 
-    enum Migration { NOPE, MEMORY, KERNEL};
+    enum Migration { NOPE, TOTAL, KERNEL};
 
     union RequestData {
         uint64_t size;

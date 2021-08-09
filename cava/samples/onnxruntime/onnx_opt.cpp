@@ -1295,9 +1295,8 @@ __host__ cudaError_t CUDARTAPI cudaMemset(void *devPtr, int value, size_t count)
   cudaError_t ret;
   if (ava_is_worker) {
     // everything that takes a device pointer must go through __translate_ptr
-    ret = __helper_cudaMemset(devPtr, value, count);
+    return __helper_cudaMemset(devPtr, value, count);
 #warning This will bypass the resource reporting routine.
-    return ret;
   }
 }
 
@@ -1347,10 +1346,26 @@ ava_end_replacement;
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaDeviceSynchronize(void);
 
 __host__ cudaError_t CUDARTAPI cudaEventCreate(cudaEvent_t *event) {
+  ava_disable_native_call;
   ava_argument(event) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
+  }
+  if (ava_is_worker) {
+    return __helper_cudaEventCreateWithFlags(event, 0);
+  }
+}
+
+__host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaEventCreateWithFlags(cudaEvent_t *event, unsigned int flags) {
+  ava_disable_native_call;
+  ava_argument(event) {
+    ava_out;
+    ava_buffer(1);
+    ava_element ava_handle;
+  }
+  if (ava_is_worker) {
+    return __helper_cudaEventCreateWithFlags(event, flags);
   }
 }
 
@@ -1360,26 +1375,49 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaEventRecord(cudaEvent_t ev
   ava_argument(stream) ava_handle;
 
   if (ava_is_worker) {
-    return cudaEventRecord(event, __helper_translate_stream(stream));
+    return __helper_cudaEventRecord(event, stream);
   }
 }
 
-__host__ cudaError_t CUDARTAPI cudaEventQuery(cudaEvent_t event) { ava_argument(event) ava_handle; }
+__host__ cudaError_t CUDARTAPI cudaEventQuery(cudaEvent_t event) { 
+  ava_disable_native_call;
+  ava_argument(event) ava_handle; 
+  if (ava_is_worker) {
+    return cudaEventQuery(__helper_translate_event(event));
+  }
+}
 
 __host__ cudaError_t CUDARTAPI cudaEventElapsedTime(float *ms, cudaEvent_t start, cudaEvent_t end) {
+  ava_disable_native_call;
   ava_argument(ms) {
     ava_out;
     ava_buffer(1);
   }
   ava_argument(start) ava_handle;
   ava_argument(end) ava_handle;
+
+  if (ava_is_worker) {
+    return (cudaError_t)0;
+  }
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaEventDestroy(cudaEvent_t event) {
+  ava_disable_native_call;
   ava_argument(event) ava_handle;
+
+  if (ava_is_worker) {
+    return __helper_cudaEventDestroy(event);
+  }
 }
 
-__host__ cudaError_t CUDARTAPI cudaEventSynchronize(cudaEvent_t event) { ava_argument(event) ava_handle; }
+__host__ cudaError_t CUDARTAPI cudaEventSynchronize(cudaEvent_t event) { 
+  ava_disable_native_call;
+  ava_argument(event) ava_handle; 
+  
+  if (ava_is_worker) {
+    return __helper_cudaEventSynchronize(event);
+  }
+}
 
 /*
 ava_callback_decl void __callback_cuda_stream_add_callback(
@@ -13493,14 +13531,6 @@ __host__ cudaError_t CUDARTAPI cudaStreamGetCaptureInfo(cudaStream_t stream,
                                                         enum cudaStreamCaptureStatus *pCaptureStatus,
                                                         unsigned long long *pId) {
   ava_unsupported;
-}
-
-__host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaEventCreateWithFlags(cudaEvent_t *event, unsigned int flags) {
-  ava_argument(event) {
-    ava_out;
-    ava_buffer(1);
-    ava_element ava_handle;
-  }
 }
 
 __host__ cudaError_t CUDARTAPI cudaImportExternalMemory(cudaExternalMemory_t *extMem_out,
