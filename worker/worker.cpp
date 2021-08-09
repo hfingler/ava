@@ -193,14 +193,13 @@ int main(int argc, char *argv[]) {
   //ttc.notify(2);
 
   //now that we have possibly all contexts created, init stuff
-    static auto worker_context = ava::WorkerContext::instance();
+  static auto worker_context = ava::WorkerContext::instance();
 
 #ifdef AVA_PRELOAD_CUBIN
   worker_cudnn_opt_init(0);
 #endif
 
   //ttc.notify(3);
-
   std::string enable_reporting = std::string(getenv("AVA_ENABLE_REPORTING"));
   if (enable_reporting == "yes") {
     GPUMemoryServer::Client::getInstance().enable_reporting = true;

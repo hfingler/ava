@@ -221,8 +221,8 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
 }
 
 cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind) {
-  /*
   cudaError_t ret;
+  /*
   cudaDeviceSynchronize();
   ret = cudaGetLastError();
   printf("peek error:  %d\n", ret);
