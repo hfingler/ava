@@ -392,7 +392,6 @@ namespace GPUMemoryServer {
             }
 
             //now that data was moved, cleanup
-            cudaSetDevice(og_device);
             cleanup(og_device);
             cudaSetDevice(new_gpuid);
             //printf("Local migration: cleaned up data on old GPU\n");
@@ -404,6 +403,7 @@ namespace GPUMemoryServer {
 
     //clean up all memory that are in current_device ONLY
     void Client::cleanup(uint32_t cd) {
+        cudaSetDevice(cd);
         //report to server
         reportCleanup(cd);
         //erase only memory in GPU current_device
@@ -413,6 +413,7 @@ namespace GPUMemoryServer {
             else
                 ++it;
         }
+        cudaSetDevice(current_device);
     }
 
     void Client::reportCleanup(uint32_t gpuid) {
@@ -424,6 +425,9 @@ namespace GPUMemoryServer {
 
     void Client::fullCleanup() {
         reportCleanup(0);  //TODO
+
+        for (int i = 0 ; i < device_count ; i++) 
+            cleanup(i);
         local_allocs.clear();
 
         //iterate over map of maps, destroying streams

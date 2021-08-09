@@ -153,8 +153,17 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
     // BIG TODOs: need to map streams on new GPU when migrating
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[cur_dvc], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
                                       blockDim.z, sharedMem, (CUstream)  __helper_translate_stream(stream), args, NULL);
-    printf(">>> cuLaunchKernel returned %d\n", ret);
 
+    printf(">>> cuLaunchKernel returned %d\n", ret);
+    /*
+    cudaError_t ret2;
+    cudaDeviceSynchronize();
+    ret2 = cudaGetLastError();
+    printf("peek error:  %d\n", ret2);
+    if(ret2) {
+      printf("\n\n\n ### cuLaunchKernel ERROR \n\n\n");
+    }
+    */
     // TODO: fix
     __internal_kernelOut();
     return ret;
@@ -163,6 +172,7 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   else {
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[0], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
                                       blockDim.z, sharedMem,  (CUstream)stream, args, NULL);
+                                      
 #ifndef NDEBUG
     auto tid = __gettid();
     std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
@@ -230,11 +240,7 @@ cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum c
     printf("\n\n\n ### MEMCPY ERROR \n\n\n");
   }
   */
-
-  int device;
-  cudaGetDevice(&device);
-  printf("__helper_cudaMemcpy at device [%d]\n", device);
-  
+/*
   struct cudaPointerAttributes at;
   ret = cudaPointerGetAttributes(&at, __translate_ptr(dst));
   printf("curdvc %d  dst attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(), ret, at.type, 
@@ -244,7 +250,7 @@ cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum c
   printf("curdvc %d  src attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(), ret, at.type, 
       at.device, at.devicePointer, at.hostPointer);
   cudaGetLastError();
-
+*/
 
 
   ret = cudaMemcpy(__translate_ptr(dst), __translate_ptr(src), count, kind);

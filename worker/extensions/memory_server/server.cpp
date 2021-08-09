@@ -161,10 +161,10 @@ void Server::handleKernelIn(Request& req, Reply& rep) {
         //3 means randomly chosen over a %
         else if (!strcmp(dbg_mig, "3")) {
             //10% change of migration
-            //if (dis01(rgen) <= 0.02) { 
-            if (1) {
-                rep.migrate = Migration::KERNEL;
-                //rep.migrate = Migration::TOTAL;
+            if (dis01(rgen) <= 0.01) { 
+            //if (1) {
+                //rep.migrate = Migration::KERNEL;
+                rep.migrate = Migration::TOTAL;
                 uint32_t dg;
                 //while (1) {
                 //    dg = intdist(rgen);
