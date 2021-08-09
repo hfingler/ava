@@ -22,6 +22,7 @@ extern "C" {
 void guestlib_cudnn_opt_init(void);
 void guestlib_cudnn_opt_fini(void);
 void worker_cudnn_opt_init(uint32_t n_handles);
+void worker_cudnn_opt_cleanup(void);
 
 cudnnStatus_t __pool_cudnnCreateConvolutionDescriptor(cudnnConvolutionDescriptor_t *convDesc, size_t count);
 cudnnStatus_t __pool_cudnnDestroyConvolutionDescriptor(cudnnConvolutionDescriptor_t *convDesc, size_t count);
@@ -45,6 +46,8 @@ int free_reduce_tensor_descriptor_pool(GQueue *pool);
 
 cudnnStatus_t __cudnnCreate(cudnnHandle_t *handle);
 cublasStatus_t __cublasCreate(cublasHandle_t *handle);
+cublasStatus_t __helper_cublasDestroy(cublasHandle_t handle);
+cudnnStatus_t __helper_cudnnDestroy(cudnnHandle_t handle);
 
 #ifdef __cplusplus
 }

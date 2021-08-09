@@ -15,9 +15,11 @@
 //GQueue *cublas_handles;
 absl::Mutex cudnn_handles_mu;
 std::map<uint32_t, GQueue*> cudnn_handles ABSL_GUARDED_BY(cudnn_handles_mu);
+std::map<uint32_t, GQueue*> idle_cudnn_handles ABSL_GUARDED_BY(cudnn_handles_mu);
 
 absl::Mutex cublas_handles_mu;
 std::map<uint32_t, GQueue*> cublas_handles ABSL_GUARDED_BY(cublas_handles_mu);
+std::map<uint32_t, GQueue*> idle_cublas_handles ABSL_GUARDED_BY(cublas_handles_mu);
 
 // TODO(#86): Better way to avoid linking issue (referenced in spec utilities).
 void guestlib_cudnn_opt_init(void) {}
@@ -44,6 +46,11 @@ void worker_cudnn_opt_cleanup(void) {
       g_queue_free(el.second);
     }
     cudnn_handles.clear();
+    for (auto el : idle_cudnn_handles) {
+      g_queue_foreach(el.second, destroy_cudnn_handle, NULL);
+      g_queue_free(el.second);
+    }
+    idle_cudnn_handles.clear();
   }
 
   {
@@ -53,6 +60,11 @@ void worker_cudnn_opt_cleanup(void) {
       g_queue_free(el.second);
     }
     cublas_handles.clear();
+    for (auto el : cublas_handles) {
+      g_queue_foreach(el.second, destroy_cublas_handle, NULL);
+      g_queue_free(el.second);
+    }
+    idle_cublas_handles.clear();
   }
 }
 
@@ -73,6 +85,7 @@ void worker_cudnn_opt_init(uint32_t n_handles) {
       absl::MutexLock lk(&cudnn_handles_mu);
       for (uint32_t gpuid = 0; gpuid < __internal_getDeviceCount(); gpuid++) {
         cudnn_handles[gpuid] = g_queue_new();
+        idle_cudnn_handles[gpuid] = g_queue_new();
         for (int i = 0; i < n_handles; i++) {
           cudnn_ret = cudnnCreate(&cudnn_handle);
           if (cudnn_ret == CUDNN_STATUS_SUCCESS)
@@ -88,6 +101,7 @@ void worker_cudnn_opt_init(uint32_t n_handles) {
       absl::MutexLock lk(&cublas_handles_mu);
       for (uint32_t gpuid = 0; gpuid < __internal_getDeviceCount(); gpuid++) {
         cublas_handles[gpuid] = g_queue_new();
+        idle_cublas_handles[gpuid] = g_queue_new();
         for (int i = 0; i < n_handles; i++) {
           cublas_ret = cublasCreate(&cublas_handle);
           if (cublas_ret == CUBLAS_STATUS_SUCCESS)
@@ -107,6 +121,7 @@ void worker_cudnn_opt_init(uint32_t n_handles) {
     {
       absl::MutexLock lk(&cudnn_handles_mu);
       cudnn_handles[gpuid] = g_queue_new();
+      idle_cudnn_handles[gpuid] = g_queue_new();
       for (int i = 0; i < n_handles; i++) {
         cudnn_ret = cudnnCreate(&cudnn_handle);
         if (cudnn_ret == CUDNN_STATUS_SUCCESS)
@@ -121,6 +136,7 @@ void worker_cudnn_opt_init(uint32_t n_handles) {
     {
       absl::MutexLock lk(&cublas_handles_mu);
       cublas_handles[gpuid] = g_queue_new();
+      idle_cublas_handles[gpuid] = g_queue_new();
       for (int i = 0; i < n_handles; i++) {
         cublas_ret = cublasCreate(&cublas_handle);
         if (cublas_ret == CUBLAS_STATUS_SUCCESS)
@@ -316,4 +332,18 @@ printf("  queue empty, creating, returned %d\n", ret);
 #endif
   cublas_handles_mu.Unlock();
   return CUBLAS_STATUS_SUCCESS;
+}
+
+// TODO: the handle is not freed
+cublasStatus_t __helper_cublasDestroy(cublasHandle_t handle) {
+  absl::MutexLock lk(&cublas_handles_mu);
+  uint32_t gpuid = __internal_getCurrentDevice();
+  g_queue_push_tail(idle_cublas_handles[gpuid], (gpointer)handle);
+}
+
+// TODO: the handle is not freed
+cudnnStatus_t __helper_cudnnDestroy(cudnnHandle_t handle) {
+  absl::MutexLock lk(&cudnn_handles_mu);
+  uint32_t gpuid = __internal_getCurrentDevice();
+  g_queue_push_tail(idle_cudnn_handles[gpuid], (gpointer)handle);
 }

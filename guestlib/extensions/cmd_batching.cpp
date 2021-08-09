@@ -165,7 +165,7 @@ static void *batch_process_thread(void *opaque) {
  */
 EXPORTED_WEAKLY struct command_batch *cmd_batch_thread_init(void) {
   struct command_batch *cmd_batch = (struct command_batch *)calloc(1, sizeof(struct command_batch));
-#ifdef __AVA_ENABLE_STATS
+#ifdef __AVA_ENABLE_STAT
   auto tid = gsl::narrow_cast<int>(syscall(SYS_gettid));
   auto stat_fname = fmt::format("./guestlib_stats_{}", tid);
   auto stat_path = ava::support::GetRealPath(stat_fname);

@@ -3437,6 +3437,9 @@ EXPORTED CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemm_v2(cublasHandle_t han
     cudaGetLastError();
     //printf(" alpha on GPU? %d\n", alpha_is_gpu);
   } else {
+#ifndef NDEBUG
+    fprintf(stderr, "alpha type is %d\n", alpha_attr.type);
+#endif
     alpha_is_gpu = (alpha_attr.type == cudaMemoryTypeDevice);
   }
   ret = __helper_cudaPointerGetAttributes(&beta_attr, beta);
@@ -3446,6 +3449,9 @@ EXPORTED CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemm_v2(cublasHandle_t han
     cudaGetLastError();
     //printf(" beta on GPU? %d\n", alpha_is_gpu);
   } else {
+#ifndef NDEBUG
+    fprintf(stderr, "beta type is %d\n", beta_attr.type);
+#endif
     beta_is_gpu = (beta_attr.type == cudaMemoryTypeDevice);
   }
   return __helper_cublasSgemm_v2(handle, transa, transb, m, n, k, alpha, A, lda, B, ldb, beta, C, ldc, alpha_is_gpu,
@@ -4409,10 +4415,16 @@ CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSetStream(cublasHandle_t handle, cud
   ava_argument(streamId) ava_handle;
 }
 
-CUBLASAPI cublasStatus_t CUBLASWINAPI cublasDestroy(cublasHandle_t handle) {
+cublasStatus_t __helper_cublasDestroy(cublasHandle_t handle) {
   ava_async;
   ava_argument(handle) ava_handle;
 }
+
+ava_begin_replacement;
+EXPORTED CUBLASAPI cublasStatus_t CUBLASWINAPI cublasDestroy(cublasHandle_t handle) {
+  return __helper_cublasDestroy(handle);
+}
+ava_end_replacement;
 
 CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSscal(cublasHandle_t handle, int n,
                                                   const float *alpha, /* host or device pointer */
@@ -4589,7 +4601,16 @@ cudnnStatus_t CUDNNWINAPI cudnnConvolutionForward(cudnnHandle_t handle, const vo
 }
 */
 
-cudnnStatus_t CUDNNWINAPI cudnnDestroy(cudnnHandle_t handle) { ava_argument(handle) ava_handle; }
+cudnnStatus_t __helper_cudnnDestroy(cudnnHandle_t handle) {
+  ava_async;
+  ava_argument(handle) ava_handle;
+}
+
+ava_begin_replacement;
+EXPORTED cudnnStatus_t CUDNNWINAPI cudnnDestroy(cudnnHandle_t handle) {
+  return __helper_cudnnDestroy(handle);
+}
+ava_end_replacement;
 
 ava_begin_replacement;
 EXPORTED cudnnStatus_t CUDNNWINAPI cudnnCreateConvolutionDescriptor(cudnnConvolutionDescriptor_t *convDesc) {
