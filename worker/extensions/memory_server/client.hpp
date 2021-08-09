@@ -37,6 +37,10 @@ void __internal_setDeviceCount(uint32_t dc);
 void* __translate_ptr(void*);
 const void* __translate_ptr(const void*);
 cudaStream_t __translate_stream(cudaStream_t key);
+cudaEvent_t __translate_event(cudaEvent_t key);
+
+void __cmd_handle_in();
+void __cmd_handle_out();
 
 namespace GPUMemoryServer {
 
@@ -51,6 +55,8 @@ namespace GPUMemoryServer {
         //device management
         int current_device, og_device;
         int device_count;
+        Migration migrated_type;
+
         std::string uuid;
         //local mallocs
         struct LocalAlloc {
@@ -70,10 +76,14 @@ namespace GPUMemoryServer {
 
         //pointer translation
         std::unordered_map<uint64_t, void*> pointer_map;
-        void* translate_ptr(void* ptr);
+        void* translateDevicePointer(void* ptr);
+        void tryRemoveFromPointerMap(void* ptr);
+        bool isInPointerMap(void* ptr);
+
         //stream translation
         std::map<cudaStream_t, std::map<uint32_t,cudaStream_t>> streams_map;
-
+        //event translation
+        std::map<cudaEvent_t, std::map<uint32_t,cudaEvent_t>> events_map;
 
         //migration
         void migrateToGPU(uint32_t new_gpuid, Migration migration_type);
@@ -87,9 +97,8 @@ namespace GPUMemoryServer {
         void fullCleanup();
         void kernelIn();
         void kernelOut();
-        void setOriginalGPU();
+        void resetCurrentGPU();
         void setCurrentGPU(int id);
-        void matchCurrentGPU();
         void connectToGPU(uint32_t gpuid);
         void reportMalloc(uint64_t size);
         void reportFree(uint64_t size);

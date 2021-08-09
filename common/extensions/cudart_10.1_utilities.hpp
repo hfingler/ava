@@ -167,8 +167,15 @@ cudnnStatus_t __helper_cudnnConvolutionForward_float(cudnnHandle_t handle, const
                                                      size_t workSpaceSizeInBytes, const float *beta,
                                                      const cudnnTensorDescriptor_t yDesc, void *y);
 
+cudaError_t __helper_cudaEventCreateWithFlags(cudaEvent_t *event, unsigned int flags);
+cudaError_t __helper_cudaEventDestroy(cudaEvent_t event);
+cudaError_t  __helper_cudaEventRecord(cudaEvent_t event, cudaStream_t stream);
+cudaError_t  __helper_cudaEventSynchronize(cudaEvent_t event);
+
+cudaEvent_t __helper_translate_event(cudaEvent_t event);
 cudaStream_t __helper_translate_stream(cudaStream_t stream);
 void* __helper_translate_ptr(void* ptr);
+
 
 #if defined(__cplusplus)
 }
