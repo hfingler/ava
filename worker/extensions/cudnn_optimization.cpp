@@ -8,14 +8,16 @@
 
 #include <gsl/gsl>
 #include <iostream>
-
+#include <absl/synchronization/mutex.h>
 #include "common/endpoint_lib.hpp"
 
 //GQueue *cudnn_handles;
 //GQueue *cublas_handles;
+absl::Mutex cudnn_handles_mu;
+std::map<uint32_t, GQueue*> cudnn_handles ABSL_GUARDED_BY(cudnn_handles_mu);
 
-std::map<uint32_t, GQueue*> cudnn_handles;
-std::map<uint32_t, GQueue*> cublas_handles;
+absl::Mutex cublas_handles_mu;
+std::map<uint32_t, GQueue*> cublas_handles ABSL_GUARDED_BY(cublas_handles_mu);
 
 // TODO(#86): Better way to avoid linking issue (referenced in spec utilities).
 void guestlib_cudnn_opt_init(void) {}
@@ -35,18 +37,23 @@ void destroy_cudnn_handle(gpointer key, gpointer value, gpointer userdata) {
 }
 
 void worker_cudnn_opt_cleanup(void) {
-  for (auto el : cudnn_handles) {
-    g_queue_foreach(el.second, destroy_cudnn_handle, NULL);
-    g_queue_free(el.second);
+  {
+    absl::MutexLock lk(&cudnn_handles_mu);
+    for (auto el : cudnn_handles) {
+      g_queue_foreach(el.second, destroy_cudnn_handle, NULL);
+      g_queue_free(el.second);
+    }
+    cudnn_handles.clear();
   }
 
-  for (auto el : cublas_handles) {
-    g_queue_foreach(el.second, destroy_cublas_handle, NULL);
-    g_queue_free(el.second);
+  {
+    absl::MutexLock lk(&cublas_handles_mu);
+    for (auto el : cublas_handles) {
+      g_queue_foreach(el.second, destroy_cublas_handle, NULL);
+      g_queue_free(el.second);
+    }
+    cublas_handles.clear();
   }
-
-  cudnn_handles.clear();
-  cublas_handles.clear();
 }
 
 /*
@@ -62,12 +69,44 @@ void worker_cudnn_opt_init(uint32_t n_handles) {
   //better be explicit and have duplicate code than have a total mess
   if (__internal_allContextsEnabled()) {
     //create all queues
-    for (uint32_t gpuid = 0; gpuid < __internal_getDeviceCount(); gpuid++) {
-      cudnn_handles[gpuid] = g_queue_new();
-      cublas_handles[gpuid] = g_queue_new();
+    {
+      absl::MutexLock lk(&cudnn_handles_mu);
+      for (uint32_t gpuid = 0; gpuid < __internal_getDeviceCount(); gpuid++) {
+        cudnn_handles[gpuid] = g_queue_new();
+        for (int i = 0; i < n_handles; i++) {
+          cudnn_ret = cudnnCreate(&cudnn_handle);
+          if (cudnn_ret == CUDNN_STATUS_SUCCESS)
+            g_queue_push_tail(cudnn_handles[gpuid], (gpointer)cudnn_handle);
+          else {
+            fprintf(stderr, "Failed to create CUDNN handle\n");
+            break;
+          }
+        }
+      }
     }
-    
-    for (uint32_t gpuid = 0; gpuid < __internal_getDeviceCount(); gpuid++) {
+    {
+      absl::MutexLock lk(&cublas_handles_mu);
+      for (uint32_t gpuid = 0; gpuid < __internal_getDeviceCount(); gpuid++) {
+        cublas_handles[gpuid] = g_queue_new();
+        for (int i = 0; i < n_handles; i++) {
+          cublas_ret = cublasCreate(&cublas_handle);
+          if (cublas_ret == CUBLAS_STATUS_SUCCESS)
+            g_queue_push_tail(cublas_handles[gpuid], (gpointer)cublas_handle);
+          else {
+            fprintf(stderr, "Failed to create CUBLAS handle\n");
+            break;
+          }
+        }
+      }
+    }
+  }
+  //normal case, only one context will be used
+  else {
+    //create only one position on map
+    uint32_t gpuid = __internal_getCurrentDevice();
+    {
+      absl::MutexLock lk(&cudnn_handles_mu);
+      cudnn_handles[gpuid] = g_queue_new();
       for (int i = 0; i < n_handles; i++) {
         cudnn_ret = cudnnCreate(&cudnn_handle);
         if (cudnn_ret == CUDNN_STATUS_SUCCESS)
@@ -79,7 +118,9 @@ void worker_cudnn_opt_init(uint32_t n_handles) {
       }
     }
 
-    for (uint32_t gpuid = 0; gpuid < __internal_getDeviceCount(); gpuid++) {
+    {
+      absl::MutexLock lk(&cublas_handles_mu);
+      cublas_handles[gpuid] = g_queue_new();
       for (int i = 0; i < n_handles; i++) {
         cublas_ret = cublasCreate(&cublas_handle);
         if (cublas_ret == CUBLAS_STATUS_SUCCESS)
@@ -88,33 +129,6 @@ void worker_cudnn_opt_init(uint32_t n_handles) {
           fprintf(stderr, "Failed to create CUBLAS handle\n");
           break;
         }
-      }
-    }
-  }
-  //normal case, only one context will be used
-  else {
-    //create only one position on map
-    uint32_t gpuid = __internal_getCurrentDevice();
-    cudnn_handles[gpuid] = g_queue_new();
-    cublas_handles[gpuid] = g_queue_new();
-
-    for (int i = 0; i < n_handles; i++) {
-      cudnn_ret = cudnnCreate(&cudnn_handle);
-      if (cudnn_ret == CUDNN_STATUS_SUCCESS)
-        g_queue_push_tail(cudnn_handles[gpuid], (gpointer)cudnn_handle);
-      else {
-        fprintf(stderr, "Failed to create CUDNN handle\n");
-        break;
-      }
-    }
-
-    for (int i = 0; i < n_handles; i++) {
-      cublas_ret = cublasCreate(&cublas_handle);
-      if (cublas_ret == CUBLAS_STATUS_SUCCESS)
-        g_queue_push_tail(cublas_handles[gpuid], (gpointer)cublas_handle);
-      else {
-        fprintf(stderr, "Failed to create CUBLAS handle\n");
-        break;
       }
     }
   }
@@ -259,7 +273,7 @@ cudnnStatus_t __pool_cudnnDestroyReduceTensorDescriptor(cudnnReduceTensorDescrip
 cudnnStatus_t __cudnnCreate(cudnnHandle_t *handle) {
   //printf("### ### ### __cudnnCreate\n");
   uint32_t gpuid = __internal_getCurrentDevice();
-  
+  cudnn_handles_mu.Lock();
   if (g_queue_is_empty(cudnn_handles[gpuid])) {
     cudnnStatus_t ret = cudnnCreate(handle);
 #ifndef NDEBUG
@@ -267,6 +281,7 @@ cudnnStatus_t __cudnnCreate(cudnnHandle_t *handle) {
     std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
 #endif
     printf("  queue empty, creating, returned %d\n", ret);
+    cudnn_handles_mu.Unlock();
     return ret;
   }
 
@@ -275,13 +290,14 @@ cudnnStatus_t __cudnnCreate(cudnnHandle_t *handle) {
   auto tid = __gettid();
   std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, CUDNN_STATUS_SUCCESS);
 #endif
+  cudnn_handles_mu.Unlock();
   return CUDNN_STATUS_SUCCESS;
 }
 
 cublasStatus_t __cublasCreate(cublasHandle_t *handle) {
   //printf("### ### ### __cublasCreate\n");
   uint32_t gpuid = __internal_getCurrentDevice();
-  
+  cublas_handles_mu.Lock();
   if (g_queue_is_empty(cublas_handles[gpuid])) {
     cublasStatus_t ret = cublasCreate(handle);
 #ifndef NDEBUG
@@ -289,6 +305,7 @@ cublasStatus_t __cublasCreate(cublasHandle_t *handle) {
     std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
 #endif
 printf("  queue empty, creating, returned %d\n", ret);
+    cublas_handles_mu.Unlock();
     return ret;
   }
 
@@ -297,5 +314,6 @@ printf("  queue empty, creating, returned %d\n", ret);
   auto tid = __gettid();
   std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, CUBLAS_STATUS_SUCCESS);
 #endif
+  cublas_handles_mu.Unlock();
   return CUBLAS_STATUS_SUCCESS;
 }
