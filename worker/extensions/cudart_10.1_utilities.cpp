@@ -108,7 +108,9 @@ cudaError_t __helper_create_stream(cudaStream_t *pStream, unsigned int flags, in
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
                                    void **args, size_t sharedMem, cudaStream_t stream) {
   cudaError_t ret2 = cudaGetLastError();
+#ifndef NDEBUG
   printf(" culaunch peek error:  %d\n", ret2);
+#endif
 
   // this might trigger and to migration
   __internal_kernelIn();
@@ -136,7 +138,9 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
     std::cerr << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc[cur_dvc] << std::endl;
 #endif
   }
+#ifndef NDEBUG
   __helper_print_kernel_info(func, args);
+#endif
   // std::cerr << "function metadata (" << (void *)func << ") for local " << func->hostfunc[cur_dvc] << ", cufunc "
   //          << (void *)func->cufunc[cur_dvc] << ", argc " << func->argc << std::endl;
 
@@ -154,7 +158,9 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[cur_dvc], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
                                       blockDim.z, sharedMem, (CUstream)  __helper_translate_stream(stream), args, NULL);
 
+#ifndef NDEBUG
     printf(">>> cuLaunchKernel returned %d\n", ret);
+#endif
     /*
     cudaError_t ret2;
     cudaDeviceSynchronize();
@@ -172,7 +178,6 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   else {
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[0], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
                                       blockDim.z, sharedMem,  (CUstream)stream, args, NULL);
-                                      
 #ifndef NDEBUG
     auto tid = __gettid();
     std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);

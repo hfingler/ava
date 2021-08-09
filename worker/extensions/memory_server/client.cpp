@@ -46,12 +46,16 @@ void __cmd_handle_in() {
             thread_block_cv.wait(lk);
     }
     pending_cmds++;
+#ifndef NDEBUG
     std::cerr << "in: " << pending_cmds << " pending cmds.." << std::endl;
+#endif
 }
 
 void __cmd_handle_out() {
     pending_cmds--;
+#ifndef NDEBUG
     std::cerr << "out: " << pending_cmds << " pending cmds.." << std::endl;
+#endif
 }
 
 bool allContextsEnabled;
