@@ -13585,6 +13585,7 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamWaitEvent(cudaStream
 }
 
 __host__ cudaError_t CUDARTAPI cudaStreamSynchronize(cudaStream_t stream) {
+  ava_async;
   ava_disable_native_call;
   ava_argument(stream) ava_handle; 
   if (ava_is_worker) {
