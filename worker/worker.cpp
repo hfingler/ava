@@ -283,8 +283,8 @@ int main(int argc, char *argv[]) {
       // clean up allocations, local and remote
       GPUMemoryServer::Client::getInstance().fullCleanup();
 
+/*
       // explode and reset cuda contexts
-      /*
       if (enable_all_ctx == "yes") {
         destroy_cuda_contexts();
         create_cuda_contexts();
@@ -294,8 +294,7 @@ int main(int argc, char *argv[]) {
         cudaSetDevice(std::stoi(gpu_device));
         cudaFree(0);
       }
-      */
-
+*/
       // go back to original GPU
       GPUMemoryServer::Client::getInstance().resetCurrentGPU();
       //ttc.notify(12);

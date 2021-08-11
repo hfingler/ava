@@ -105,10 +105,11 @@ cudaError_t __helper_create_stream(cudaStream_t *pStream, unsigned int flags, in
 
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
                                    void **args, size_t sharedMem, cudaStream_t stream) {
-  cudaError_t ret2 = cudaGetLastError();
-#ifndef NDEBUG
-  printf(" culaunch peek error:  %d\n", ret2);
-#endif
+  /*
+  if (ret2 != 0) {
+    printf("\n\n\n ##### culaunch SAW AN ERROR:  %d\n\n\n", ret2);
+  }
+  */
 
   // this might trigger and to migration
   __internal_kernelIn();
@@ -136,9 +137,11 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
     std::cerr << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc[cur_dvc] << std::endl;
 #endif
   }
+
 #ifndef NDEBUG
   __helper_print_kernel_info(func, args);
 #endif
+
   // std::cerr << "function metadata (" << (void *)func << ") for local " << func->hostfunc[cur_dvc] << ", cufunc "
   //          << (void *)func->cufunc[cur_dvc] << ", argc " << func->argc << std::endl;
 
@@ -160,6 +163,7 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
 #ifndef NDEBUG
     printf(">>> cuLaunchKernel returned %d\n", ret);
 #endif
+
     /*
     cudaError_t ret2;
     cudaDeviceSynchronize();
@@ -226,7 +230,7 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
         ret = cuModuleLoad(module, fname);
       }
     }
-    fprintf(stderr, "resetting device to %d\n", __internal_getCurrentDevice());
+    //fprintf(stderr, "resetting device to %d\n", __internal_getCurrentDevice());
     cudaSetDevice(__internal_getCurrentDevice());
     return ret;
   } else {
@@ -237,23 +241,23 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
 cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind) {
   cudaError_t ret;
   /*
-  cudaDeviceSynchronize();
-  ret = cudaGetLastError();
-  printf("peek error:  %d\n", ret);
-  if(ret) {
-    printf("\n\n\n ### MEMCPY ERROR \n\n\n");
+  cudaError_t ret2 = cudaGetLastError();
+  if (ret != 0) {
+    printf("\n\n\n ##### __helper_cudaMemcpy SAW AN ERROR:  %d\n\n\n", ret2);
   }
   */
-  /*
-    struct cudaPointerAttributes at;
-    ret = cudaPointerGetAttributes(&at, __translate_ptr(dst));
-    printf("curdvc %d  dst attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(),
-    ret, at.type, at.device, at.devicePointer, at.hostPointer);
+  
+/*
+  struct cudaPointerAttributes at;
+  ret = cudaPointerGetAttributes(&at, __translate_ptr(dst));
+  printf("curdvc %d  dst attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(), ret, at.type, 
+      at.device, at.devicePointer, at.hostPointer);
 
-    ret = cudaPointerGetAttributes(&at, __translate_ptr(src));
-    printf("curdvc %d  src attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(),
-    ret, at.type, at.device, at.devicePointer, at.hostPointer); cudaGetLastError();
-  */
+  ret = cudaPointerGetAttributes(&at, __translate_ptr(src));
+  printf("curdvc %d  src attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(), ret, at.type, 
+      at.device, at.devicePointer, at.hostPointer);
+  cudaGetLastError();
+*/
 
   ret = cudaMemcpy(__translate_ptr(dst), __translate_ptr(src), count, kind);
 #ifndef NDEBUG
@@ -264,12 +268,12 @@ cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum c
 }
 
 cudaError_t __helper_cudaMemset(void *devPtr, int value, size_t count) {
-  cudaError_t ret2;
-  ret2 = cudaGetLastError();
-  printf("__helper_cudaMemset  peek error:  %d\n", ret2);
+  //cudaError_t ret2;
+  //ret2 = cudaGetLastError();
+  //printf("__helper_cudaMemset  peek error:  %d\n", ret2);
 
   cudaError_t ret = cudaMemset(__translate_ptr(devPtr), value, count);
-  printf("memset ret %d   input %p  val %d  count %u\n", ret, __translate_ptr(devPtr), value, count);
+  //printf("memset ret %d   input %p  val %d  count %u\n", ret, __translate_ptr(devPtr), value, count);
 
 #ifndef NDEBUG
   auto tid = __gettid();
