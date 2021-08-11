@@ -211,6 +211,12 @@ namespace GPUMemoryServer {
     }
     
     cudaError_t Client::localFree(void* devPtr) {
+        // this migration type can cause illegal memory access errors
+        // when migrating, so don't free for now
+        if (migrated_type == Migration::KERNEL) {
+            return cudaSuccess;
+        }
+
         // cudaFree with nullptr does no operation
         if (devPtr == nullptr) {
             return cudaSuccess;
