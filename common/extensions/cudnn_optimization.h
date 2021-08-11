@@ -22,7 +22,7 @@ extern "C" {
 void guestlib_cudnn_opt_init(void);
 void guestlib_cudnn_opt_fini(void);
 void worker_cudnn_opt_init(uint32_t n_handles);
-void worker_cudnn_opt_cleanup(void);
+void worker_cudnn_opt_cleanup();
 
 cudnnStatus_t __pool_cudnnCreateConvolutionDescriptor(cudnnConvolutionDescriptor_t *convDesc, size_t count);
 cudnnStatus_t __pool_cudnnDestroyConvolutionDescriptor(cudnnConvolutionDescriptor_t *convDesc, size_t count);

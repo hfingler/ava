@@ -4476,10 +4476,39 @@ CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSscal(cublasHandle_t handle, int n,
 }
 
 /***** CUDNN (OOF) ******/
+cudnnStatus_t cudnnBatchNormalizationForwardInference_float(
+    cudnnHandle_t handle, cudnnBatchNormMode_t mode, const float *alpha, /* alpha[0] = result blend factor */
+    const float *beta,                                                   /* beta[0] = dest layer blend factor */
+    const cudnnTensorDescriptor_t xDesc, const void *x,                 /* NxCxHxW */
+    const cudnnTensorDescriptor_t yDesc, void *y,                       /* NxCxHxW */
+    const cudnnTensorDescriptor_t bnScaleBiasMeanVarDesc, const void *bnScale, const void *bnBias,
+    const void *estimatedMean, const void *estimatedVariance, double epsilon) {
+  ava_async;
+  ava_argument(handle) ava_handle;
+  ava_argument(alpha) {
+    ava_type_cast(const float *);
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(beta) {
+    ava_type_cast(const float *);
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(xDesc) ava_handle;
+  ava_argument(x) ava_opaque;
+  ava_argument(yDesc) ava_handle;
+  ava_argument(y) ava_opaque;
+  ava_argument(bnScaleBiasMeanVarDesc) ava_handle;
+  ava_argument(bnScale) ava_opaque;
+  ava_argument(bnBias) ava_opaque;
+  ava_argument(estimatedMean) ava_opaque;
+  ava_argument(estimatedVariance) ava_opaque;
+}
 
-cudnnStatus_t CUDNNWINAPI cudnnBatchNormalizationForwardInference(
-    cudnnHandle_t handle, cudnnBatchNormMode_t mode, const void *alpha, /* alpha[0] = result blend factor */
-    const void *beta,                                                   /* beta[0] = dest layer blend factor */
+cudnnStatus_t cudnnBatchNormalizationForwardInference_double(
+    cudnnHandle_t handle, cudnnBatchNormMode_t mode, const double *alpha, /* alpha[0] = result blend factor */
+    const double *beta,                                                   /* beta[0] = dest layer blend factor */
     const cudnnTensorDescriptor_t xDesc, const void *x,                 /* NxCxHxW */
     const cudnnTensorDescriptor_t yDesc, void *y,                       /* NxCxHxW */
     const cudnnTensorDescriptor_t bnScaleBiasMeanVarDesc, const void *bnScale, const void *bnBias,
@@ -4506,6 +4535,38 @@ cudnnStatus_t CUDNNWINAPI cudnnBatchNormalizationForwardInference(
   ava_argument(estimatedMean) ava_opaque;
   ava_argument(estimatedVariance) ava_opaque;
 }
+
+ava_begin_replacement;
+EXPORTED cudnnStatus_t CUDNNWINAPI cudnnBatchNormalizationForwardInference(
+    cudnnHandle_t handle, cudnnBatchNormMode_t mode, const void *alpha, /* alpha[0] = result blend factor */
+    const void *beta,                                                   /* beta[0] = dest layer blend factor */
+    const cudnnTensorDescriptor_t xDesc, const void *x,                 /* NxCxHxW */
+    const cudnnTensorDescriptor_t yDesc, void *y,                       /* NxCxHxW */
+    const cudnnTensorDescriptor_t bnScaleBiasMeanVarDesc, const void *bnScale, const void *bnBias,
+    const void *estimatedMean, const void *estimatedVariance, double epsilon) {
+  cudnnDataType_t x_data_type;
+  cudnnDataType_t y_data_type;
+  cudnnDataType_t data_type;
+  bool xret = __helper_get_tensor_type(xDesc, &x_data_type);
+  bool yret = __helper_get_tensor_type(yDesc, &y_data_type);
+  if (xret) {
+    data_type = x_data_type;
+  } else if (yret) {
+    data_type = y_data_type;
+  } else {
+    data_type = CUDNN_DATA_DOUBLE;
+  }
+  if (data_type == CUDNN_DATA_DOUBLE) {
+    return cudnnBatchNormalizationForwardInference_double(handle, mode, (const double *)alpha, (const double *)beta, xDesc, x, yDesc, y, 
+                                                          bnScaleBiasMeanVarDesc, bnScale, bnBias, estimatedMean, 
+                                                          estimatedVariance, epsilon);
+  } else {
+    return cudnnBatchNormalizationForwardInference_float(handle, mode, (const float *)alpha, (const float *)beta, xDesc, x, yDesc, y, 
+                                                         bnScaleBiasMeanVarDesc, bnScale, bnBias, estimatedMean, 
+                                                         estimatedVariance, epsilon);
+  }
+}
+ava_end_replacement;
 
 cudnnStatus_t __helper_cudnnConvolutionForward_double(cudnnHandle_t handle, const double *alpha,
                                                       const cudnnTensorDescriptor_t xDesc, const void *x,

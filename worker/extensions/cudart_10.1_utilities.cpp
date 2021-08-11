@@ -681,3 +681,27 @@ cudnnStatus_t __helper_cudnnConvolutionForward_float(cudnnHandle_t handle, const
                                                      const cudnnTensorDescriptor_t yDesc, void *y) {
   return cudnnConvolutionForward(handle, alpha, xDesc, x, wDesc, w, convDesc, algo, workSpace, workSpaceSizeInBytes, beta, yDesc, y);
 }
+
+cudnnStatus_t cudnnBatchNormalizationForwardInference_float(
+    cudnnHandle_t handle, cudnnBatchNormMode_t mode, const float *alpha, /* alpha[0] = result blend factor */
+    const float *beta,                                                   /* beta[0] = dest layer blend factor */
+    const cudnnTensorDescriptor_t xDesc, const void *x,                 /* NxCxHxW */
+    const cudnnTensorDescriptor_t yDesc, void *y,                       /* NxCxHxW */
+    const cudnnTensorDescriptor_t bnScaleBiasMeanVarDesc, const void *bnScale, const void *bnBias,
+    const void *estimatedMean, const void *estimatedVariance, double epsilon) {
+  return cudnnBatchNormalizationForwardInference(handle, mode, alpha, beta, xDesc, x, yDesc, y, 
+                                                 bnScaleBiasMeanVarDesc, bnScale, bnBias, estimatedMean, 
+                                                 estimatedVariance, epsilon);
+}
+
+cudnnStatus_t cudnnBatchNormalizationForwardInference_double(
+    cudnnHandle_t handle, cudnnBatchNormMode_t mode, const double *alpha, /* alpha[0] = result blend factor */
+    const double *beta,                                                   /* beta[0] = dest layer blend factor */
+    const cudnnTensorDescriptor_t xDesc, const void *x,                 /* NxCxHxW */
+    const cudnnTensorDescriptor_t yDesc, void *y,                       /* NxCxHxW */
+    const cudnnTensorDescriptor_t bnScaleBiasMeanVarDesc, const void *bnScale, const void *bnBias,
+    const void *estimatedMean, const void *estimatedVariance, double epsilon) {
+  return cudnnBatchNormalizationForwardInference(handle, mode, alpha, beta, xDesc, x, yDesc, y, 
+                                                 bnScaleBiasMeanVarDesc, bnScale, bnBias, estimatedMean, 
+                                                 estimatedVariance, epsilon);
+}

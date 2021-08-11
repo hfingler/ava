@@ -166,7 +166,21 @@ cudnnStatus_t __helper_cudnnConvolutionForward_float(cudnnHandle_t handle, const
                                                      cudnnConvolutionFwdAlgo_t algo, void *workSpace,
                                                      size_t workSpaceSizeInBytes, const float *beta,
                                                      const cudnnTensorDescriptor_t yDesc, void *y);
-
+cudnnStatus_t cudnnBatchNormalizationForwardInference_double(
+    cudnnHandle_t handle, cudnnBatchNormMode_t mode, const double *alpha, /* alpha[0] = result blend factor */
+    const double *beta,                                                   /* beta[0] = dest layer blend factor */
+    const cudnnTensorDescriptor_t xDesc, const void *x,                 /* NxCxHxW */
+    const cudnnTensorDescriptor_t yDesc, void *y,                       /* NxCxHxW */
+    const cudnnTensorDescriptor_t bnScaleBiasMeanVarDesc, const void *bnScale, const void *bnBias,
+    const void *estimatedMean, const void *estimatedVariance, double epsilon);
+cudnnStatus_t cudnnBatchNormalizationForwardInference_float(
+    cudnnHandle_t handle, cudnnBatchNormMode_t mode, const float *alpha, /* alpha[0] = result blend factor */
+    const float *beta,                                                   /* beta[0] = dest layer blend factor */
+    const cudnnTensorDescriptor_t xDesc, const void *x,                 /* NxCxHxW */
+    const cudnnTensorDescriptor_t yDesc, void *y,                       /* NxCxHxW */
+    const cudnnTensorDescriptor_t bnScaleBiasMeanVarDesc, const void *bnScale, const void *bnBias,
+    const void *estimatedMean, const void *estimatedVariance, double epsilon);
+    
 cudaError_t __helper_cudaEventCreateWithFlags(cudaEvent_t *event, unsigned int flags);
 cudaError_t __helper_cudaEventDestroy(cudaEvent_t event);
 cudaError_t  __helper_cudaEventRecord(cudaEvent_t event, cudaStream_t stream);
