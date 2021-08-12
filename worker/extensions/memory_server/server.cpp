@@ -18,7 +18,7 @@ static uint32_t debug_kernel_count = 0;
 //std::mt19937 rgen(rdd());
 std::mt19937 rgen{0};
 std::uniform_real_distribution<float> dis01(0, 1);
-std::uniform_int_distribution<int> intdist(0,1);
+//std::uniform_int_distribution<int> intdist(0,1);
 
 Server::Server(uint16_t gpu, uint64_t total_memory, std::string unix_socket_path, std::string resmngr_address) {
     this->gpu = gpu;
@@ -28,11 +28,11 @@ Server::Server(uint16_t gpu, uint64_t total_memory, std::string unix_socket_path
     this->unix_socket_path = unix_socket_path;
 
     if (resmngr_address != "") {
-        printf("Server connecting to resmngr at %s\n", resmngr_address.c_str());
+        std::cerr << "Server connecting to resmngr at " << resmngr_address << std::endl;
         this->resmngr_client = new ResMngrClient(grpc::CreateChannel(resmngr_address, grpc::InsecureChannelCredentials())); 
     }
     else {
-        printf("Server did not get resmngr_address, so not connecting..\n");
+        std::cerr << "Server did not get resmngr_address, so not connecting.." << std::endl;
         this->resmngr_client = 0;
     }
 }
@@ -52,11 +52,11 @@ void Server::run() {
     Reply rep;
     Request req;
     while(1) {
-        std::cerr << " >> server " << gpu <<  " waiting for request" << std::endl;
+        //std::cerr << " >> server " << gpu <<  " waiting for request" << std::endl;
         zmq_recv(responder, &req, sizeof(Request), 0);
-        std::cerr << " >> server " << gpu <<  " got a request" << std::endl;
+        //std::cerr << " >> server " << gpu <<  " got a request" << std::endl;
         handleRequest(req, rep);
-        std::cerr << " >> sending response" << std::endl;
+        //std::cerr << " >> sending response" << std::endl;
         zmq_send(responder, &rep, sizeof(Reply), 0);
     }
 }
@@ -136,15 +136,16 @@ void Server::handleFinish(Request& req, Reply& rep) {
 
 void Server::handleKernelIn(Request& req, Reply& rep) {
     kernels_queued++;
-    std::cerr << " >>in: there are now" <<  kernels_queued << "kernels queued" <<std::endl;
+    //std::cerr << " >>in: there are now" <<  kernels_queued << "kernels queued" <<std::endl;
 
     //check if we are just debugging
     char* dbg_mig = std::getenv("SG_DEBUG_MIGRATION");
     if (dbg_mig) {
         debug_kernel_count += 1;
+        uint32_t dbgi = atoi(std::getenv("SG_DEBUG_MIGRATION"));
 
         //if debug type 1 or 2 and multiple of 2
-        if (!strcmp(dbg_mig, "1") && !strcmp(dbg_mig, "2")  &&  debug_kernel_count % 2 == 0) {
+        if ((dbgi == 1 || dbgi == 2)  &&  debug_kernel_count % 2 == 0) {
             printf("SG_DEBUG_MIGRATION:  kernel #%d, setting migration on\n", debug_kernel_count);
 
             if (!strcmp(dbg_mig, "1")) {
@@ -158,22 +159,25 @@ void Server::handleKernelIn(Request& req, Reply& rep) {
                 rep.target_device = gpu == 1 ? 2 : 1;
             }
         }
-        //3 means randomly chosen over a %
-        else if (!strcmp(dbg_mig, "3")) {
-            //10% change of migration
-            if (dis01(rgen) <= 0.01) { 
+        //if a multiple of 10, divide 1 by it and that's the prob
+        else if (dbgi >= 10 && dbgi % 10 == 0) {
+            float prob = 1.0 / dbgi;
+            if (dis01(rgen) <= prob) { 
             //if (1) {
-                //rep.migrate = Migration::KERNEL;
                 rep.migrate = Migration::TOTAL;
-                uint32_t dg;
-                //while (1) {
-                //    dg = intdist(rgen);
-                //    if (dg != gpu) break;
-                //}
-                dg = gpu == 0 ? 1 : 0;
-
+                uint32_t dg = gpu == 0 ? 1 : 0;
                 rep.target_device = dg;
-                std::cerr << " SG_DEBUG_MIGRATION: random migration triggered:  " << gpu  << " -> " << dg << std::endl;
+                std::cerr << " SG_DEBUG_MIGRATION: TOTAL random migration triggered:  " << gpu  << " -> " << dg << " with prob " << prob << std::endl;
+            }
+        }
+        //if a multiple of 10 after -1, divide 1 by it and that's the prob, use kernel migration
+        else if (dbgi >= 11 && (dbgi-1) % 10 == 0) {
+            float prob = 1.0 / dbgi;
+            if (dis01(rgen) <= prob) { 
+                rep.migrate = Migration::KERNEL;
+                uint32_t dg = gpu == 0 ? 1 : 0;
+                rep.target_device = dg;
+                std::cerr << " SG_DEBUG_MIGRATION: KERNEL random migration triggered:  " << gpu  << " -> " << dg << " with prob " << prob << std::endl;
             }  
         }
     }

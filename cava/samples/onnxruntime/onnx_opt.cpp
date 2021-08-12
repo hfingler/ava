@@ -5808,7 +5808,13 @@ cudnnStatus_t CUDNNWINAPI cudnnSetReduceTensorDescriptor(cudnnReduceTensorDescri
                                                          cudnnReduceTensorIndices_t reduceTensorIndices,
                                                          cudnnIndicesType_t reduceTensorIndicesType) {
   ava_async;
+  //ava_disable_native_call;
   ava_argument(reduceTensorDesc) ava_handle;
+
+  //if (ava_is_worker) {
+  //  return __helper_cudnnSetReduceTensorDescriptor(reduceTensorDesc, reduceTensorOp, reduceTensorCompType,
+  //               reduceTensorNanOpt, reduceTensorIndices, reduceTensorIndicesType);
+  //}
 }
 
 cudnnStatus_t CUDNNWINAPI cudnnGetReduceTensorDescriptor(const cudnnReduceTensorDescriptor_t reduceTensorDesc,
@@ -5884,6 +5890,9 @@ cudnnStatus_t cudnnReduceTensor_double(cudnnHandle_t handle, const cudnnReduceTe
                                        const cudnnTensorDescriptor_t aDesc, const void *A, const double *beta,
                                        const cudnnTensorDescriptor_t cDesc, void *C) {
   ava_async;
+/* Tensor operation : C = reduce op( alpha * A ) + beta * C */
+/* The NaN propagation enum applies to only the min and max reduce ops; the other reduce ops propagate NaN as usual. */
+/* The indices space is ignored for reduce ops other than min or max. */
   ava_argument(handle) ava_handle;
   ava_argument(reduceTensorDesc) ava_handle;
   ava_argument(alpha) {
@@ -5900,6 +5909,11 @@ cudnnStatus_t cudnnReduceTensor_double(cudnnHandle_t handle, const cudnnReduceTe
   ava_argument(C) ava_opaque;
   ava_argument(workspace) ava_opaque;
   ava_argument(indices) ava_opaque;
+
+  //if (ava_is_worker) {
+  //  return __helper_cudnnReduceTensor(handle, reduceTensorDesc, indices, indicesSizeInBytes, workspace,
+  //                                          workspaceSizeInBytes, alpha, aDesc, A, beta, cDesc, C);
+  //}
 }
 
 cudnnStatus_t cudnnReduceTensor_float(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
@@ -6272,6 +6286,7 @@ cudnnStatus_t cudnnConvolutionBiasActivationForward_float(
     cudnnConvolutionFwdAlgo_t algo, void *workSpace, size_t workSpaceSizeInBytes, const float *alpha2,
     const cudnnTensorDescriptor_t zDesc, const void *z, const cudnnTensorDescriptor_t biasDesc, const void *bias,
     const cudnnActivationDescriptor_t activationDesc, const cudnnTensorDescriptor_t yDesc, void *y) {
+  //ava_disable_native_call;
   ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(alpha1) {
@@ -6295,6 +6310,11 @@ cudnnStatus_t cudnnConvolutionBiasActivationForward_float(
   ava_argument(activationDesc) ava_handle;
   ava_argument(yDesc) ava_handle;
   ava_argument(y) ava_opaque;
+
+  //if (ava_is_worker) {
+  //  return __helper_cudnnConvolutionBiasActivationForward(handle, alpha1, xDesc, x, wDesc, w, convDesc, algo, workSpace, 
+  //    workSpaceSizeInBytes, alpha2, zDesc, z, biasDesc, bias, activationDesc, yDesc, y);
+  //}
 }
 
 ava_begin_replacement;
@@ -6701,17 +6721,27 @@ cudnnStatus_t CUDNNWINAPI cudnnGetPooling2dForwardOutputDim(const cudnnPoolingDe
 
 /* Activation functions: All of the form "output = alpha * Op(inputs) + beta * output" */
 cudnnStatus_t CUDNNWINAPI cudnnCreateActivationDescriptor(cudnnActivationDescriptor_t *activationDesc) {
+  //ava_disable_native_call;
   ava_argument(activationDesc) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
   }
+
+  //if (ava_is_worker) {
+  //  return __helper_cudnnCreateActivationDescriptor(activationDesc);
+  //}
 }
 
 cudnnStatus_t CUDNNWINAPI cudnnSetActivationDescriptor(cudnnActivationDescriptor_t activationDesc,
                                                        cudnnActivationMode_t mode, cudnnNanPropagation_t reluNanOpt,
                                                        double coef) {
+  ava_disable_native_call;
   ava_argument(activationDesc) ava_handle;
+  if (ava_is_worker) {
+    return __helper_cudnnSetActivationDescriptor(activationDesc, mode, reluNanOpt, coef);
+  }
+
 } /* ceiling for clipped RELU, alpha for ELU */
 
 cudnnStatus_t CUDNNWINAPI cudnnGetActivationDescriptor(const cudnnActivationDescriptor_t activationDesc,

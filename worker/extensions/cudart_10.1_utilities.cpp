@@ -105,10 +105,11 @@ cudaError_t __helper_create_stream(cudaStream_t *pStream, unsigned int flags, in
 
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
                                    void **args, size_t sharedMem, cudaStream_t stream) {
-  cudaError_t ret2 = cudaGetLastError();
-#ifndef NDEBUG
-  printf(" culaunch peek error:  %d\n", ret2);
-#endif
+  /*
+  if (ret2 != 0) {
+    printf("\n\n\n ##### culaunch SAW AN ERROR:  %d\n\n\n", ret2);
+  }
+  */
 
   // this might trigger and to migration
   __internal_kernelIn();
@@ -136,9 +137,11 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
     std::cerr << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc[cur_dvc] << std::endl;
 #endif
   }
+
 #ifndef NDEBUG
   __helper_print_kernel_info(func, args);
 #endif
+
   // std::cerr << "function metadata (" << (void *)func << ") for local " << func->hostfunc[cur_dvc] << ", cufunc "
   //          << (void *)func->cufunc[cur_dvc] << ", argc " << func->argc << std::endl;
 
@@ -153,13 +156,17 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
         *((void **)args[i]) = __translate_ptr(*((void **)args[i]));
       }
     }
-    // BIG TODOs: need to map streams on new GPU when migrating
+
+    // auto start = std::chrono::steady_clock::now();
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[cur_dvc], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
                                       blockDim.z, sharedMem, (CUstream)__helper_translate_stream(stream), args, NULL);
+    // auto end = std::chrono::steady_clock::now();
+    // std::cerr << "???" << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << std::endl;
 
 #ifndef NDEBUG
     printf(">>> cuLaunchKernel returned %d\n", ret);
 #endif
+
     /*
     cudaError_t ret2;
     cudaDeviceSynchronize();
@@ -175,8 +182,12 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   }
   // if not with migration, just get over it and do
   else {
+    // auto start = std::chrono::steady_clock::now();
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[0], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
                                       blockDim.z, sharedMem, (CUstream)stream, args, NULL);
+    // auto end = std::chrono::steady_clock::now();
+    // std::cerr << "???" << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << std::endl;
+
 #ifndef NDEBUG
     auto tid = __gettid();
     std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
@@ -226,7 +237,7 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
         ret = cuModuleLoad(module, fname);
       }
     }
-    fprintf(stderr, "resetting device to %d\n", __internal_getCurrentDevice());
+    // fprintf(stderr, "resetting device to %d\n", __internal_getCurrentDevice());
     cudaSetDevice(__internal_getCurrentDevice());
     return ret;
   } else {
@@ -237,13 +248,12 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
 cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind) {
   cudaError_t ret;
   /*
-  cudaDeviceSynchronize();
-  ret = cudaGetLastError();
-  printf("peek error:  %d\n", ret);
-  if(ret) {
-    printf("\n\n\n ### MEMCPY ERROR \n\n\n");
+  cudaError_t ret2 = cudaGetLastError();
+  if (ret != 0) {
+    printf("\n\n\n ##### __helper_cudaMemcpy SAW AN ERROR:  %d\n\n\n", ret2);
   }
   */
+
   /*
     struct cudaPointerAttributes at;
     ret = cudaPointerGetAttributes(&at, __translate_ptr(dst));
@@ -255,7 +265,11 @@ cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum c
     ret, at.type, at.device, at.devicePointer, at.hostPointer); cudaGetLastError();
   */
 
+  // auto start = std::chrono::steady_clock::now();
   ret = cudaMemcpy(__translate_ptr(dst), __translate_ptr(src), count, kind);
+  // auto end = std::chrono::steady_clock::now();
+  // std::cerr << ";;;" << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << std::endl;
+
 #ifndef NDEBUG
   auto tid = __gettid();
   std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
@@ -264,12 +278,15 @@ cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum c
 }
 
 cudaError_t __helper_cudaMemset(void *devPtr, int value, size_t count) {
-  cudaError_t ret2;
-  ret2 = cudaGetLastError();
-  printf("__helper_cudaMemset  peek error:  %d\n", ret2);
+  // cudaError_t ret2;
+  // ret2 = cudaGetLastError();
+  // printf("__helper_cudaMemset  peek error:  %d\n", ret2);
 
+  // auto start = std::chrono::steady_clock::now();
   cudaError_t ret = cudaMemset(__translate_ptr(devPtr), value, count);
-  printf("memset ret %d   input %p  val %d  count %u\n", ret, __translate_ptr(devPtr), value, count);
+  // printf("memset ret %d   input %p  val %d  count %u\n", ret, __translate_ptr(devPtr), value, count);
+  // auto end = std::chrono::steady_clock::now();
+  // std::cerr << ":::" << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << std::endl;
 
 #ifndef NDEBUG
   auto tid = __gettid();
@@ -773,4 +790,68 @@ cudnnStatus_t cudnnSoftmaxForward_float(cudnnHandle_t handle, cudnnSoftmaxAlgori
                                         const float *alpha, const cudnnTensorDescriptor_t xDesc, const void *x,
                                         const float *beta, const cudnnTensorDescriptor_t yDesc, void *y) {
   return cudnnSoftmaxForward(handle, algo, mode, alpha, xDesc, x, beta, yDesc, y);
+}
+
+/*
+ *  Stuff below is unused so far
+ */
+
+cudnnStatus_t __helper_cudnnCreateActivationDescriptor(cudnnActivationDescriptor_t *activationDesc) {
+  if (__internal_allContextsEnabled()) {
+    // TBD
+  } else {
+    return cudnnCreateActivationDescriptor(activationDesc);
+  }
+}
+
+cudnnStatus_t __helper_cudnnSetActivationDescriptor(cudnnActivationDescriptor_t activationDesc,
+                                                    cudnnActivationMode_t mode, cudnnNanPropagation_t reluNanOpt,
+                                                    double coef) {
+  if (__internal_allContextsEnabled()) {
+    // TBD
+  } else {
+    return cudnnSetActivationDescriptor(activationDesc, mode, reluNanOpt, coef);
+  }
+}
+
+cudnnStatus_t __helper_cudnnConvolutionBiasActivationForward(
+    cudnnHandle_t handle, const void *alpha1, const cudnnTensorDescriptor_t xDesc, const void *x,
+    const cudnnFilterDescriptor_t wDesc, const void *w, const cudnnConvolutionDescriptor_t convDesc,
+    cudnnConvolutionFwdAlgo_t algo, void *workSpace, size_t workSpaceSizeInBytes, const void *alpha2,
+    const cudnnTensorDescriptor_t zDesc, const void *z, const cudnnTensorDescriptor_t biasDesc, const void *bias,
+    const cudnnActivationDescriptor_t activationDesc, const cudnnTensorDescriptor_t yDesc, void *y) {
+  if (__internal_allContextsEnabled()) {
+    // TBD
+  } else {
+    return cudnnConvolutionBiasActivationForward(handle, alpha1, xDesc, x, wDesc, w, convDesc, algo, workSpace,
+                                                 workSpaceSizeInBytes, alpha2, zDesc, z, biasDesc, bias, activationDesc,
+                                                 yDesc, y);
+  }
+}
+
+cudnnStatus_t __helper_cudnnSetReduceTensorDescriptor(cudnnReduceTensorDescriptor_t reduceTensorDesc,
+                                                      cudnnReduceTensorOp_t reduceTensorOp,
+                                                      cudnnDataType_t reduceTensorCompType,
+                                                      cudnnNanPropagation_t reduceTensorNanOpt,
+                                                      cudnnReduceTensorIndices_t reduceTensorIndices,
+                                                      cudnnIndicesType_t reduceTensorIndicesType) {
+  if (__internal_allContextsEnabled()) {
+    // TBD
+  } else {
+    return cudnnSetReduceTensorDescriptor(reduceTensorDesc, reduceTensorOp, reduceTensorCompType, reduceTensorNanOpt,
+                                          reduceTensorIndices, reduceTensorIndicesType);
+  }
+}
+
+cudnnStatus_t __helper_cudnnReduceTensor(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
+                                         void *indices, size_t indicesSizeInBytes, void *workspace,
+                                         size_t workspaceSizeInBytes, const void *alpha,
+                                         const cudnnTensorDescriptor_t aDesc, const void *A, const void *beta,
+                                         const cudnnTensorDescriptor_t cDesc, void *C) {
+  if (__internal_allContextsEnabled()) {
+    // TBD
+  } else {
+    return cudnnReduceTensor(handle, reduceTensorDesc, indices, indicesSizeInBytes, workspace, workspaceSizeInBytes,
+                             alpha, aDesc, A, beta, cDesc, C);
+  }
 }

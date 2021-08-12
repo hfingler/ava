@@ -47,14 +47,14 @@ void __cmd_handle_in() {
     }
     pending_cmds++;
 #ifndef NDEBUG
-    std::cerr << "in: " << pending_cmds << " pending cmds.." << std::endl;
+    //std::cerr << "in: " << pending_cmds << " pending cmds.." << std::endl;
 #endif
 }
 
 void __cmd_handle_out() {
     pending_cmds--;
 #ifndef NDEBUG
-    std::cerr << "out: " << pending_cmds << " pending cmds.." << std::endl;
+    //std::cerr << "out: " << pending_cmds << " pending cmds.." << std::endl;
 #endif
 }
 
@@ -148,12 +148,15 @@ cudaEvent_t __translate_event(cudaEvent_t key) {
  * ************************************/
 
 namespace GPUMemoryServer {
+
+    //uint32_t kc = 0;
     Client::Client() {
         og_device = -1;
         context = zmq_ctx_new();
         for (int i = 0 ; i < 4; i++) {
-             sockets[i] = 0;
-         }
+            sockets[i] = 0;
+        }
+        migrated_type = Migration::NOPE;
      }
 
      Client::~Client() {
@@ -182,7 +185,7 @@ namespace GPUMemoryServer {
         cudaGetDevice(&d);
         cudaError_t err = cudaMalloc(devPtr, size);
         local_allocs.emplace((uint64_t)*devPtr, std::make_unique<Client::LocalAlloc>(*devPtr, size, current_device));
-        printf("  malloc %p  size %lu  at device %d, ret=%d\n", *devPtr, size, d, err);
+        // printf("  malloc %p  size %lu  at device %d, ret=%d\n", *devPtr, size, d, err);
         //TODO add memory if we do it
         if (migrated_type == Migration::TOTAL) {
             //here's the issue.. if we have migrated memory, cudaMalloc may return a pointer that was
@@ -197,7 +200,7 @@ namespace GPUMemoryServer {
                 *devPtr = optr;
             }
         }
-        reportMalloc(size); 
+        //reportMalloc(size); 
         return err;
     }
 
@@ -209,8 +212,11 @@ namespace GPUMemoryServer {
     }
     
     cudaError_t Client::localFree(void* devPtr) {
-        // this migration type can cause illegal memory access errors
-        // when migrating, so don't free for now
+        //there is a use-after-free bug with execution (KERNEL) migration, where
+        //if the app frees a buffer immediately after a kernel launch, an error 700
+        //can occur due to the array being freed before the kernel finishes.
+        //this will only happen in badly written code (like the kmeans we're testing with)
+        //if it migrated, don't free now, it will be freed on exit
         if (migrated_type == Migration::KERNEL) {
             return cudaSuccess;
         }
@@ -224,9 +230,9 @@ namespace GPUMemoryServer {
         //found it, remove and get out
         if (it != local_allocs.end()) {
             tryRemoveFromPointerMap(devPtr);
-            GPUMemoryServer::Client::getInstance().reportFree(it->second->size); 
+            //GPUMemoryServer::Client::getInstance().reportFree(it->second->size); 
             local_allocs.erase(it); //this calls cudaFree
-            return (cudaError_t)0;   
+            return cudaSuccess;   
         }
 
         //we could have migrated memory, check
@@ -235,13 +241,13 @@ namespace GPUMemoryServer {
         if (it != local_allocs.end()) {
             fprintf(stderr, "### ERASE BY MAP\n");
             tryRemoveFromPointerMap(devPtr);
-            GPUMemoryServer::Client::getInstance().reportFree(it->second->size); 
+            //GPUMemoryServer::Client::getInstance().reportFree(it->second->size); 
             local_allocs.erase(it); //this calls cudaFree
-            return (cudaError_t)0;   
+            return cudaSuccess;   
         }
 
         fprintf(stderr, "### ILLEGAL cudaFree call on devPtr %x\n", (uint64_t)devPtr);
-        return (cudaError_t)1;   
+        return cudaErrorInvalidValue;   
     }
 
     void Client::reportFree(uint64_t size) {
@@ -255,7 +261,7 @@ namespace GPUMemoryServer {
         Request req;
         req.type = RequestType::MEMREQUESTED;
         req.data.size = mem_mb;
-        sendRequest(req);
+        //sendRequest(req);
     }
 
     void Client::sendRequest(Request &req) {
@@ -314,6 +320,11 @@ namespace GPUMemoryServer {
     }
 
     void Client::kernelIn() {
+        //printf("%d kernels\n", ++kc);
+        if (migrated_type != Migration::NOPE) {
+            //if we have migrated, lets just skip..
+            return;
+        }
         Request req;
         req.type = RequestType::KERNEL_IN;
         sendRequest(req);
@@ -322,7 +333,7 @@ namespace GPUMemoryServer {
     void Client::kernelOut() {
         Request req;
         req.type = RequestType::KERNEL_OUT;
-        sendRequest(req);
+        //sendRequest(req);
     }
 
     bool Client::isInPointerMap(void* ptr) {
@@ -349,7 +360,7 @@ namespace GPUMemoryServer {
         ret = cudaPointerGetAttributes(&at, optr);
         //if it really is a device pointer
         if (ret == 0 && at.type == 2) {
-            std::cerr << "translated " << ptr << " to " << optr  << std::endl;
+            //std::cerr << "translated " << ptr << " to " << optr  << std::endl;
             return optr;
         }
         else {
@@ -367,7 +378,6 @@ namespace GPUMemoryServer {
         //mark that we migrated
         migrated_type = migration_type;
 
-        //cudaDeviceSynchronize();
         if (migration_type == Migration::KERNEL) {
             printf("Migration by kernel mode, changing device to [%d]\n", new_gpuid);
             //cudaDeviceEnablePeerAccess(new_gpuid, 0);
@@ -393,11 +403,12 @@ namespace GPUMemoryServer {
                 localMalloc(&devPtr, al.second);
                 //update map
                 pointer_map[al.first] = devPtr;
-                //async might not help much since they are not parallel
-                cudaMemcpyPeer(devPtr, new_gpuid, al.first, og_device, al.second);
+                //cudaMemcpyPeer(devPtr, new_gpuid, al.first, og_device, al.second);
+                cudaMemcpyPeerAsync(devPtr, new_gpuid, al.first, og_device, al.second);
                 //printf("  [%s] copying %d bytes GPUs [%d]  ->  [%d]\n", uuid.c_str(), al.second, og_device, new_gpuid);
                 //printf("      [%p] -> %p\n", al.first, devPtr);
             }
+            cudaDeviceSynchronize();
 
             //now that data was moved, cleanup
             cleanup(og_device);
@@ -437,6 +448,8 @@ namespace GPUMemoryServer {
         for (int i = 0 ; i < device_count ; i++) 
             cleanup(i);
         local_allocs.clear();
+
+        pointer_map.clear();
 
         //iterate over map of maps, destroying streams
         for (auto& kv : streams_map) {
