@@ -705,3 +705,47 @@ cudnnStatus_t cudnnBatchNormalizationForwardInference_double(
                                                  bnScaleBiasMeanVarDesc, bnScale, bnBias, estimatedMean, 
                                                  estimatedVariance, epsilon);
 }
+
+cudnnStatus_t cudnnPoolingForward_float(cudnnHandle_t handle, const cudnnPoolingDescriptor_t poolingDesc,
+                                        const float *alpha, const cudnnTensorDescriptor_t xDesc, const void *x,
+                                        const float *beta, const cudnnTensorDescriptor_t yDesc, void *y) {
+  return cudnnPoolingForward(handle, poolingDesc, alpha, xDesc, x, beta, yDesc, y);
+}
+
+cudnnStatus_t cudnnPoolingForward_double(cudnnHandle_t handle, const cudnnPoolingDescriptor_t poolingDesc,
+                                         const double *alpha, const cudnnTensorDescriptor_t xDesc, const void *x,
+                                         const double *beta, const cudnnTensorDescriptor_t yDesc, void *y) {
+  return cudnnPoolingForward(handle, poolingDesc, alpha, xDesc, x, beta, yDesc, y);
+}
+
+cudnnStatus_t cudnnAddTensor_double(cudnnHandle_t handle, const double *alpha, const cudnnTensorDescriptor_t aDesc,
+                                    const void *A, const double *beta, const cudnnTensorDescriptor_t cDesc,
+                                    void *C) {
+  return cudnnAddTensor(handle, alpha, aDesc, A, beta, cDesc, C);
+}
+
+cudnnStatus_t cudnnAddTensor_float(cudnnHandle_t handle, const float *alpha, const cudnnTensorDescriptor_t aDesc,
+                                   const void *A, const float *beta, const cudnnTensorDescriptor_t cDesc,
+                                   void *C) {
+  return cudnnAddTensor(handle, alpha, aDesc, A, beta, cDesc, C);
+}
+
+cudnnStatus_t cudnnReduceTensor_double(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
+                                            void *indices, size_t indicesSizeInBytes, void *workspace,
+                                            size_t workspaceSizeInBytes, const double *alpha,
+                                            const cudnnTensorDescriptor_t aDesc, const void *A, const double *beta,
+                                            const cudnnTensorDescriptor_t cDesc, void *C) {
+  return cudnnReduceTensor(handle, reduceTensorDesc, indices, indicesSizeInBytes, workspace,
+                           workspaceSizeInBytes, alpha, aDesc, A,
+                           beta, cDesc, C);
+}
+
+cudnnStatus_t cudnnReduceTensor_float(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
+                                            void *indices, size_t indicesSizeInBytes, void *workspace,
+                                            size_t workspaceSizeInBytes, const float *alpha,
+                                            const cudnnTensorDescriptor_t aDesc, const void *A, const float *beta,
+                                            const cudnnTensorDescriptor_t cDesc, void *C) {
+  return cudnnReduceTensor(handle, reduceTensorDesc, indices, indicesSizeInBytes, workspace,
+                           workspaceSizeInBytes, alpha, aDesc, A,
+                           beta, cDesc, C);
+}

@@ -1379,9 +1379,9 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaEventRecord(cudaEvent_t ev
   }
 }
 
-__host__ cudaError_t CUDARTAPI cudaEventQuery(cudaEvent_t event) { 
+__host__ cudaError_t CUDARTAPI cudaEventQuery(cudaEvent_t event) {
   ava_disable_native_call;
-  ava_argument(event) ava_handle; 
+  ava_argument(event) ava_handle;
   if (ava_is_worker) {
     return cudaEventQuery(__helper_translate_event(event));
   }
@@ -1410,10 +1410,10 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaEventDestroy(cudaEvent_t e
   }
 }
 
-__host__ cudaError_t CUDARTAPI cudaEventSynchronize(cudaEvent_t event) { 
+__host__ cudaError_t CUDARTAPI cudaEventSynchronize(cudaEvent_t event) {
   ava_disable_native_call;
-  ava_argument(event) ava_handle; 
-  
+  ava_argument(event) ava_handle;
+
   if (ava_is_worker) {
     return __helper_cudaEventSynchronize(event);
   }
@@ -3469,11 +3469,12 @@ EXPORTED CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemm_v2(cublasHandle_t han
   bool alpha_is_gpu = false;
   bool beta_is_gpu = false;
   ret = __helper_cudaPointerGetAttributes(&alpha_attr, alpha);
-  //printf("alpha attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, alpha_attr.type, alpha_attr.device, alpha_attr.devicePointer, alpha_attr.hostPointer);
+  // printf("alpha attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, alpha_attr.type, alpha_attr.device,
+  // alpha_attr.devicePointer, alpha_attr.hostPointer);
   if (ret != cudaSuccess) {
     alpha_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(alpha));
     cudaGetLastError();
-    //printf(" alpha on GPU? %d\n", alpha_is_gpu);
+    // printf(" alpha on GPU? %d\n", alpha_is_gpu);
   } else {
 #ifndef NDEBUG
     fprintf(stderr, "alpha type is %d\n", alpha_attr.type);
@@ -3481,11 +3482,12 @@ EXPORTED CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemm_v2(cublasHandle_t han
     alpha_is_gpu = (alpha_attr.type == cudaMemoryTypeDevice);
   }
   ret = __helper_cudaPointerGetAttributes(&beta_attr, beta);
-  //printf("beta attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, beta_attr.type, beta_attr.device, beta_attr.devicePointer, beta_attr.hostPointer);
+  // printf("beta attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, beta_attr.type, beta_attr.device,
+  // beta_attr.devicePointer, beta_attr.hostPointer);
   if (ret != cudaSuccess) {
     beta_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(beta));
     cudaGetLastError();
-    //printf(" beta on GPU? %d\n", alpha_is_gpu);
+    // printf(" beta on GPU? %d\n", alpha_is_gpu);
   } else {
 #ifndef NDEBUG
     fprintf(stderr, "beta type is %d\n", beta_attr.type);
@@ -4479,19 +4481,17 @@ CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSscal(cublasHandle_t handle, int n,
 cudnnStatus_t cudnnBatchNormalizationForwardInference_float(
     cudnnHandle_t handle, cudnnBatchNormMode_t mode, const float *alpha, /* alpha[0] = result blend factor */
     const float *beta,                                                   /* beta[0] = dest layer blend factor */
-    const cudnnTensorDescriptor_t xDesc, const void *x,                 /* NxCxHxW */
-    const cudnnTensorDescriptor_t yDesc, void *y,                       /* NxCxHxW */
+    const cudnnTensorDescriptor_t xDesc, const void *x,                  /* NxCxHxW */
+    const cudnnTensorDescriptor_t yDesc, void *y,                        /* NxCxHxW */
     const cudnnTensorDescriptor_t bnScaleBiasMeanVarDesc, const void *bnScale, const void *bnBias,
     const void *estimatedMean, const void *estimatedVariance, double epsilon) {
   ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(alpha) {
-    ava_type_cast(const float *);
     ava_in;
     ava_buffer(1);
   }
   ava_argument(beta) {
-    ava_type_cast(const float *);
     ava_in;
     ava_buffer(1);
   }
@@ -4509,19 +4509,17 @@ cudnnStatus_t cudnnBatchNormalizationForwardInference_float(
 cudnnStatus_t cudnnBatchNormalizationForwardInference_double(
     cudnnHandle_t handle, cudnnBatchNormMode_t mode, const double *alpha, /* alpha[0] = result blend factor */
     const double *beta,                                                   /* beta[0] = dest layer blend factor */
-    const cudnnTensorDescriptor_t xDesc, const void *x,                 /* NxCxHxW */
-    const cudnnTensorDescriptor_t yDesc, void *y,                       /* NxCxHxW */
+    const cudnnTensorDescriptor_t xDesc, const void *x,                   /* NxCxHxW */
+    const cudnnTensorDescriptor_t yDesc, void *y,                         /* NxCxHxW */
     const cudnnTensorDescriptor_t bnScaleBiasMeanVarDesc, const void *bnScale, const void *bnBias,
     const void *estimatedMean, const void *estimatedVariance, double epsilon) {
   ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(alpha) {
-    ava_type_cast(const double *);
     ava_in;
     ava_buffer(1);
   }
   ava_argument(beta) {
-    ava_type_cast(const double *);
     ava_in;
     ava_buffer(1);
   }
@@ -4557,13 +4555,13 @@ EXPORTED cudnnStatus_t CUDNNWINAPI cudnnBatchNormalizationForwardInference(
     data_type = CUDNN_DATA_DOUBLE;
   }
   if (data_type == CUDNN_DATA_DOUBLE) {
-    return cudnnBatchNormalizationForwardInference_double(handle, mode, (const double *)alpha, (const double *)beta, xDesc, x, yDesc, y, 
-                                                          bnScaleBiasMeanVarDesc, bnScale, bnBias, estimatedMean, 
-                                                          estimatedVariance, epsilon);
+    return cudnnBatchNormalizationForwardInference_double(handle, mode, (const double *)alpha, (const double *)beta,
+                                                          xDesc, x, yDesc, y, bnScaleBiasMeanVarDesc, bnScale, bnBias,
+                                                          estimatedMean, estimatedVariance, epsilon);
   } else {
-    return cudnnBatchNormalizationForwardInference_float(handle, mode, (const float *)alpha, (const float *)beta, xDesc, x, yDesc, y, 
-                                                         bnScaleBiasMeanVarDesc, bnScale, bnBias, estimatedMean, 
-                                                         estimatedVariance, epsilon);
+    return cudnnBatchNormalizationForwardInference_float(handle, mode, (const float *)alpha, (const float *)beta, xDesc,
+                                                         x, yDesc, y, bnScaleBiasMeanVarDesc, bnScale, bnBias,
+                                                         estimatedMean, estimatedVariance, epsilon);
   }
 }
 ava_end_replacement;
@@ -4656,15 +4654,14 @@ EXPORTED cudnnStatus_t CUDNNWINAPI cudnnConvolutionForward(cudnnHandle_t handle,
     data_type = CUDNN_DATA_DOUBLE;
   }
   if (data_type == CUDNN_DATA_DOUBLE) {
-    return __helper_cudnnConvolutionForward_double(handle, (const double *)alpha, xDesc, x, wDesc, w, convDesc, 
-                                                   algo, workSpace, workSpaceSizeInBytes, (const double *)beta, yDesc, y);
+    return __helper_cudnnConvolutionForward_double(handle, (const double *)alpha, xDesc, x, wDesc, w, convDesc, algo,
+                                                   workSpace, workSpaceSizeInBytes, (const double *)beta, yDesc, y);
   } else {
-    return __helper_cudnnConvolutionForward_float(handle, (const float *)alpha, xDesc, x, wDesc, w, convDesc, 
-                                                  algo, workSpace, workSpaceSizeInBytes, (const float *)beta, yDesc, y);
+    return __helper_cudnnConvolutionForward_float(handle, (const float *)alpha, xDesc, x, wDesc, w, convDesc, algo,
+                                                  workSpace, workSpaceSizeInBytes, (const float *)beta, yDesc, y);
   }
 }
 ava_end_replacement;
-
 
 /*
 cudnnStatus_t CUDNNWINAPI cudnnConvolutionForward(cudnnHandle_t handle, const void *alpha,
@@ -4677,7 +4674,7 @@ cudnnStatus_t CUDNNWINAPI cudnnConvolutionForward(cudnnHandle_t handle, const vo
 
   ava_async;
   ava_argument(handle) ava_handle;
-  
+
   ava_argument(alpha) {
     ava_type_cast(const float *);
     ava_in;
@@ -4688,7 +4685,7 @@ cudnnStatus_t CUDNNWINAPI cudnnConvolutionForward(cudnnHandle_t handle, const vo
     ava_in;
     ava_buffer(1);
   }
-  
+
   ava_argument(xDesc) ava_handle;
   ava_argument(x) ava_opaque;
   ava_argument(wDesc) ava_handle;
@@ -4706,9 +4703,7 @@ cudnnStatus_t __helper_cudnnDestroy(cudnnHandle_t handle) {
 }
 
 ava_begin_replacement;
-EXPORTED cudnnStatus_t CUDNNWINAPI cudnnDestroy(cudnnHandle_t handle) {
-  return __helper_cudnnDestroy(handle);
-}
+EXPORTED cudnnStatus_t CUDNNWINAPI cudnnDestroy(cudnnHandle_t handle) { return __helper_cudnnDestroy(handle); }
 ava_end_replacement;
 
 ava_begin_replacement;
@@ -4732,9 +4727,9 @@ EXPORTED cudnnStatus_t CUDNNWINAPI cudnnCreateConvolutionDescriptor(cudnnConvolu
 
   if (res != CUDNN_STATUS_SUCCESS) {
     conv_desc_pool_mu.Unlock();
-    #ifdef __AVA_ENABLE_STAT
-      ava::support::stats_end(__FUNCTION__, begin_ts);
-    #endif
+#ifdef __AVA_ENABLE_STAT
+    ava::support::stats_end(__FUNCTION__, begin_ts);
+#endif
     return res;
   }
 
@@ -4988,7 +4983,6 @@ EXPORTED cudnnStatus_t CUDNNWINAPI cudnnDestroyReduceTensorDescriptor(cudnnReduc
 }
 ava_end_replacement;
 
-
 cudnnStatus_t CUDNNWINAPI cudnnGetBatchNormalizationForwardTrainingExWorkspaceSize(
     cudnnHandle_t handle, cudnnBatchNormMode_t mode, cudnnBatchNormOps_t bnOps, const cudnnTensorDescriptor_t xDesc,
     const cudnnTensorDescriptor_t zDesc, const cudnnTensorDescriptor_t yDesc,
@@ -5064,27 +5058,73 @@ cudnnStatus_t CUDNNWINAPI cudnnGetProperty(libraryPropertyType type, int *value)
   }
 }
 
-cudnnStatus_t CUDNNWINAPI cudnnPoolingForward(cudnnHandle_t handle, const cudnnPoolingDescriptor_t poolingDesc,
-                                              const void *alpha, const cudnnTensorDescriptor_t xDesc, const void *x,
-                                              const void *beta, const cudnnTensorDescriptor_t yDesc, void *y) {
+cudnnStatus_t cudnnPoolingForward_float(cudnnHandle_t handle, const cudnnPoolingDescriptor_t poolingDesc,
+                                        const float *alpha, const cudnnTensorDescriptor_t xDesc, const void *x,
+                                        const float *beta, const cudnnTensorDescriptor_t yDesc, void *y) {
   ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(poolingDesc) ava_handle;
   ava_argument(alpha) {
-    ava_type_cast(const double *);
     ava_in;
     ava_buffer(1);
   }
   ava_argument(xDesc) ava_handle;
   ava_argument(x) ava_opaque;
   ava_argument(beta) {
-    ava_type_cast(const double *);
     ava_in;
     ava_buffer(1);
   }
   ava_argument(yDesc) ava_handle;
   ava_argument(y) ava_opaque;
 }
+
+cudnnStatus_t cudnnPoolingForward_double(cudnnHandle_t handle, const cudnnPoolingDescriptor_t poolingDesc,
+                                         const double *alpha, const cudnnTensorDescriptor_t xDesc, const void *x,
+                                         const double *beta, const cudnnTensorDescriptor_t yDesc, void *y) {
+  ava_async;
+  ava_argument(handle) ava_handle;
+  ava_argument(poolingDesc) ava_handle;
+  ava_argument(alpha) {
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(xDesc) ava_handle;
+  ava_argument(x) ava_opaque;
+  ava_argument(beta) {
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(yDesc) ava_handle;
+  ava_argument(y) ava_opaque;
+}
+
+ava_begin_replacement;
+EXPORTED cudnnStatus_t CUDNNWINAPI cudnnPoolingForward(cudnnHandle_t handle, const cudnnPoolingDescriptor_t poolingDesc,
+                                                       const void *alpha, const cudnnTensorDescriptor_t xDesc,
+                                                       const void *x, const void *beta,
+                                                       const cudnnTensorDescriptor_t yDesc, void *y) {
+  cudnnDataType_t x_data_type;
+  cudnnDataType_t y_data_type;
+  cudnnDataType_t data_type;
+  bool xret = __helper_get_tensor_type(xDesc, &x_data_type);
+  bool yret = __helper_get_tensor_type(yDesc, &y_data_type);
+  if (xret) {
+    data_type = x_data_type;
+  } else if (yret) {
+    data_type = y_data_type;
+  } else {
+    data_type = CUDNN_DATA_DOUBLE;
+  }
+  if (data_type == CUDNN_DATA_DOUBLE) {
+    return cudnnPoolingForward_double(handle, poolingDesc, (const double *)alpha, xDesc, x, (const double *)beta, yDesc,
+                                      y);
+  } else {
+    // onnxruntime cast the int8 tensor to float
+    return cudnnPoolingForward_float(handle, poolingDesc, (const float *)alpha, xDesc, x, (const float *)beta, yDesc,
+                                     y);
+  }
+}
+ava_end_replacement;
 
 cudnnStatus_t CUDNNWINAPI cudnnSetConvolutionGroupCount(cudnnConvolutionDescriptor_t convDesc, int groupCount) {
   ava_async;
@@ -5665,27 +5705,66 @@ cudnnStatus_t CUDNNWINAPI cudnnGetFoldedConvBackwardDataDescriptors(
   ava_unsupported;
 }
 
-/* Tensor Bias addition : C = alpha * A + beta * C  */
-cudnnStatus_t CUDNNWINAPI cudnnAddTensor(cudnnHandle_t handle, const void *alpha, const cudnnTensorDescriptor_t aDesc,
-                                         const void *A, const void *beta, const cudnnTensorDescriptor_t cDesc,
-                                         void *C) {
+cudnnStatus_t cudnnAddTensor_double(cudnnHandle_t handle, const double *alpha, const cudnnTensorDescriptor_t aDesc,
+                                    const void *A, const double *beta, const cudnnTensorDescriptor_t cDesc, void *C) {
   ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(alpha) {
-    ava_type_cast(const double *);
     ava_in;
     ava_buffer(1);
   }
   ava_argument(aDesc) ava_handle;
   ava_argument(A) ava_opaque;
   ava_argument(beta) {
-    ava_type_cast(const double *);
     ava_in;
     ava_buffer(1);
   }
   ava_argument(cDesc) ava_handle;
   ava_argument(C) ava_opaque;
 }
+
+cudnnStatus_t cudnnAddTensor_float(cudnnHandle_t handle, const float *alpha, const cudnnTensorDescriptor_t aDesc,
+                                   const void *A, const float *beta, const cudnnTensorDescriptor_t cDesc, void *C) {
+  ava_async;
+  ava_argument(handle) ava_handle;
+  ava_argument(alpha) {
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(aDesc) ava_handle;
+  ava_argument(A) ava_opaque;
+  ava_argument(beta) {
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(cDesc) ava_handle;
+  ava_argument(C) ava_opaque;
+}
+
+ava_begin_replacement;
+/* Tensor Bias addition : C = alpha * A + beta * C  */
+EXPORTED cudnnStatus_t CUDNNWINAPI cudnnAddTensor(cudnnHandle_t handle, const void *alpha,
+                                                  const cudnnTensorDescriptor_t aDesc, const void *A, const void *beta,
+                                                  const cudnnTensorDescriptor_t cDesc, void *C) {
+  cudnnDataType_t a_data_type;
+  cudnnDataType_t c_data_type;
+  cudnnDataType_t data_type;
+  bool aret = __helper_get_tensor_type(aDesc, &a_data_type);
+  bool cret = __helper_get_tensor_type(cDesc, &c_data_type);
+  if (aret) {
+    data_type = a_data_type;
+  } else if (cret) {
+    data_type = c_data_type;
+  } else {
+    data_type = CUDNN_DATA_DOUBLE;
+  }
+  if (data_type == CUDNN_DATA_DOUBLE) {
+    return cudnnAddTensor_double(handle, (const double *)alpha, aDesc, A, (const double *)beta, cDesc, C);
+  } else {
+    return cudnnAddTensor_float(handle, (const float *)alpha, aDesc, A, (const float *)beta, cDesc, C);
+  }
+}
+ava_end_replacement;
 
 cudnnStatus_t CUDNNWINAPI cudnnCreateOpTensorDescriptor(cudnnOpTensorDescriptor_t *opTensorDesc) { ava_unsupported; }
 
@@ -5798,25 +5877,20 @@ cudnnStatus_t CUDNNWINAPI cudnnGetReductionWorkspaceSize(cudnnHandle_t handle,
   }
 }
 
-/* Tensor operation : C = reduce op( alpha * A ) + beta * C */
-/* The NaN propagation enum applies to only the min and max reduce ops; the other reduce ops propagate NaN as usual. */
-/* The indices space is ignored for reduce ops other than min or max. */
-cudnnStatus_t CUDNNWINAPI cudnnReduceTensor(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
-                                            void *indices, size_t indicesSizeInBytes, void *workspace,
-                                            size_t workspaceSizeInBytes, const void *alpha,
-                                            const cudnnTensorDescriptor_t aDesc, const void *A, const void *beta,
-                                            const cudnnTensorDescriptor_t cDesc, void *C) {
+cudnnStatus_t cudnnReduceTensor_double(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
+                                       void *indices, size_t indicesSizeInBytes, void *workspace,
+                                       size_t workspaceSizeInBytes, const double *alpha,
+                                       const cudnnTensorDescriptor_t aDesc, const void *A, const double *beta,
+                                       const cudnnTensorDescriptor_t cDesc, void *C) {
   ava_argument(handle) ava_handle;
   ava_argument(reduceTensorDesc) ava_handle;
   ava_argument(alpha) {
-    ava_type_cast(const double *);
     ava_in;
     ava_buffer(1);
   }
   ava_argument(aDesc) ava_handle;
   ava_argument(A) ava_opaque;
   ava_argument(beta) {
-    ava_type_cast(const double *);
     ava_in;
     ava_buffer(1);
   }
@@ -5825,6 +5899,61 @@ cudnnStatus_t CUDNNWINAPI cudnnReduceTensor(cudnnHandle_t handle, const cudnnRed
   ava_argument(workspace) ava_opaque;
   ava_argument(indices) ava_opaque;
 }
+
+cudnnStatus_t cudnnReduceTensor_float(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
+                                      void *indices, size_t indicesSizeInBytes, void *workspace,
+                                      size_t workspaceSizeInBytes, const float *alpha,
+                                      const cudnnTensorDescriptor_t aDesc, const void *A, const float *beta,
+                                      const cudnnTensorDescriptor_t cDesc, void *C) {
+  ava_argument(handle) ava_handle;
+  ava_argument(reduceTensorDesc) ava_handle;
+  ava_argument(alpha) {
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(aDesc) ava_handle;
+  ava_argument(A) ava_opaque;
+  ava_argument(beta) {
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(cDesc) ava_handle;
+  ava_argument(C) ava_opaque;
+  ava_argument(workspace) ava_opaque;
+  ava_argument(indices) ava_opaque;
+}
+
+ava_begin_replacement;
+/* Tensor operation : C = reduce op( alpha * A ) + beta * C */
+/* The NaN propagation enum applies to only the min and max reduce ops; the other reduce ops propagate NaN as usual. */
+/* The indices space is ignored for reduce ops other than min or max. */
+EXPORTED cudnnStatus_t cudnnReduceTensor(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
+                                         void *indices, size_t indicesSizeInBytes, void *workspace,
+                                         size_t workspaceSizeInBytes, const void *alpha,
+                                         const cudnnTensorDescriptor_t aDesc, const void *A, const void *beta,
+                                         const cudnnTensorDescriptor_t cDesc, void *C) {
+  cudnnDataType_t a_data_type;
+  cudnnDataType_t c_data_type;
+  cudnnDataType_t data_type;
+  bool aret = __helper_get_tensor_type(aDesc, &a_data_type);
+  bool cret = __helper_get_tensor_type(cDesc, &c_data_type);
+  if (aret) {
+    data_type = a_data_type;
+  } else if (cret) {
+    data_type = c_data_type;
+  } else {
+    data_type = CUDNN_DATA_DOUBLE;
+  }
+  if (data_type == CUDNN_DATA_DOUBLE) {
+    return cudnnReduceTensor_double(handle, reduceTensorDesc, indices, indicesSizeInBytes, workspace,
+                                    workspaceSizeInBytes, (const double *)alpha, aDesc, A, (const double *)beta, cDesc,
+                                    C);
+  } else {
+    return cudnnReduceTensor_float(handle, reduceTensorDesc, indices, indicesSizeInBytes, workspace,
+                                   workspaceSizeInBytes, (const float *)alpha, aDesc, A, (const float *)beta, cDesc, C);
+  }
+}
+ava_end_replacement;
 
 /* Set all values of a tensor to a given value : y[i] = value[0] */
 cudnnStatus_t CUDNNWINAPI cudnnSetTensor(cudnnHandle_t handle, const cudnnTensorDescriptor_t yDesc, void *y,
@@ -13541,7 +13670,6 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamCreateWithFlags(cuda
   if (ava_is_worker) {
     return __helper_create_stream(pStream, flags, 0);
   }
-
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamCreateWithPriority(cudaStream_t *pStream,
@@ -13552,7 +13680,7 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamCreateWithPriority(c
     ava_buffer(1);
     ava_element ava_handle;
   }
-  
+
   if (ava_is_worker) {
     return __helper_create_stream(pStream, flags, priority);
   }
@@ -13587,7 +13715,7 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamWaitEvent(cudaStream
 __host__ cudaError_t CUDARTAPI cudaStreamSynchronize(cudaStream_t stream) {
   ava_async;
   ava_disable_native_call;
-  ava_argument(stream) ava_handle; 
+  ava_argument(stream) ava_handle;
   if (ava_is_worker) {
     return cudaStreamSynchronize(__helper_translate_stream(stream));
   }
@@ -14385,7 +14513,7 @@ void ava_load_cubin_worker(absl::string_view dump_dir) {
 }
 
 void __helper_worker_init_epilogue() {
-    //this is now empty since all initialization is done explicitly by worker.cpp and cmd_handler.cpp (internal API)
+  // this is now empty since all initialization is done explicitly by worker.cpp and cmd_handler.cpp (internal API)
 
   /*
 // this prevents ava_load_cubin_worker from being called twice if a dump dir is specified
@@ -14403,7 +14531,7 @@ void __helper_worker_init_epilogue() {
   ava_load_cubin_worker(dump_dir);
 #endif
 */
-  //worker_tf_opt_init();
+  // worker_tf_opt_init();
 }
 ava_end_worker_replacement;
 
