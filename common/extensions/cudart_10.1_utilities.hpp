@@ -211,6 +211,17 @@ cudnnStatus_t cudnnConvolutionBiasActivationForward_float(
     cudnnConvolutionFwdAlgo_t algo, void *workSpace, size_t workSpaceSizeInBytes, const float *alpha2,
     const cudnnTensorDescriptor_t zDesc, const void *z, const cudnnTensorDescriptor_t biasDesc, const void *bias,
     const cudnnActivationDescriptor_t activationDesc, const cudnnTensorDescriptor_t yDesc, void *y);
+cudnnStatus_t cudnnScaleTensor_float(cudnnHandle_t handle, const cudnnTensorDescriptor_t yDesc, void *y,
+                                     const float *alpha);
+cudnnStatus_t cudnnScaleTensor_double(cudnnHandle_t handle, const cudnnTensorDescriptor_t yDesc, void *y,
+                                      const double *alpha);
+
+cudnnStatus_t cudnnSoftmaxForward_double(cudnnHandle_t handle, cudnnSoftmaxAlgorithm_t algo, cudnnSoftmaxMode_t mode,
+                                         const double *alpha, const cudnnTensorDescriptor_t xDesc, const void *x,
+                                         const double *beta, const cudnnTensorDescriptor_t yDesc, void *y);
+cudnnStatus_t cudnnSoftmaxForward_float(cudnnHandle_t handle, cudnnSoftmaxAlgorithm_t algo, cudnnSoftmaxMode_t mode,
+                                        const float *alpha, const cudnnTensorDescriptor_t xDesc, const void *x,
+                                        const float *beta, const cudnnTensorDescriptor_t yDesc, void *y);
 
 cudaError_t __helper_cudaEventCreateWithFlags(cudaEvent_t *event, unsigned int flags);
 cudaError_t __helper_cudaEventDestroy(cudaEvent_t event);

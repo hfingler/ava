@@ -753,3 +753,24 @@ cudnnStatus_t cudnnConvolutionBiasActivationForward_float(
                                                workSpaceSizeInBytes, alpha2, zDesc, z, biasDesc, bias, activationDesc,
                                                yDesc, y);
 }
+
+cudnnStatus_t cudnnScaleTensor_float(cudnnHandle_t handle, const cudnnTensorDescriptor_t yDesc, void *y,
+                                     const float *alpha) {
+  return cudnnScaleTensor(handle, yDesc, y, alpha);
+}
+cudnnStatus_t cudnnScaleTensor_double(cudnnHandle_t handle, const cudnnTensorDescriptor_t yDesc, void *y,
+                                      const double *alpha) {
+  return cudnnScaleTensor(handle, yDesc, y, alpha);
+}
+
+cudnnStatus_t cudnnSoftmaxForward_double(cudnnHandle_t handle, cudnnSoftmaxAlgorithm_t algo, cudnnSoftmaxMode_t mode,
+                                         const double *alpha, const cudnnTensorDescriptor_t xDesc, const void *x,
+                                         const double *beta, const cudnnTensorDescriptor_t yDesc, void *y) {
+  return cudnnSoftmaxForward(handle, algo, mode, alpha, xDesc, x, beta, yDesc, y);
+}
+
+cudnnStatus_t cudnnSoftmaxForward_float(cudnnHandle_t handle, cudnnSoftmaxAlgorithm_t algo, cudnnSoftmaxMode_t mode,
+                                        const float *alpha, const cudnnTensorDescriptor_t xDesc, const void *x,
+                                        const float *beta, const cudnnTensorDescriptor_t yDesc, void *y) {
+  return cudnnSoftmaxForward(handle, algo, mode, alpha, xDesc, x, beta, yDesc, y);
+}

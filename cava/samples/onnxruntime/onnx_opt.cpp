@@ -5807,6 +5807,7 @@ cudnnStatus_t CUDNNWINAPI cudnnSetReduceTensorDescriptor(cudnnReduceTensorDescri
                                                          cudnnNanPropagation_t reduceTensorNanOpt,
                                                          cudnnReduceTensorIndices_t reduceTensorIndices,
                                                          cudnnIndicesType_t reduceTensorIndicesType) {
+  ava_async;
   ava_argument(reduceTensorDesc) ava_handle;
 }
 
@@ -5966,14 +5967,46 @@ cudnnStatus_t CUDNNWINAPI cudnnSetTensor(cudnnHandle_t handle, const cudnnTensor
   ava_argument(valuePtr) ava_opaque;
 }
 
-/* Scale all values of a tensor by a given factor : y[i] = alpha * y[i] */
-cudnnStatus_t CUDNNWINAPI cudnnScaleTensor(cudnnHandle_t handle, const cudnnTensorDescriptor_t yDesc, void *y,
-                                           const void *alpha) {
+cudnnStatus_t cudnnScaleTensor_float(cudnnHandle_t handle, const cudnnTensorDescriptor_t yDesc, void *y,
+                                     const float *alpha) {
+  ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(yDesc) ava_handle;
   ava_argument(y) ava_opaque;
-  ava_argument(alpha) ava_opaque;
+  ava_argument(alpha) {
+    ava_in;
+    ava_buffer(1);
+  }
 }
+
+cudnnStatus_t cudnnScaleTensor_double(cudnnHandle_t handle, const cudnnTensorDescriptor_t yDesc, void *y,
+                                      const double *alpha) {
+  ava_async;
+  ava_argument(handle) ava_handle;
+  ava_argument(yDesc) ava_handle;
+  ava_argument(y) ava_opaque;
+  ava_argument(alpha) {
+    ava_in;
+    ava_buffer(1);
+  }
+}
+
+ava_begin_replacement;
+/* Scale all values of a tensor by a given factor : y[i] = alpha * y[i] */
+EXPORTED cudnnStatus_t CUDNNWINAPI cudnnScaleTensor(cudnnHandle_t handle, const cudnnTensorDescriptor_t yDesc, void *y,
+                                                    const void *alpha) {
+  cudnnDataType_t y_data_type;
+  bool yret = __helper_get_tensor_type(yDesc, &y_data_type);
+  if (!yret) {
+    y_data_type = CUDNN_DATA_DOUBLE;
+  }
+  if (y_data_type == CUDNN_DATA_DOUBLE) {
+    return cudnnScaleTensor_double(handle, yDesc, y, (const double *)alpha);
+  } else {
+    return cudnnScaleTensor_float(handle, yDesc, y, (const float *)alpha);
+  }
+}
+ava_end_replacement;
 
 cudnnStatus_t CUDNNWINAPI cudnnSetFilter4dDescriptor(cudnnFilterDescriptor_t filterDesc,
                                                      cudnnDataType_t dataType, /* image data type */
@@ -6508,28 +6541,70 @@ cudnnStatus_t CUDNNWINAPI cudnnIm2Col(cudnnHandle_t handle, const cudnnTensorDes
   ava_unsupported;
 }
 
-/* Function to perform forward softmax */
-cudnnStatus_t CUDNNWINAPI cudnnSoftmaxForward(cudnnHandle_t handle, cudnnSoftmaxAlgorithm_t algo,
-                                              cudnnSoftmaxMode_t mode, const void *alpha,
-                                              const cudnnTensorDescriptor_t xDesc, const void *x, const void *beta,
-                                              const cudnnTensorDescriptor_t yDesc, void *y) {
+cudnnStatus_t cudnnSoftmaxForward_double(cudnnHandle_t handle, cudnnSoftmaxAlgorithm_t algo, cudnnSoftmaxMode_t mode,
+                                         const double *alpha, const cudnnTensorDescriptor_t xDesc, const void *x,
+                                         const double *beta, const cudnnTensorDescriptor_t yDesc, void *y) {
+  ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(x) ava_opaque;
   ava_argument(xDesc) ava_handle;
   ava_argument(y) ava_opaque;
   ava_argument(yDesc) ava_handle;
-  // pytorch's alpha and beta are float
   ava_argument(alpha) {
-    ava_type_cast(const float *);
     ava_in;
     ava_buffer(1);
   }
   ava_argument(beta) {
-    ava_type_cast(const float *);
     ava_in;
     ava_buffer(1);
   }
 }
+
+cudnnStatus_t cudnnSoftmaxForward_float(cudnnHandle_t handle, cudnnSoftmaxAlgorithm_t algo, cudnnSoftmaxMode_t mode,
+                                        const float *alpha, const cudnnTensorDescriptor_t xDesc, const void *x,
+                                        const float *beta, const cudnnTensorDescriptor_t yDesc, void *y) {
+  ava_async;
+  ava_argument(handle) ava_handle;
+  ava_argument(x) ava_opaque;
+  ava_argument(xDesc) ava_handle;
+  ava_argument(y) ava_opaque;
+  ava_argument(yDesc) ava_handle;
+  ava_argument(alpha) {
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(beta) {
+    ava_in;
+    ava_buffer(1);
+  }
+}
+
+ava_begin_replacement;
+/* Function to perform forward softmax */
+EXPORTED cudnnStatus_t CUDNNWINAPI cudnnSoftmaxForward(cudnnHandle_t handle, cudnnSoftmaxAlgorithm_t algo,
+                                                       cudnnSoftmaxMode_t mode, const void *alpha,
+                                                       const cudnnTensorDescriptor_t xDesc, const void *x,
+                                                       const void *beta, const cudnnTensorDescriptor_t yDesc, void *y) {
+  cudnnDataType_t x_data_type;
+  cudnnDataType_t y_data_type;
+  cudnnDataType_t data_type;
+  bool xret = __helper_get_tensor_type(xDesc, &x_data_type);
+  bool yret = __helper_get_tensor_type(yDesc, &y_data_type);
+  if (xret) {
+    data_type = x_data_type;
+  } else if (yret) {
+    data_type = y_data_type;
+  } else {
+    data_type = CUDNN_DATA_DOUBLE;
+  }
+  if (data_type == CUDNN_DATA_DOUBLE) {
+    return cudnnSoftmaxForward_double(handle, algo, mode, (const double *)alpha, xDesc, x, (const double *)beta, yDesc,
+                                      y);
+  } else {
+    return cudnnSoftmaxForward_float(handle, algo, mode, (const float *)alpha, xDesc, x, (const float *)beta, yDesc, y);
+  }
+}
+ava_end_replacement;
 
 /* Function to perform backward softmax */
 cudnnStatus_t CUDNNWINAPI cudnnSoftmaxBackward(cudnnHandle_t handle, cudnnSoftmaxAlgorithm_t algo,
@@ -6658,6 +6733,7 @@ cudnnStatus_t CUDNNWINAPI cudnnGetActivationDescriptor(const cudnnActivationDesc
 } /* ceiling for clipped RELU, alpha for ELU */
 
 cudnnStatus_t CUDNNWINAPI cudnnDestroyActivationDescriptor(cudnnActivationDescriptor_t activationDesc) {
+  ava_async;
   ava_argument(activationDesc) ava_handle;
 }
 
