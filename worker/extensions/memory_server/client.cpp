@@ -182,8 +182,7 @@ namespace GPUMemoryServer {
         cudaGetDevice(&d);
         cudaError_t err = cudaMalloc(devPtr, size);
         local_allocs.emplace((uint64_t)*devPtr, std::make_unique<Client::LocalAlloc>(*devPtr, size, current_device));
-        printf("  malloc %p  size %d  at device %d\n", *devPtr, size, d);
-        
+        printf("  malloc %p  size %lu  at device %d, ret=%d\n", *devPtr, size, d, err);
         //TODO add memory if we do it
         if (migrated_type == Migration::TOTAL) {
             //here's the issue.. if we have migrated memory, cudaMalloc may return a pointer that was
@@ -198,7 +197,6 @@ namespace GPUMemoryServer {
                 *devPtr = optr;
             }
         }
-        
         reportMalloc(size); 
         return err;
     }
