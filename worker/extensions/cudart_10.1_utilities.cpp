@@ -163,8 +163,6 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
     //auto end = std::chrono::steady_clock::now();
     //std::cerr << "???" << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << std::endl;
 
->>>>>>> fix to execution migration (fake free) and tooling used to measure some apis after migration
-
 #ifndef NDEBUG
     printf(">>> cuLaunchKernel returned %d\n", ret);
 #endif
@@ -189,7 +187,7 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
                                       blockDim.z, sharedMem,  (CUstream)stream, args, NULL);
     //auto end = std::chrono::steady_clock::now();
     //std::cerr << "???" << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << std::endl;
->>>>>>> fix to execution migration (fake free) and tooling used to measure some apis after migration
+
 #ifndef NDEBUG
     auto tid = __gettid();
     std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
@@ -847,4 +845,3 @@ cudnnStatus_t __helper_cudnnReduceTensor(cudnnHandle_t handle, const cudnnReduce
   }       
 }
 
->>>>>>> getting cudnn functions intercepted, will be required for migration
