@@ -150,7 +150,6 @@ cudaEvent_t __translate_event(cudaEvent_t key) {
 namespace GPUMemoryServer {
 
     //uint32_t kc = 0;
-
     Client::Client() {
         og_device = -1;
         context = zmq_ctx_new();
@@ -215,8 +214,11 @@ namespace GPUMemoryServer {
     }
     
     cudaError_t Client::localFree(void* devPtr) {
-        // this migration type can cause illegal memory access errors
-        // when migrating, so don't free for now
+        //there is a use-after-free bug with execution (KERNEL) migration, where
+        //if the app frees a buffer immediately after a kernel launch, an error 700
+        //can occur due to the array being freed before the kernel finishes.
+        //this will only happen in badly written code (like the kmeans we're testing with)
+        //if it migrated, don't free now, it will be freed on exit
         if (migrated_type == Migration::KERNEL) {
             return cudaSuccess;
         }
@@ -232,7 +234,7 @@ namespace GPUMemoryServer {
             tryRemoveFromPointerMap(devPtr);
             //GPUMemoryServer::Client::getInstance().reportFree(it->second->size); 
             local_allocs.erase(it); //this calls cudaFree
-            return (cudaError_t)0;   
+            return cudaSuccess;   
         }
 
         //we could have migrated memory, check
@@ -243,11 +245,11 @@ namespace GPUMemoryServer {
             tryRemoveFromPointerMap(devPtr);
             //GPUMemoryServer::Client::getInstance().reportFree(it->second->size); 
             local_allocs.erase(it); //this calls cudaFree
-            return (cudaError_t)0;   
+            return cudaSuccess;   
         }
 
         fprintf(stderr, "### ILLEGAL cudaFree call on devPtr %x\n", (uint64_t)devPtr);
-        return (cudaError_t)1;   
+        return cudaErrorInvalidValue;   
     }
 
     void Client::reportFree(uint64_t size) {
@@ -321,7 +323,6 @@ namespace GPUMemoryServer {
 
     void Client::kernelIn() {
         //printf("%d kernels\n", ++kc);
-
         if (migrated_type != Migration::NOPE) {
             //if we have migrated, lets just skip..
             return;

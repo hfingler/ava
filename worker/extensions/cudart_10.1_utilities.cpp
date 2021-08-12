@@ -156,9 +156,14 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
         *((void **)args[i]) = __translate_ptr(*((void **)args[i]));
       }
     }
-    // BIG TODOs: need to map streams on new GPU when migrating
+
+    //auto start = std::chrono::steady_clock::now();
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[cur_dvc], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
-                                      blockDim.z, sharedMem, (CUstream)__helper_translate_stream(stream), args, NULL);
+              blockDim.z, sharedMem, (CUstream)  __helper_translate_stream(stream), args, NULL);
+    //auto end = std::chrono::steady_clock::now();
+    //std::cerr << "???" << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << std::endl;
+
+>>>>>>> fix to execution migration (fake free) and tooling used to measure some apis after migration
 
 #ifndef NDEBUG
     printf(">>> cuLaunchKernel returned %d\n", ret);
@@ -179,8 +184,12 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   }
   // if not with migration, just get over it and do
   else {
+    //auto start = std::chrono::steady_clock::now();
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[0], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
-                                      blockDim.z, sharedMem, (CUstream)stream, args, NULL);
+                                      blockDim.z, sharedMem,  (CUstream)stream, args, NULL);
+    //auto end = std::chrono::steady_clock::now();
+    //std::cerr << "???" << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << std::endl;
+>>>>>>> fix to execution migration (fake free) and tooling used to measure some apis after migration
 #ifndef NDEBUG
     auto tid = __gettid();
     std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
@@ -259,7 +268,12 @@ cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum c
   cudaGetLastError();
 */
 
+
+  //auto start = std::chrono::steady_clock::now();
   ret = cudaMemcpy(__translate_ptr(dst), __translate_ptr(src), count, kind);
+  //auto end = std::chrono::steady_clock::now();
+  //std::cerr << ";;;" << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << std::endl;
+
 #ifndef NDEBUG
   auto tid = __gettid();
   std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
@@ -272,8 +286,11 @@ cudaError_t __helper_cudaMemset(void *devPtr, int value, size_t count) {
   //ret2 = cudaGetLastError();
   //printf("__helper_cudaMemset  peek error:  %d\n", ret2);
 
+  //auto start = std::chrono::steady_clock::now();
   cudaError_t ret = cudaMemset(__translate_ptr(devPtr), value, count);
   //printf("memset ret %d   input %p  val %d  count %u\n", ret, __translate_ptr(devPtr), value, count);
+  //auto end = std::chrono::steady_clock::now();
+  //std::cerr << ":::" << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << std::endl;
 
 #ifndef NDEBUG
   auto tid = __gettid();
