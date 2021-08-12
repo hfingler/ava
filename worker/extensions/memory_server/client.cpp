@@ -155,8 +155,9 @@ namespace GPUMemoryServer {
         og_device = -1;
         context = zmq_ctx_new();
         for (int i = 0 ; i < 4; i++) {
-             sockets[i] = 0;
-         }
+            sockets[i] = 0;
+        }
+        migrated_type = Migration::NOPE;
      }
 
      Client::~Client() {

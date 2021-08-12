@@ -757,3 +757,77 @@ cudnnStatus_t cudnnConvolutionBiasActivationForward_float(
                                                workSpaceSizeInBytes, alpha2, zDesc, z, biasDesc, bias, activationDesc,
                                                yDesc, y);
 }
+
+
+
+
+/*
+ *  Stuff below is unused so far
+ */
+
+cudnnStatus_t __helper_cudnnCreateActivationDescriptor(cudnnActivationDescriptor_t *activationDesc) {
+  if (__internal_allContextsEnabled()) {
+    //TBD
+  }
+  else {
+    return cudnnCreateActivationDescriptor(activationDesc);
+  }
+}
+
+cudnnStatus_t __helper_cudnnSetActivationDescriptor(cudnnActivationDescriptor_t activationDesc,
+                                                       cudnnActivationMode_t mode, cudnnNanPropagation_t reluNanOpt,
+                                                       double coef) {
+  if (__internal_allContextsEnabled()) {
+    //TBD
+  }
+  else {
+    return cudnnSetActivationDescriptor(activationDesc, mode, reluNanOpt, coef);
+  }                                                       
+}
+
+cudnnStatus_t __helper_cudnnConvolutionBiasActivationForward(
+      cudnnHandle_t handle, const void *alpha1, const cudnnTensorDescriptor_t xDesc, const void *x,
+      const cudnnFilterDescriptor_t wDesc, const void *w, const cudnnConvolutionDescriptor_t convDesc,
+      cudnnConvolutionFwdAlgo_t algo, void *workSpace, size_t workSpaceSizeInBytes, const void *alpha2,
+      const cudnnTensorDescriptor_t zDesc, const void *z, const cudnnTensorDescriptor_t biasDesc, const void *bias,
+      const cudnnActivationDescriptor_t activationDesc, const cudnnTensorDescriptor_t yDesc, void *y) {
+
+  if (__internal_allContextsEnabled()) {
+    //TBD
+  }
+  else {
+    return cudnnConvolutionBiasActivationForward(handle, alpha1, xDesc, x, wDesc, w, convDesc, algo, workSpace, 
+      workSpaceSizeInBytes, alpha2, zDesc, z, biasDesc, bias, activationDesc, yDesc, y);
+  }       
+}
+
+cudnnStatus_t __helper_cudnnSetReduceTensorDescriptor(cudnnReduceTensorDescriptor_t reduceTensorDesc,
+                                                         cudnnReduceTensorOp_t reduceTensorOp,
+                                                         cudnnDataType_t reduceTensorCompType,
+                                                         cudnnNanPropagation_t reduceTensorNanOpt,
+                                                         cudnnReduceTensorIndices_t reduceTensorIndices,
+                                                         cudnnIndicesType_t reduceTensorIndicesType) {
+  if (__internal_allContextsEnabled()) {
+    //TBD
+  }
+  else {
+    return cudnnSetReduceTensorDescriptor(reduceTensorDesc, reduceTensorOp, reduceTensorCompType,
+                 reduceTensorNanOpt, reduceTensorIndices, reduceTensorIndicesType);
+  }       
+}
+
+cudnnStatus_t __helper_cudnnReduceTensor(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
+                                            void *indices, size_t indicesSizeInBytes, void *workspace,
+                                            size_t workspaceSizeInBytes, const void *alpha,
+                                            const cudnnTensorDescriptor_t aDesc, const void *A, const void *beta,
+                                            const cudnnTensorDescriptor_t cDesc, void *C) {
+  if (__internal_allContextsEnabled()) {
+    //TBD
+  }
+  else {
+    return cudnnReduceTensor(handle, reduceTensorDesc, indices, indicesSizeInBytes, workspace,
+                                            workspaceSizeInBytes, alpha, aDesc, A, beta, cDesc, C);
+  }       
+}
+
+>>>>>>> getting cudnn functions intercepted, will be required for migration
