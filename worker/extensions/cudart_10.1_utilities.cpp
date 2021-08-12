@@ -7,12 +7,10 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <gsl/gsl>
 #include <iostream>
-
-#include <chrono>
 #include <thread>
-
 
 #include "common/declaration.h"
 #include "common/logging.h"
@@ -36,7 +34,7 @@ cudaError_t __helper_cuda_memcpy_async_host_to_device(void *dst, const void *src
 }
 
 cudaError_t __helper_cuda_memcpy_async_device_to_host(void *dst, const void *src, size_t count, cudaStream_t stream) {
-  cudaError_t ret; 
+  cudaError_t ret;
   ret = cudaMemcpyAsync(dst, __translate_ptr(src), count, cudaMemcpyDeviceToHost, stream);
   return ret;
 }
@@ -148,15 +146,16 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   // if we need to figure out the correct context to get function
   if (__internal_allContextsEnabled()) {
     for (int i = 0; i < func->argc; i++) {
-      //printf("  arg %d is handle? %d   size %d  ptr  %p\n", i, func->args[i].is_handle, func->args[i].size, *((void **)args[i]));
+      // printf("  arg %d is handle? %d   size %d  ptr  %p\n", i, func->args[i].is_handle, func->args[i].size, *((void
+      // **)args[i]));
       // TODO: we need something that says if something is a pointer or not
       if (func->args[i].size == 8) {
-          *((void **)args[i]) = __translate_ptr(*((void **)args[i]));
+        *((void **)args[i]) = __translate_ptr(*((void **)args[i]));
       }
     }
     // BIG TODOs: need to map streams on new GPU when migrating
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[cur_dvc], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
-                                      blockDim.z, sharedMem, (CUstream)  __helper_translate_stream(stream), args, NULL);
+                                      blockDim.z, sharedMem, (CUstream)__helper_translate_stream(stream), args, NULL);
 
 #ifndef NDEBUG
     printf(">>> cuLaunchKernel returned %d\n", ret);
@@ -177,7 +176,7 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   // if not with migration, just get over it and do
   else {
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[0], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
-                                      blockDim.z, sharedMem,  (CUstream)stream, args, NULL);
+                                      blockDim.z, sharedMem, (CUstream)stream, args, NULL);
 #ifndef NDEBUG
     auto tid = __gettid();
     std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
@@ -245,18 +244,16 @@ cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum c
     printf("\n\n\n ### MEMCPY ERROR \n\n\n");
   }
   */
-/*
-  struct cudaPointerAttributes at;
-  ret = cudaPointerGetAttributes(&at, __translate_ptr(dst));
-  printf("curdvc %d  dst attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(), ret, at.type, 
-      at.device, at.devicePointer, at.hostPointer);
+  /*
+    struct cudaPointerAttributes at;
+    ret = cudaPointerGetAttributes(&at, __translate_ptr(dst));
+    printf("curdvc %d  dst attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(),
+    ret, at.type, at.device, at.devicePointer, at.hostPointer);
 
-  ret = cudaPointerGetAttributes(&at, __translate_ptr(src));
-  printf("curdvc %d  src attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(), ret, at.type, 
-      at.device, at.devicePointer, at.hostPointer);
-  cudaGetLastError();
-*/
-
+    ret = cudaPointerGetAttributes(&at, __translate_ptr(src));
+    printf("curdvc %d  src attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(),
+    ret, at.type, at.device, at.devicePointer, at.hostPointer); cudaGetLastError();
+  */
 
   ret = cudaMemcpy(__translate_ptr(dst), __translate_ptr(src), count, kind);
 #ifndef NDEBUG
@@ -316,7 +313,7 @@ void __helper_register_function(struct fatbin_function *func, const char *hostFu
     if (__internal_allContextsEnabled()) {
       // printf("  __helper_register_function  setting device to %d\n", i);
       cudaSetDevice(i);
-    } 
+    }
 
     CUresult ret = cuModuleGetFunction(&func->cufunc[i], module[i], deviceName);
     if (ret != CUDA_SUCCESS) {
@@ -556,7 +553,6 @@ cudaError_t __helper_cudaDeviceGetAttribute(int *value, enum cudaDeviceAttr attr
 }
 
 CUresult __helper_cuDeviceGet(CUdevice *device, int ordinal) {
-  
   if (ordinal != 0) {
     return CUDA_ERROR_INVALID_VALUE;
   } else {
@@ -574,7 +570,7 @@ cudaError_t __helper_cudaEventCreateWithFlags(cudaEvent_t *event, unsigned int f
     /*
     cudaEventCreateWithFlags(event, flags);
     printf("------ return event %p\n", *event);
-    
+
     // add current
     uint32_t cur_dvc = __internal_getCurrentDevice();
     GPUMemoryServer::Client::getInstance().events_map[*event][cur_dvc] = *event;
@@ -593,8 +589,7 @@ cudaError_t __helper_cudaEventCreateWithFlags(cudaEvent_t *event, unsigned int f
     cudaSetDevice(cur_dvc);
     */
     return (cudaError_t)0;
-  }
-  else
+  } else
     return cudaEventCreateWithFlags(event, flags);
 }
 
@@ -610,53 +605,44 @@ cudaError_t __helper_cudaEventDestroy(cudaEvent_t event) {
     cudaSetDevice(__internal_getCurrentDevice());
     */
     return (cudaError_t)0;
-  }
-  else
+  } else
     return cudaEventDestroy(event);
 }
 
-cudaError_t  __helper_cudaEventRecord(cudaEvent_t event, cudaStream_t stream) {
+cudaError_t __helper_cudaEventRecord(cudaEvent_t event, cudaStream_t stream) {
   if (__internal_allContextsEnabled()) {
     /*
     printf("input event:  %p\n", event);
 
     for (int i = 0; i < __internal_getDeviceCount(); i++) {
       cudaSetDevice(i);
-      printf("------ record at %d :  %p -> %p\n", i, event, GPUMemoryServer::Client::getInstance().events_map[event][i]);
-      cudaEventRecord(GPUMemoryServer::Client::getInstance().events_map[event][i], GPUMemoryServer::Client::getInstance().streams_map[stream][i]);
-      cudaError_t  ret = cudaGetLastError();
-      if (ret)
+      printf("------ record at %d :  %p -> %p\n", i, event,
+    GPUMemoryServer::Client::getInstance().events_map[event][i]);
+      cudaEventRecord(GPUMemoryServer::Client::getInstance().events_map[event][i],
+    GPUMemoryServer::Client::getInstance().streams_map[stream][i]); cudaError_t  ret = cudaGetLastError(); if (ret)
         printf("__helper_cudaEventRecord last error:  %d\n", ret);
     }
     cudaSetDevice(__internal_getCurrentDevice());
     */
     return (cudaError_t)0;
-  }
-  else
+  } else
     return cudaEventRecord(event, stream);
 }
 
-cudaError_t  __helper_cudaEventSynchronize(cudaEvent_t event) {
+cudaError_t __helper_cudaEventSynchronize(cudaEvent_t event) {
   if (__internal_allContextsEnabled()) {
     cudaDeviceSynchronize();
     return (cudaError_t)0;
-  }
-  else {
+  } else {
     return cudaEventSynchronize(event);
   }
 }
 
-cudaEvent_t __helper_translate_event(cudaEvent_t event) {
-  return __translate_event(event);
-}
+cudaEvent_t __helper_translate_event(cudaEvent_t event) { return __translate_event(event); }
 
-cudaStream_t __helper_translate_stream(cudaStream_t stream) {
-  return __translate_stream(stream);
-}
+cudaStream_t __helper_translate_stream(cudaStream_t stream) { return __translate_stream(stream); }
 
-void* __helper_translate_ptr(void* ptr) {
-  return __translate_ptr(ptr);
-}
+void *__helper_translate_ptr(void *ptr) { return __translate_ptr(ptr); }
 
 cudaError_t __helper_cudaPointerGetAttributes(struct cudaPointerAttributes *attributes, const void *ptr) {
   return cudaPointerGetAttributes(attributes, ptr);
@@ -669,7 +655,8 @@ cudnnStatus_t __helper_cudnnConvolutionForward_double(cudnnHandle_t handle, cons
                                                       cudnnConvolutionFwdAlgo_t algo, void *workSpace,
                                                       size_t workSpaceSizeInBytes, const double *beta,
                                                       const cudnnTensorDescriptor_t yDesc, void *y) {
-  return cudnnConvolutionForward(handle, alpha, xDesc, x, wDesc, w, convDesc, algo, workSpace, workSpaceSizeInBytes, beta, yDesc, y);
+  return cudnnConvolutionForward(handle, alpha, xDesc, x, wDesc, w, convDesc, algo, workSpace, workSpaceSizeInBytes,
+                                 beta, yDesc, y);
 }
 
 cudnnStatus_t __helper_cudnnConvolutionForward_float(cudnnHandle_t handle, const float *alpha,
@@ -679,31 +666,30 @@ cudnnStatus_t __helper_cudnnConvolutionForward_float(cudnnHandle_t handle, const
                                                      cudnnConvolutionFwdAlgo_t algo, void *workSpace,
                                                      size_t workSpaceSizeInBytes, const float *beta,
                                                      const cudnnTensorDescriptor_t yDesc, void *y) {
-  return cudnnConvolutionForward(handle, alpha, xDesc, x, wDesc, w, convDesc, algo, workSpace, workSpaceSizeInBytes, beta, yDesc, y);
+  return cudnnConvolutionForward(handle, alpha, xDesc, x, wDesc, w, convDesc, algo, workSpace, workSpaceSizeInBytes,
+                                 beta, yDesc, y);
 }
 
 cudnnStatus_t cudnnBatchNormalizationForwardInference_float(
     cudnnHandle_t handle, cudnnBatchNormMode_t mode, const float *alpha, /* alpha[0] = result blend factor */
     const float *beta,                                                   /* beta[0] = dest layer blend factor */
-    const cudnnTensorDescriptor_t xDesc, const void *x,                 /* NxCxHxW */
-    const cudnnTensorDescriptor_t yDesc, void *y,                       /* NxCxHxW */
+    const cudnnTensorDescriptor_t xDesc, const void *x,                  /* NxCxHxW */
+    const cudnnTensorDescriptor_t yDesc, void *y,                        /* NxCxHxW */
     const cudnnTensorDescriptor_t bnScaleBiasMeanVarDesc, const void *bnScale, const void *bnBias,
     const void *estimatedMean, const void *estimatedVariance, double epsilon) {
-  return cudnnBatchNormalizationForwardInference(handle, mode, alpha, beta, xDesc, x, yDesc, y, 
-                                                 bnScaleBiasMeanVarDesc, bnScale, bnBias, estimatedMean, 
-                                                 estimatedVariance, epsilon);
+  return cudnnBatchNormalizationForwardInference(handle, mode, alpha, beta, xDesc, x, yDesc, y, bnScaleBiasMeanVarDesc,
+                                                 bnScale, bnBias, estimatedMean, estimatedVariance, epsilon);
 }
 
 cudnnStatus_t cudnnBatchNormalizationForwardInference_double(
     cudnnHandle_t handle, cudnnBatchNormMode_t mode, const double *alpha, /* alpha[0] = result blend factor */
     const double *beta,                                                   /* beta[0] = dest layer blend factor */
-    const cudnnTensorDescriptor_t xDesc, const void *x,                 /* NxCxHxW */
-    const cudnnTensorDescriptor_t yDesc, void *y,                       /* NxCxHxW */
+    const cudnnTensorDescriptor_t xDesc, const void *x,                   /* NxCxHxW */
+    const cudnnTensorDescriptor_t yDesc, void *y,                         /* NxCxHxW */
     const cudnnTensorDescriptor_t bnScaleBiasMeanVarDesc, const void *bnScale, const void *bnBias,
     const void *estimatedMean, const void *estimatedVariance, double epsilon) {
-  return cudnnBatchNormalizationForwardInference(handle, mode, alpha, beta, xDesc, x, yDesc, y, 
-                                                 bnScaleBiasMeanVarDesc, bnScale, bnBias, estimatedMean, 
-                                                 estimatedVariance, epsilon);
+  return cudnnBatchNormalizationForwardInference(handle, mode, alpha, beta, xDesc, x, yDesc, y, bnScaleBiasMeanVarDesc,
+                                                 bnScale, bnBias, estimatedMean, estimatedVariance, epsilon);
 }
 
 cudnnStatus_t cudnnPoolingForward_float(cudnnHandle_t handle, const cudnnPoolingDescriptor_t poolingDesc,
@@ -719,33 +705,51 @@ cudnnStatus_t cudnnPoolingForward_double(cudnnHandle_t handle, const cudnnPoolin
 }
 
 cudnnStatus_t cudnnAddTensor_double(cudnnHandle_t handle, const double *alpha, const cudnnTensorDescriptor_t aDesc,
-                                    const void *A, const double *beta, const cudnnTensorDescriptor_t cDesc,
-                                    void *C) {
+                                    const void *A, const double *beta, const cudnnTensorDescriptor_t cDesc, void *C) {
   return cudnnAddTensor(handle, alpha, aDesc, A, beta, cDesc, C);
 }
 
 cudnnStatus_t cudnnAddTensor_float(cudnnHandle_t handle, const float *alpha, const cudnnTensorDescriptor_t aDesc,
-                                   const void *A, const float *beta, const cudnnTensorDescriptor_t cDesc,
-                                   void *C) {
+                                   const void *A, const float *beta, const cudnnTensorDescriptor_t cDesc, void *C) {
   return cudnnAddTensor(handle, alpha, aDesc, A, beta, cDesc, C);
 }
 
 cudnnStatus_t cudnnReduceTensor_double(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
-                                            void *indices, size_t indicesSizeInBytes, void *workspace,
-                                            size_t workspaceSizeInBytes, const double *alpha,
-                                            const cudnnTensorDescriptor_t aDesc, const void *A, const double *beta,
-                                            const cudnnTensorDescriptor_t cDesc, void *C) {
-  return cudnnReduceTensor(handle, reduceTensorDesc, indices, indicesSizeInBytes, workspace,
-                           workspaceSizeInBytes, alpha, aDesc, A,
-                           beta, cDesc, C);
+                                       void *indices, size_t indicesSizeInBytes, void *workspace,
+                                       size_t workspaceSizeInBytes, const double *alpha,
+                                       const cudnnTensorDescriptor_t aDesc, const void *A, const double *beta,
+                                       const cudnnTensorDescriptor_t cDesc, void *C) {
+  return cudnnReduceTensor(handle, reduceTensorDesc, indices, indicesSizeInBytes, workspace, workspaceSizeInBytes,
+                           alpha, aDesc, A, beta, cDesc, C);
 }
 
 cudnnStatus_t cudnnReduceTensor_float(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
-                                            void *indices, size_t indicesSizeInBytes, void *workspace,
-                                            size_t workspaceSizeInBytes, const float *alpha,
-                                            const cudnnTensorDescriptor_t aDesc, const void *A, const float *beta,
-                                            const cudnnTensorDescriptor_t cDesc, void *C) {
-  return cudnnReduceTensor(handle, reduceTensorDesc, indices, indicesSizeInBytes, workspace,
-                           workspaceSizeInBytes, alpha, aDesc, A,
-                           beta, cDesc, C);
+                                      void *indices, size_t indicesSizeInBytes, void *workspace,
+                                      size_t workspaceSizeInBytes, const float *alpha,
+                                      const cudnnTensorDescriptor_t aDesc, const void *A, const float *beta,
+                                      const cudnnTensorDescriptor_t cDesc, void *C) {
+  return cudnnReduceTensor(handle, reduceTensorDesc, indices, indicesSizeInBytes, workspace, workspaceSizeInBytes,
+                           alpha, aDesc, A, beta, cDesc, C);
+}
+
+cudnnStatus_t cudnnConvolutionBiasActivationForward_double(
+    cudnnHandle_t handle, const double *alpha1, const cudnnTensorDescriptor_t xDesc, const void *x,
+    const cudnnFilterDescriptor_t wDesc, const void *w, const cudnnConvolutionDescriptor_t convDesc,
+    cudnnConvolutionFwdAlgo_t algo, void *workSpace, size_t workSpaceSizeInBytes, const double *alpha2,
+    const cudnnTensorDescriptor_t zDesc, const void *z, const cudnnTensorDescriptor_t biasDesc, const void *bias,
+    const cudnnActivationDescriptor_t activationDesc, const cudnnTensorDescriptor_t yDesc, void *y) {
+  return cudnnConvolutionBiasActivationForward(handle, alpha1, xDesc, x, wDesc, w, convDesc, algo, workSpace,
+                                               workSpaceSizeInBytes, alpha2, zDesc, z, biasDesc, bias, activationDesc,
+                                               yDesc, y);
+}
+
+cudnnStatus_t cudnnConvolutionBiasActivationForward_float(
+    cudnnHandle_t handle, const float *alpha1, const cudnnTensorDescriptor_t xDesc, const void *x,
+    const cudnnFilterDescriptor_t wDesc, const void *w, const cudnnConvolutionDescriptor_t convDesc,
+    cudnnConvolutionFwdAlgo_t algo, void *workSpace, size_t workSpaceSizeInBytes, const float *alpha2,
+    const cudnnTensorDescriptor_t zDesc, const void *z, const cudnnTensorDescriptor_t biasDesc, const void *bias,
+    const cudnnActivationDescriptor_t activationDesc, const cudnnTensorDescriptor_t yDesc, void *y) {
+  return cudnnConvolutionBiasActivationForward(handle, alpha1, xDesc, x, wDesc, w, convDesc, algo, workSpace,
+                                               workSpaceSizeInBytes, alpha2, zDesc, z, biasDesc, bias, activationDesc,
+                                               yDesc, y);
 }

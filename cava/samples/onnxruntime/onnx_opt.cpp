@@ -956,7 +956,7 @@ void CUDARTAPI __cudaRegisterTexture(void **fatCubinHandle,
 __host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, dim3 blockDim, void **args,
                                                 size_t sharedMem, cudaStream_t stream) {
   /* May lead to TensorFlow internal race condition but safe for ONNX. */
-  // ava_async;
+  ava_async;
   ava_disable_native_call;
 
   ava_implicit_argument void *func_id = ava_metadata(func)->func_id;
@@ -5882,6 +5882,7 @@ cudnnStatus_t cudnnReduceTensor_double(cudnnHandle_t handle, const cudnnReduceTe
                                        size_t workspaceSizeInBytes, const double *alpha,
                                        const cudnnTensorDescriptor_t aDesc, const void *A, const double *beta,
                                        const cudnnTensorDescriptor_t cDesc, void *C) {
+  ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(reduceTensorDesc) ava_handle;
   ava_argument(alpha) {
@@ -5905,6 +5906,7 @@ cudnnStatus_t cudnnReduceTensor_float(cudnnHandle_t handle, const cudnnReduceTen
                                       size_t workspaceSizeInBytes, const float *alpha,
                                       const cudnnTensorDescriptor_t aDesc, const void *A, const float *beta,
                                       const cudnnTensorDescriptor_t cDesc, void *C) {
+  ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(reduceTensorDesc) ava_handle;
   ava_argument(alpha) {
@@ -6200,11 +6202,10 @@ cudnnStatus_t CUDNNWINAPI cudnnFindConvolutionForwardAlgorithmEx(
 
 /* Convolution functions: All of the form "output = alpha * Op(inputs) + beta * output" */
 
-/* Fused conv/bias/activation operation : y = Act( alpha1 * conv(x) + alpha2 * z + bias ) */
-cudnnStatus_t CUDNNWINAPI cudnnConvolutionBiasActivationForward(
-    cudnnHandle_t handle, const void *alpha1, const cudnnTensorDescriptor_t xDesc, const void *x,
+cudnnStatus_t cudnnConvolutionBiasActivationForward_double(
+    cudnnHandle_t handle, const double *alpha1, const cudnnTensorDescriptor_t xDesc, const void *x,
     const cudnnFilterDescriptor_t wDesc, const void *w, const cudnnConvolutionDescriptor_t convDesc,
-    cudnnConvolutionFwdAlgo_t algo, void *workSpace, size_t workSpaceSizeInBytes, const void *alpha2,
+    cudnnConvolutionFwdAlgo_t algo, void *workSpace, size_t workSpaceSizeInBytes, const double *alpha2,
     const cudnnTensorDescriptor_t zDesc, const void *z, const cudnnTensorDescriptor_t biasDesc, const void *bias,
     const cudnnActivationDescriptor_t activationDesc, const cudnnTensorDescriptor_t yDesc, void *y) {
   ava_async;
@@ -6231,6 +6232,69 @@ cudnnStatus_t CUDNNWINAPI cudnnConvolutionBiasActivationForward(
   ava_argument(yDesc) ava_handle;
   ava_argument(y) ava_opaque;
 }
+
+cudnnStatus_t cudnnConvolutionBiasActivationForward_float(
+    cudnnHandle_t handle, const float *alpha1, const cudnnTensorDescriptor_t xDesc, const void *x,
+    const cudnnFilterDescriptor_t wDesc, const void *w, const cudnnConvolutionDescriptor_t convDesc,
+    cudnnConvolutionFwdAlgo_t algo, void *workSpace, size_t workSpaceSizeInBytes, const float *alpha2,
+    const cudnnTensorDescriptor_t zDesc, const void *z, const cudnnTensorDescriptor_t biasDesc, const void *bias,
+    const cudnnActivationDescriptor_t activationDesc, const cudnnTensorDescriptor_t yDesc, void *y) {
+  ava_async;
+  ava_argument(handle) ava_handle;
+  ava_argument(alpha1) {
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(xDesc) ava_handle;
+  ava_argument(x) ava_opaque;
+  ava_argument(wDesc) ava_handle;
+  ava_argument(w) ava_opaque;
+  ava_argument(convDesc) ava_handle;
+  ava_argument(workSpace) ava_opaque;
+  ava_argument(alpha2) {
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(zDesc) ava_handle;
+  ava_argument(z) ava_opaque;
+  ava_argument(biasDesc) ava_handle;
+  ava_argument(bias) ava_opaque;
+  ava_argument(activationDesc) ava_handle;
+  ava_argument(yDesc) ava_handle;
+  ava_argument(y) ava_opaque;
+}
+
+ava_begin_replacement;
+/* Fused conv/bias/activation operation : y = Act( alpha1 * conv(x) + alpha2 * z + bias ) */
+EXPORTED cudnnStatus_t CUDNNWINAPI cudnnConvolutionBiasActivationForward(
+    cudnnHandle_t handle, const void *alpha1, const cudnnTensorDescriptor_t xDesc, const void *x,
+    const cudnnFilterDescriptor_t wDesc, const void *w, const cudnnConvolutionDescriptor_t convDesc,
+    cudnnConvolutionFwdAlgo_t algo, void *workSpace, size_t workSpaceSizeInBytes, const void *alpha2,
+    const cudnnTensorDescriptor_t zDesc, const void *z, const cudnnTensorDescriptor_t biasDesc, const void *bias,
+    const cudnnActivationDescriptor_t activationDesc, const cudnnTensorDescriptor_t yDesc, void *y) {
+  cudnnDataType_t a1_data_type;
+  cudnnDataType_t a2_data_type;
+  cudnnDataType_t data_type;
+  bool a1ret = __helper_get_tensor_type(xDesc, &a1_data_type);
+  bool a2ret = __helper_get_tensor_type(zDesc, &a2_data_type);
+  if (a1ret) {
+    data_type = a1_data_type;
+  } else if (a2ret) {
+    data_type = a2_data_type;
+  } else {
+    data_type = CUDNN_DATA_DOUBLE;
+  }
+  if (data_type == CUDNN_DATA_DOUBLE) {
+    return cudnnConvolutionBiasActivationForward_double(handle, (const double *)alpha1, xDesc, x, wDesc, w, convDesc,
+                                                        algo, workSpace, workSpaceSizeInBytes, (const double *)alpha2,
+                                                        zDesc, z, biasDesc, bias, activationDesc, yDesc, y);
+  } else {
+    return cudnnConvolutionBiasActivationForward_float(handle, (const float *)alpha1, xDesc, x, wDesc, w, convDesc,
+                                                       algo, workSpace, workSpaceSizeInBytes, (const float *)alpha2,
+                                                       zDesc, z, biasDesc, bias, activationDesc, yDesc, y);
+  }
+}
+ava_end_replacement;
 
 /* Function to compute the bias gradient for batch convolution */
 cudnnStatus_t CUDNNWINAPI cudnnConvolutionBackwardBias(cudnnHandle_t handle, const void *alpha,
@@ -13713,7 +13777,6 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamWaitEvent(cudaStream
 }
 
 __host__ cudaError_t CUDARTAPI cudaStreamSynchronize(cudaStream_t stream) {
-  ava_async;
   ava_disable_native_call;
   ava_argument(stream) ava_handle;
   if (ava_is_worker) {

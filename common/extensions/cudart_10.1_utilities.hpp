@@ -142,12 +142,11 @@ CUresult __helper_cuDeviceGetName(char *name, int len, CUdevice dev);
 CUresult __helper_cuDeviceGetAttribute(int *pi, CUdevice_attribute attrib, CUdevice dev);
 CUresult __helper_cuDeviceGetUuid(CUuuid *uuid, CUdevice dev);
 CUresult __helper_cuDevicePrimaryCtxSetFlags(CUdevice dev, unsigned int flags);
-CUresult __helper_cuDeviceTotalMem(size_t* bytes, CUdevice dev);
+CUresult __helper_cuDeviceTotalMem(size_t *bytes, CUdevice dev);
 CUresult __helper_cuDeviceGetPCIBusId(char *pciBusId, int len, CUdevice dev);
 CUresult __helper_cuDeviceComputeCapability(int *major, int *minor, CUdevice device);
 cudaError_t __helper_cudaGetDeviceProperties(struct cudaDeviceProp *prop, int device);
-cudaError_t __helper_cudaDeviceGetAttribute(int *value, enum cudaDeviceAttr attr,
-                                            int device);
+cudaError_t __helper_cudaDeviceGetAttribute(int *value, enum cudaDeviceAttr attr, int device);
 CUresult __helper_cuDeviceGet(CUdevice *device, int ordinal);
 cudaError_t __helper_cudaPointerGetAttributes(struct cudaPointerAttributes *attributes, const void *ptr);
 void __helper_record_tensor_desc(cudnnTensorDescriptor_t desc, cudnnDataType_t data_type);
@@ -169,15 +168,15 @@ cudnnStatus_t __helper_cudnnConvolutionForward_float(cudnnHandle_t handle, const
 cudnnStatus_t cudnnBatchNormalizationForwardInference_double(
     cudnnHandle_t handle, cudnnBatchNormMode_t mode, const double *alpha, /* alpha[0] = result blend factor */
     const double *beta,                                                   /* beta[0] = dest layer blend factor */
-    const cudnnTensorDescriptor_t xDesc, const void *x,                 /* NxCxHxW */
-    const cudnnTensorDescriptor_t yDesc, void *y,                       /* NxCxHxW */
+    const cudnnTensorDescriptor_t xDesc, const void *x,                   /* NxCxHxW */
+    const cudnnTensorDescriptor_t yDesc, void *y,                         /* NxCxHxW */
     const cudnnTensorDescriptor_t bnScaleBiasMeanVarDesc, const void *bnScale, const void *bnBias,
     const void *estimatedMean, const void *estimatedVariance, double epsilon);
 cudnnStatus_t cudnnBatchNormalizationForwardInference_float(
     cudnnHandle_t handle, cudnnBatchNormMode_t mode, const float *alpha, /* alpha[0] = result blend factor */
     const float *beta,                                                   /* beta[0] = dest layer blend factor */
-    const cudnnTensorDescriptor_t xDesc, const void *x,                 /* NxCxHxW */
-    const cudnnTensorDescriptor_t yDesc, void *y,                       /* NxCxHxW */
+    const cudnnTensorDescriptor_t xDesc, const void *x,                  /* NxCxHxW */
+    const cudnnTensorDescriptor_t yDesc, void *y,                        /* NxCxHxW */
     const cudnnTensorDescriptor_t bnScaleBiasMeanVarDesc, const void *bnScale, const void *bnBias,
     const void *estimatedMean, const void *estimatedVariance, double epsilon);
 cudnnStatus_t cudnnPoolingForward_double(cudnnHandle_t handle, const cudnnPoolingDescriptor_t poolingDesc,
@@ -185,33 +184,42 @@ cudnnStatus_t cudnnPoolingForward_double(cudnnHandle_t handle, const cudnnPoolin
                                          const double *beta, const cudnnTensorDescriptor_t yDesc, void *y);
 cudnnStatus_t cudnnPoolingForward_float(cudnnHandle_t handle, const cudnnPoolingDescriptor_t poolingDesc,
                                         const float *alpha, const cudnnTensorDescriptor_t xDesc, const void *x,
-                                        const float *beta, const cudnnTensorDescriptor_t yDesc, void *y);                                         
+                                        const float *beta, const cudnnTensorDescriptor_t yDesc, void *y);
 cudnnStatus_t cudnnAddTensor_double(cudnnHandle_t handle, const double *alpha, const cudnnTensorDescriptor_t aDesc,
-                                    const void *A, const double *beta, const cudnnTensorDescriptor_t cDesc,
-                                    void *C);
+                                    const void *A, const double *beta, const cudnnTensorDescriptor_t cDesc, void *C);
 cudnnStatus_t cudnnAddTensor_float(cudnnHandle_t handle, const float *alpha, const cudnnTensorDescriptor_t aDesc,
-                                   const void *A, const float *beta, const cudnnTensorDescriptor_t cDesc,
-                                   void *C);
+                                   const void *A, const float *beta, const cudnnTensorDescriptor_t cDesc, void *C);
 cudnnStatus_t cudnnReduceTensor_double(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
-                                            void *indices, size_t indicesSizeInBytes, void *workspace,
-                                            size_t workspaceSizeInBytes, const double *alpha,
-                                            const cudnnTensorDescriptor_t aDesc, const void *A, const double *beta,
-                                            const cudnnTensorDescriptor_t cDesc, void *C);
+                                       void *indices, size_t indicesSizeInBytes, void *workspace,
+                                       size_t workspaceSizeInBytes, const double *alpha,
+                                       const cudnnTensorDescriptor_t aDesc, const void *A, const double *beta,
+                                       const cudnnTensorDescriptor_t cDesc, void *C);
 cudnnStatus_t cudnnReduceTensor_float(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
-                                            void *indices, size_t indicesSizeInBytes, void *workspace,
-                                            size_t workspaceSizeInBytes, const float *alpha,
-                                            const cudnnTensorDescriptor_t aDesc, const void *A, const float *beta,
-                                            const cudnnTensorDescriptor_t cDesc, void *C);
+                                      void *indices, size_t indicesSizeInBytes, void *workspace,
+                                      size_t workspaceSizeInBytes, const float *alpha,
+                                      const cudnnTensorDescriptor_t aDesc, const void *A, const float *beta,
+                                      const cudnnTensorDescriptor_t cDesc, void *C);
+cudnnStatus_t cudnnConvolutionBiasActivationForward_double(
+    cudnnHandle_t handle, const double *alpha1, const cudnnTensorDescriptor_t xDesc, const void *x,
+    const cudnnFilterDescriptor_t wDesc, const void *w, const cudnnConvolutionDescriptor_t convDesc,
+    cudnnConvolutionFwdAlgo_t algo, void *workSpace, size_t workSpaceSizeInBytes, const double *alpha2,
+    const cudnnTensorDescriptor_t zDesc, const void *z, const cudnnTensorDescriptor_t biasDesc, const void *bias,
+    const cudnnActivationDescriptor_t activationDesc, const cudnnTensorDescriptor_t yDesc, void *y);
+cudnnStatus_t cudnnConvolutionBiasActivationForward_float(
+    cudnnHandle_t handle, const float *alpha1, const cudnnTensorDescriptor_t xDesc, const void *x,
+    const cudnnFilterDescriptor_t wDesc, const void *w, const cudnnConvolutionDescriptor_t convDesc,
+    cudnnConvolutionFwdAlgo_t algo, void *workSpace, size_t workSpaceSizeInBytes, const float *alpha2,
+    const cudnnTensorDescriptor_t zDesc, const void *z, const cudnnTensorDescriptor_t biasDesc, const void *bias,
+    const cudnnActivationDescriptor_t activationDesc, const cudnnTensorDescriptor_t yDesc, void *y);
 
 cudaError_t __helper_cudaEventCreateWithFlags(cudaEvent_t *event, unsigned int flags);
 cudaError_t __helper_cudaEventDestroy(cudaEvent_t event);
-cudaError_t  __helper_cudaEventRecord(cudaEvent_t event, cudaStream_t stream);
-cudaError_t  __helper_cudaEventSynchronize(cudaEvent_t event);
+cudaError_t __helper_cudaEventRecord(cudaEvent_t event, cudaStream_t stream);
+cudaError_t __helper_cudaEventSynchronize(cudaEvent_t event);
 
 cudaEvent_t __helper_translate_event(cudaEvent_t event);
 cudaStream_t __helper_translate_stream(cudaStream_t stream);
-void* __helper_translate_ptr(void* ptr);
-
+void *__helper_translate_ptr(void *ptr);
 
 #if defined(__cplusplus)
 }

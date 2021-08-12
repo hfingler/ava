@@ -4075,6 +4075,9 @@ cudnnStatus_t CUDNNWINAPI cudnnSetTensorNdDescriptor(cudnnTensorDescriptor_t ten
     ava_in;
     ava_buffer(nbDims);
   }
+  if (ava_is_guest) {
+    __helper_record_tensor_desc(tensorDesc, dataType);
+  }
 }
 
 cudnnStatus_t CUDNNWINAPI cudnnPoolingBackward(cudnnHandle_t handle, const cudnnPoolingDescriptor_t poolingDesc,
@@ -4430,6 +4433,9 @@ cudnnStatus_t CUDNNWINAPI cudnnSetTensor4dDescriptor(cudnnTensorDescriptor_t ten
                                                      int w)                    /* width of input section */
 {
   ava_argument(tensorDesc) ava_handle;
+  if (ava_is_guest) {
+    __helper_record_tensor_desc(tensorDesc, dataType);
+  }
 }
 
 cudnnStatus_t CUDNNWINAPI cudnnSetTensor4dDescriptorEx(cudnnTensorDescriptor_t tensorDesc,
@@ -4440,6 +4446,9 @@ cudnnStatus_t CUDNNWINAPI cudnnSetTensor4dDescriptorEx(cudnnTensorDescriptor_t t
                                                        int w,                    /* width of input section */
                                                        int nStride, int cStride, int hStride, int wStride) {
   ava_argument(tensorDesc) ava_handle;
+  if (ava_is_guest) {
+    __helper_record_tensor_desc(tensorDesc, dataType);
+  }
 }
 
 cudnnStatus_t CUDNNWINAPI cudnnGetTensor4dDescriptor(const cudnnTensorDescriptor_t tensorDesc,
@@ -4695,25 +4704,20 @@ cudnnStatus_t CUDNNWINAPI cudnnGetReductionWorkspaceSize(cudnnHandle_t handle,
   }
 }
 
-/* Tensor operation : C = reduce op( alpha * A ) + beta * C */
-/* The NaN propagation enum applies to only the min and max reduce ops; the other reduce ops propagate NaN as usual. */
-/* The indices space is ignored for reduce ops other than min or max. */
-cudnnStatus_t CUDNNWINAPI cudnnReduceTensor(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
-                                            void *indices, size_t indicesSizeInBytes, void *workspace,
-                                            size_t workspaceSizeInBytes, const void *alpha,
-                                            const cudnnTensorDescriptor_t aDesc, const void *A, const void *beta,
-                                            const cudnnTensorDescriptor_t cDesc, void *C) {
+cudnnStatus_t cudnnReduceTensor_double(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
+                                       void *indices, size_t indicesSizeInBytes, void *workspace,
+                                       size_t workspaceSizeInBytes, const double *alpha,
+                                       const cudnnTensorDescriptor_t aDesc, const void *A, const double *beta,
+                                       const cudnnTensorDescriptor_t cDesc, void *C) {
   ava_argument(handle) ava_handle;
   ava_argument(reduceTensorDesc) ava_handle;
   ava_argument(alpha) {
-    ava_type_cast(const double *);
     ava_in;
     ava_buffer(1);
   }
   ava_argument(aDesc) ava_handle;
   ava_argument(A) ava_opaque;
   ava_argument(beta) {
-    ava_type_cast(const double *);
     ava_in;
     ava_buffer(1);
   }
@@ -4722,6 +4726,61 @@ cudnnStatus_t CUDNNWINAPI cudnnReduceTensor(cudnnHandle_t handle, const cudnnRed
   ava_argument(workspace) ava_opaque;
   ava_argument(indices) ava_opaque;
 }
+
+cudnnStatus_t cudnnReduceTensor_float(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
+                                      void *indices, size_t indicesSizeInBytes, void *workspace,
+                                      size_t workspaceSizeInBytes, const float *alpha,
+                                      const cudnnTensorDescriptor_t aDesc, const void *A, const float *beta,
+                                      const cudnnTensorDescriptor_t cDesc, void *C) {
+  ava_argument(handle) ava_handle;
+  ava_argument(reduceTensorDesc) ava_handle;
+  ava_argument(alpha) {
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(aDesc) ava_handle;
+  ava_argument(A) ava_opaque;
+  ava_argument(beta) {
+    ava_in;
+    ava_buffer(1);
+  }
+  ava_argument(cDesc) ava_handle;
+  ava_argument(C) ava_opaque;
+  ava_argument(workspace) ava_opaque;
+  ava_argument(indices) ava_opaque;
+}
+
+ava_begin_replacement;
+/* Tensor operation : C = reduce op( alpha * A ) + beta * C */
+/* The NaN propagation enum applies to only the min and max reduce ops; the other reduce ops propagate NaN as usual. */
+/* The indices space is ignored for reduce ops other than min or max. */
+cudnnStatus_t CUDNNWINAPI cudnnReduceTensor(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
+                                            void *indices, size_t indicesSizeInBytes, void *workspace,
+                                            size_t workspaceSizeInBytes, const void *alpha,
+                                            const cudnnTensorDescriptor_t aDesc, const void *A, const void *beta,
+                                            const cudnnTensorDescriptor_t cDesc, void *C) {
+  cudnnDataType_t a_data_type;
+  cudnnDataType_t c_data_type;
+  cudnnDataType_t data_type;
+  bool aret = __helper_get_tensor_type(aDesc, &a_data_type);
+  bool cret = __helper_get_tensor_type(cDesc, &c_data_type);
+  if (aret) {
+    data_type = a_data_type;
+  } else if (cret) {
+    data_type = c_data_type;
+  } else {
+    data_type = CUDNN_DATA_DOUBLE;
+  }
+  if (data_type == CUDNN_DATA_DOUBLE) {
+    return cudnnReduceTensor_double(handle, reduceTensorDesc, indices, indicesSizeInBytes, workspace,
+                                    workspaceSizeInBytes, (const double *)alpha, aDesc, A, (const double *)beta, cDesc,
+                                    C);
+  } else {
+    return cudnnReduceTensor_float(handle, reduceTensorDesc, indices, indicesSizeInBytes, workspace,
+                                   workspaceSizeInBytes, (const float *)alpha, aDesc, A, (const float *)beta, cDesc, C);
+  }
+}
+ava_end_replacement;
 
 /* Set all values of a tensor to a given value : y[i] = value[0] */
 cudnnStatus_t CUDNNWINAPI cudnnSetTensor(cudnnHandle_t handle, const cudnnTensorDescriptor_t yDesc, void *y,
