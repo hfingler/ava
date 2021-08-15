@@ -28,9 +28,13 @@ def main():
 
     keys = sorted(guest_stats.keys())
     for n in keys:
-        if n in worker_stats:
+        if n[-6:] == "_async":
+            name = n[:-6]
+        else:
+            name = n
+        if name in worker_stats:
             g_exec_time = np.array(guest_stats[n][1])
-            w_exec_time = np.array(worker_stats[n][1])
+            w_exec_time = np.array(worker_stats[name][1])
             g_exec_time = g_exec_time / 1000000.0
             w_exec_time = w_exec_time / 1000000.0
             g_total = np.sum(g_exec_time)
