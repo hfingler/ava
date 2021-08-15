@@ -7,7 +7,7 @@ ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -
 // To enable stat collecting, use the below line and uncomment the ava_stats definition
 // ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN -D__AVA_ENABLE_STAT);
 ava_libs(-L/usr/local/cuda-10.1/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver zmq nvidia-ml absl::flat_hash_map absl::hash absl::strings);
-ava_guestlib_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/guest_cmd_batching_queue.cpp extensions/extension_api.cpp extensions/gpu_address_tracking.cpp);
+ava_guestlib_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/guest_cmd_batching_queue.cpp extensions/extension_api.cpp extensions/gpu_address_tracking.cpp extensions/cudart_10.1_utilities.cpp);
 ava_worker_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/cmd_batching.cpp extensions/cudart_10.1_utilities.cpp extensions/memory_server/client.cpp);
 ava_common_utility_srcs(extensions/cudart_10.1_utilities.cpp);
 ava_export_qualifier();
@@ -71,6 +71,7 @@ ava_begin_utility;
 #include "common/support/time_util.h"
 #include "cudart_nw_internal.h"
 #include "guestlib/extensions/extension_api.h"
+#include "guestlib/extensions/cudart_10.1_utilities.hpp"
 #include "guestlib/extensions/gpu_address_tracking.h"
 #include "guestlib/extensions/guest_cmd_batching_queue.h"
 
@@ -1211,6 +1212,9 @@ cudaError_t __helper_cuda_memcpy_async_device_to_host(void *dst, const void *src
   }
   ava_argument(src) { ava_opaque; }
   ava_argument(stream) ava_handle;
+  if (ava_is_guest) {
+    set_stream_synchronize_safe_async(stream, false);
+  }
 }
 
 cudaError_t __helper_cuda_memcpy_async_device_to_device(void *dst, const void *src, size_t count, cudaStream_t stream) {
@@ -1222,6 +1226,7 @@ cudaError_t __helper_cuda_memcpy_async_device_to_device(void *dst, const void *s
 
 cudaError_t __helper_cuda_memcpy_async_default(void *dst, const void *src, size_t count, cudaStream_t stream,
                                                bool dst_is_gpu, bool src_is_gpu) {
+  ava_async;
   if (dst_is_gpu) {
     ava_argument(dst) {
       ava_opaque;
@@ -5808,10 +5813,10 @@ cudnnStatus_t CUDNNWINAPI cudnnSetReduceTensorDescriptor(cudnnReduceTensorDescri
                                                          cudnnReduceTensorIndices_t reduceTensorIndices,
                                                          cudnnIndicesType_t reduceTensorIndicesType) {
   ava_async;
-  //ava_disable_native_call;
+  // ava_disable_native_call;
   ava_argument(reduceTensorDesc) ava_handle;
 
-  //if (ava_is_worker) {
+  // if (ava_is_worker) {
   //  return __helper_cudnnSetReduceTensorDescriptor(reduceTensorDesc, reduceTensorOp, reduceTensorCompType,
   //               reduceTensorNanOpt, reduceTensorIndices, reduceTensorIndicesType);
   //}
@@ -5890,9 +5895,10 @@ cudnnStatus_t cudnnReduceTensor_double(cudnnHandle_t handle, const cudnnReduceTe
                                        const cudnnTensorDescriptor_t aDesc, const void *A, const double *beta,
                                        const cudnnTensorDescriptor_t cDesc, void *C) {
   ava_async;
-/* Tensor operation : C = reduce op( alpha * A ) + beta * C */
-/* The NaN propagation enum applies to only the min and max reduce ops; the other reduce ops propagate NaN as usual. */
-/* The indices space is ignored for reduce ops other than min or max. */
+  /* Tensor operation : C = reduce op( alpha * A ) + beta * C */
+  /* The NaN propagation enum applies to only the min and max reduce ops; the other reduce ops propagate NaN as usual.
+   */
+  /* The indices space is ignored for reduce ops other than min or max. */
   ava_argument(handle) ava_handle;
   ava_argument(reduceTensorDesc) ava_handle;
   ava_argument(alpha) {
@@ -5910,7 +5916,7 @@ cudnnStatus_t cudnnReduceTensor_double(cudnnHandle_t handle, const cudnnReduceTe
   ava_argument(workspace) ava_opaque;
   ava_argument(indices) ava_opaque;
 
-  //if (ava_is_worker) {
+  // if (ava_is_worker) {
   //  return __helper_cudnnReduceTensor(handle, reduceTensorDesc, indices, indicesSizeInBytes, workspace,
   //                                          workspaceSizeInBytes, alpha, aDesc, A, beta, cDesc, C);
   //}
@@ -6286,7 +6292,7 @@ cudnnStatus_t cudnnConvolutionBiasActivationForward_float(
     cudnnConvolutionFwdAlgo_t algo, void *workSpace, size_t workSpaceSizeInBytes, const float *alpha2,
     const cudnnTensorDescriptor_t zDesc, const void *z, const cudnnTensorDescriptor_t biasDesc, const void *bias,
     const cudnnActivationDescriptor_t activationDesc, const cudnnTensorDescriptor_t yDesc, void *y) {
-  //ava_disable_native_call;
+  // ava_disable_native_call;
   ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(alpha1) {
@@ -6311,8 +6317,9 @@ cudnnStatus_t cudnnConvolutionBiasActivationForward_float(
   ava_argument(yDesc) ava_handle;
   ava_argument(y) ava_opaque;
 
-  //if (ava_is_worker) {
-  //  return __helper_cudnnConvolutionBiasActivationForward(handle, alpha1, xDesc, x, wDesc, w, convDesc, algo, workSpace, 
+  // if (ava_is_worker) {
+  //  return __helper_cudnnConvolutionBiasActivationForward(handle, alpha1, xDesc, x, wDesc, w, convDesc, algo,
+  //  workSpace,
   //    workSpaceSizeInBytes, alpha2, zDesc, z, biasDesc, bias, activationDesc, yDesc, y);
   //}
 }
@@ -6721,14 +6728,14 @@ cudnnStatus_t CUDNNWINAPI cudnnGetPooling2dForwardOutputDim(const cudnnPoolingDe
 
 /* Activation functions: All of the form "output = alpha * Op(inputs) + beta * output" */
 cudnnStatus_t CUDNNWINAPI cudnnCreateActivationDescriptor(cudnnActivationDescriptor_t *activationDesc) {
-  //ava_disable_native_call;
+  // ava_disable_native_call;
   ava_argument(activationDesc) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
   }
 
-  //if (ava_is_worker) {
+  // if (ava_is_worker) {
   //  return __helper_cudnnCreateActivationDescriptor(activationDesc);
   //}
 }
@@ -13882,13 +13889,35 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamWaitEvent(cudaStream
   ava_argument(event) ava_handle;
 }
 
-__host__ cudaError_t CUDARTAPI cudaStreamSynchronize(cudaStream_t stream) {
+cudaError_t __helper_cudaStreamSynchronize_sync(cudaStream_t stream) {
   ava_disable_native_call;
   ava_argument(stream) ava_handle;
   if (ava_is_worker) {
     return cudaStreamSynchronize(__helper_translate_stream(stream));
   }
 }
+
+cudaError_t __helper_cudaStreamSynchronize_async(cudaStream_t stream) {
+  ava_async;
+  ava_disable_native_call;
+  ava_argument(stream) ava_handle;
+  if (ava_is_worker) {
+    return cudaStreamSynchronize(__helper_translate_stream(stream));
+  }
+}
+
+ava_begin_replacement;
+EXPORTED __host__ cudaError_t CUDARTAPI cudaStreamSynchronize(cudaStream_t stream) {
+  bool safe_ava_async = get_stream_synchronize_safe_async(stream);
+  if (safe_ava_async) {
+    return __helper_cudaStreamSynchronize_async(stream);
+  } else {
+    auto ret = __helper_cudaStreamSynchronize_sync(stream);
+    set_stream_synchronize_safe_async(stream, true);
+    return ret;
+  }
+}
+ava_end_replacement;
 
 __host__ cudaError_t CUDARTAPI cudaStreamQuery(cudaStream_t stream) { ava_argument(stream) ava_handle; }
 

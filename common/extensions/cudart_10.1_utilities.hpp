@@ -254,7 +254,9 @@ cudnnStatus_t __helper_cudnnReduceTensor(cudnnHandle_t handle, const cudnnReduce
                                             void *indices, size_t indicesSizeInBytes, void *workspace,
                                             size_t workspaceSizeInBytes, const void *alpha,
                                             const cudnnTensorDescriptor_t aDesc, const void *A, const void *beta,
-                                            const cudnnTensorDescriptor_t cDesc, void *C) ;
+                                            const cudnnTensorDescriptor_t cDesc, void *C);
+cudaError_t __helper_cudaStreamSynchronize_sync(cudaStream_t stream);
+cudaError_t __helper_cudaStreamSynchronize_async(cudaStream_t stream);
 
 
 #if defined(__cplusplus)
