@@ -93,6 +93,10 @@ GuestThread *GuestThread::current() {
 
 void guest_write_stats(const char *data, size_t size) {
   auto gthread = (GuestThread *)GuestThread::current();
+  if (gthread == nullptr) {
+    GuestThread::RegisterSelfAsGuestThread(ava::GuestThread::kGuestStatsPath, ava::GuestThread::kGuestStatsPrefix);
+    gthread = (GuestThread *)GuestThread::current();
+  }
   int guest_stats_fd = gthread->GetGuestStatsFd();
   ava::support::WriteData(guest_stats_fd, data, size);
 }
@@ -118,8 +122,8 @@ int get_guest_stats_fd() {
   auto gthread = (GuestThread *)GuestThread::current();
   if (gthread == nullptr) {
     GuestThread::RegisterSelfAsGuestThread(ava::GuestThread::kGuestStatsPath, ava::GuestThread::kGuestStatsPrefix);
+    gthread = (GuestThread *)GuestThread::current();
   }
-  gthread = (GuestThread *)GuestThread::current();
   return gthread->GetGuestStatsFd();
 }
 
