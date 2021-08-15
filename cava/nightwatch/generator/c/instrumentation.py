@@ -9,24 +9,19 @@ def timing_code_guest(selector: str, name: str, enabled: bool) -> str:
         {{
             struct timeval ts_{name}_timing;
             gettimeofday(&ts_{name}_timing, NULL);
-            printf("Guestlib: {name} {selector} at : %ld s, %ld us\\n", ts_{name}_timing.tv_sec, ts_{name}_timing.tv_usec);
+            fmt::memory_buffer output;
+            fmt::format_to(output, \"Guestlib: {name} {selector} at : {{}} s, {{}} us\\n\",
+                           ts_{name}_timing.tv_sec, ts_{name}_timing.tv_usec);
+            ava::guest_write_stats(output.data(), output.size());
         }}
     #endif\n"""
 
 
-def time_stamp_begin(name: str, enabled: bool) -> str:
+def gen_time_stamp(name: str, enabled: bool) -> str:
     if not enabled:
         return ""
     return f"""#ifdef __AVA_ENABLE_STAT
-               auto {name}_begin_ts = ava::GetMonotonicNanoTimestamp();
-    #endif\n"""
-
-
-def time_stamp_end(name: str, enabled: bool) -> str:
-    if not enabled:
-        return ""
-    return f"""#ifdef __AVA_ENABLE_STAT
-    auto {name}_end_ts = ava::GetMonotonicNanoTimestamp();
+               auto {name}_ts = ava::GetMonotonicNanoTimestamp();
     #endif\n"""
 
 
@@ -65,6 +60,9 @@ def timing_code_worker(location: str, name: str, enabled: bool) -> str:
         {{
             struct timeval ts_{name}_timing;
             gettimeofday(&ts_{name}_timing, NULL);
-            printf("Worker: {name} {location} at : %ld s, %ld us\\n",ts_{name}_timing.tv_sec, ts_{name}_timing.tv_usec);
+            fmt::memory_buffer output;
+            fmt::format_to(output, \"Worker: {name} {location} at : {{}} s, {{}} us\\n\",
+                           ts_{name}_timing.tv_sec, ts_{name}_timing.tv_usec);
+            worker_write_stats(common_context->nw_shadow_thread_pool, output.data(), output.size());
         }}
         #endif\n"""

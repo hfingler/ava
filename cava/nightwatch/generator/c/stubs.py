@@ -9,8 +9,7 @@ from nightwatch.generator.c.instrumentation import (
     timing_code_guest,
     report_alloc_resources,
     report_consume_resources,
-    time_stamp_begin,
-    time_stamp_end,
+    gen_time_stamp,
 )
 from nightwatch.generator.c.util import AllocList
 from nightwatch.generator.common import nl, pack_struct
@@ -68,28 +67,31 @@ def function_implementation(f: Function, enabled_opts: List[str] = None) -> Unio
             """.strip()
 
         collect_stats = ""
+        func_name = str(f.name)
+        if is_async.is_true():
+            func_name = f"{str(f.name)}_async"
         if f.generate_stats_code:
             collect_stats = f"""
             #ifdef __AVA_ENABLE_STAT
-            int guest_stats_fd = ava::get_guest_stats_fd();
             fmt::memory_buffer output;
-            fmt::format_to(output, \"GuestlibStat {{}}, {{}}\\n\",
-                __FUNCTION__,
-                gsl::narrow_cast<int32_t>({str(f.name)}_end_ts - {str(f.name)}_begin_ts));
+            fmt::format_to(output, \"GuestlibStat {func_name}, {{}}\\n\",
+                gsl::narrow_cast<int32_t>({str(f.name)}_end_ts - {str(f.name)}_beg_ts));
             ava::guest_write_stats(output.data(), output.size());
             #endif
             """.strip()
 
         return_code = is_async.if_then_else(
             f"""
-            {time_stamp_end(str(f.name), f.generate_stats_code)}
+            {gen_time_stamp(str(f.name)+"_end", f.generate_stats_code)}
+            {timing_code_guest("after_send", str(f.name), f.generate_timing_code)}
             {collect_stats}
             {forge_success}
             """,
             f"""
                 shadow_thread_handle_command_until(
                   common_context->nw_shadow_thread_pool, __call_record->__call_complete);
-                {time_stamp_end(str(f.name), f.generate_stats_code)}
+                {gen_time_stamp(str(f.name)+"_end", f.generate_stats_code)}
+                {timing_code_guest("after_send", str(f.name), f.generate_timing_code)}
                 {collect_stats}
                 {return_statement}
             """.strip(),
@@ -98,7 +100,7 @@ def function_implementation(f: Function, enabled_opts: List[str] = None) -> Unio
         return f"""
         EXPORTED {(f.api.export_qualifier + " ") if f.api.export_qualifier else ""}{f.return_value.type.spelling} {f.name}(
                     {", ".join(a.original_declaration for a in f.real_arguments)}) {{
-            {time_stamp_begin(str(f.name), f.generate_stats_code)}
+            {gen_time_stamp(str(f.name)+"_beg", f.generate_stats_code)}
             {timing_code_guest("before_marshal", str(f.name), f.generate_timing_code)}
 
             const int ava_is_in = 1, ava_is_out = 0;
@@ -247,20 +249,6 @@ def call_function_wrapper(f: Function) -> ExprOrStr:
             f"{f.return_value.type.nonconst.attach_to(f.return_value.name)}; "
             f"{f.return_value.name} = ({f.return_value.type.nonconst.spelling})"
         )
-    collect_stats = ""
-    if f.generate_stats_code:
-        collect_stats = f"""
-        #ifdef __AVA_ENABLE_STAT
-        fmt::memory_buffer output;
-        fmt::format_to(output, \"WorkerStat {str(f.name)}, {{}}\\n\",
-            gsl::narrow_cast<int32_t>({str(f.name)}_end_ts - {str(f.name)}_begin_ts));
-        worker_write_stats(common_context->nw_shadow_thread_pool, output.data(), output.size());
-        #endif
-        """.strip()
     return f"""
-        auto common_context = ava::CommonContext::instance();
-        {time_stamp_begin(str(f.name), f.generate_stats_code)}
         {capture_ret}__wrapper_{f.name}({", ".join(f"({a.type.spelling}){a.name}" for a in f.arguments)});
-        {time_stamp_end(str(f.name), f.generate_stats_code)}
-        {collect_stats}
     """.strip()

@@ -11,7 +11,7 @@ from nightwatch.generator.c.buffer_handling import (
     size_to_bytes,
     allocate_tmp_buffer,
 )
-from nightwatch.generator.c.instrumentation import timing_code_worker
+from nightwatch.generator.c.instrumentation import timing_code_worker, gen_time_stamp
 from nightwatch.generator.c.stubs import call_function_wrapper
 from nightwatch.generator.c.util import AllocList, compute_buffer_size, for_all_elements
 from nightwatch.generator.common import comment_block
@@ -322,9 +322,20 @@ def call_command_implementation(f: Function, enabled_opts: List[str] = None):
             reply_code = """
                 command_channel_send_command(__chan, (struct command_base*)__ret);
             """.strip()
+        collect_stats = ""
+        if f.generate_stats_code:
+            collect_stats = f"""
+            #ifdef __AVA_ENABLE_STAT
+            fmt::memory_buffer output;
+            fmt::format_to(output, \"WorkerStat {str(f.name)}, {{}}\\n\",
+                gsl::narrow_cast<int32_t>({str(f.name)}_end_ts - {str(f.name)}_beg_ts));
+            worker_write_stats(common_context->nw_shadow_thread_pool, output.data(), output.size());
+            #endif
+            """.strip()
 
         return f"""
         case {f.call_id_spelling}: {{\
+            auto common_context = ava::CommonContext::instance();
             {timing_code_worker("before_unmarshal", str(f.name), f.generate_timing_code)}
             ava_is_in = 1; ava_is_out = 0;
             {alloc_list.alloc}
@@ -338,7 +349,10 @@ def call_command_implementation(f: Function, enabled_opts: List[str] = None):
             {timing_code_worker("after_unmarshal", str(f.name), f.generate_timing_code)}
             /* Perform Call */
             {worker_argument_process_code}
+            {gen_time_stamp(str(f.name)+"_beg", f.generate_stats_code)}
             {call_function_wrapper(f)}
+            {gen_time_stamp(str(f.name)+"_end", f.generate_stats_code)}
+            {collect_stats}
             {timing_code_worker("after_execution", str(f.name), f.generate_timing_code)}
 
             ava_is_in = 0; ava_is_out = 1;
@@ -367,6 +381,7 @@ def call_command_implementation(f: Function, enabled_opts: List[str] = None):
             {reply_code}
             {alloc_list.dealloc}
             {lines(deallocate_managed_for_argument(a, "") for a in f.arguments)}
+            {timing_code_worker("after_send", str(f.name), f.generate_timing_code)}
             break;
         }}
         """.strip()
