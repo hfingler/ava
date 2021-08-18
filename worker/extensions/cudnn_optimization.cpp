@@ -15,12 +15,11 @@
 
 //WANTED: make this generic
 template <class handle_type>
-struct cudnnHandleSet {
+struct HandleSet {
     std::vector<handle_type> handles;
 
-    void cleanup() {
-        for (auto &h : handles) cudnnDestroy(h);
-    }
+    HandleSet();
+    void cleanup();
 
     bool containsHandle(handle_type guest_handle) {
         if (__internal_allContextsEnabled()) {
@@ -42,42 +41,107 @@ struct cudnnHandleSet {
         }
     }
 
-    ~cudnnHandleSet() { cleanup(); }
+    ~HandleSet() { cleanup(); } 
 
     static gint finder(gpointer a, gpointer b) {
-        cudnnHandleSet* set = a;
+        HandleSet* set = a;
         handle_type handle = b;
         //return 0 if it contains
-        return a->containsHandle(b) ? 0 : 1;
+        return set->containsHandle(handle) ? 0 : 1;
     }
-}
+};
 
 template <>
-cudnnHandleSet<cudnnHandle_t>::cudnnHandleSet() {
+HandleSet<cudnnHandle_t>::HandleSet() {
 // if we need to create one per gpu
     if (__internal_allContextsEnabled()) {
         handles.reserve(__internal_getDeviceCount());
         for (uint32_t gpuid = 0; gpuid < __internal_getDeviceCount(); gpuid++) {
+            if(cudaSetDevice(gpuid) != 0) {
+                fprintf(stderr, "### error on cudaSetDevice at HandleSet cublas, skipping!\n");
+                continue;
+            }
             cudnnHandle_t cudnn_handle;
-            cudnn_ret = cudnnCreate(&cudnn_handle);
+            cudnnStatus_t cudnn_ret = cudnnCreate(&cudnn_handle);
             if (cudnn_ret == CUDNN_STATUS_SUCCESS)
-                handles[gpuid] = cudnn_handle;
+                handles.push_back(cudnn_handle);
             else
                 fprintf(stderr, "### Failed to create CUDNN handle!\n");
         }
+        cudaSetDevice(__internal_getCurrentDevice());
     }
     // otherwise keep it simple
     else {
         cudnnHandle_t cudnn_handle;
-        cudnn_ret = cudnnCreate(&cudnn_handle);
+        cudnnStatus_t cudnn_ret = cudnnCreate(&cudnn_handle);
         if (cudnn_ret == CUDNN_STATUS_SUCCESS)
-            handles[0] = cudnn_handle;
+            handles.push_back(cudnn_handle);
         else
             fprintf(stderr, "### Failed to create CUDNN handle!\n");
     }
 }
 
+template <>
+void HandleSet<cudnnHandle_t>::cleanup() {
+    if (__internal_allContextsEnabled()) {
+        for (uint32_t gpuid = 0; gpuid < __internal_getDeviceCount(); gpuid++) {
+            if(cudaSetDevice(gpuid) != 0) {
+                fprintf(stderr, "### error on cudaSetDevice at HandleSet cublas, skipping!\n");
+                continue;
+                cudnnDestroy(handles[gpuid]);
+            }
+        }
+        cudaSetDevice(__internal_getCurrentDevice());
+    } else {
+        cudnnDestroy(handles[0]);
+    }
+}
 
+template <>
+HandleSet<cublasHandle_t>::HandleSet() {
+// if we need to create one per gpu
+    if (__internal_allContextsEnabled()) {
+        handles.reserve(__internal_getDeviceCount());
+        for (uint32_t gpuid = 0; gpuid < __internal_getDeviceCount(); gpuid++) {
+            if(cudaSetDevice(gpuid) != 0) {
+                fprintf(stderr, "### error on cudaSetDevice at HandleSet cublas, skipping!\n");
+                continue;
+            }
+            cublasHandle_t cublas_handle;
+            cublasStatus_t cublas_ret = cublasCreate(&cublas_handle);
+            if (cublas_ret == CUBLAS_STATUS_SUCCESS)
+                handles.push_back(cublas_handle);
+            else
+                fprintf(stderr, "### Failed to create CUDNN handle!\n");
+        }
+        cudaSetDevice(__internal_getCurrentDevice());
+    }
+    // otherwise keep it simple
+    else {
+        cublasHandle_t cublas_handle;
+        cublasStatus_t cublas_ret = cublasCreate(&cublas_handle);
+        if (cublas_ret == CUDNN_STATUS_SUCCESS)
+            handles.push_back(cublas_handle);
+        else
+            fprintf(stderr, "### Failed to create CUDNN handle!\n");
+    }
+}
+
+template <>
+void HandleSet<cublasHandle_t>::cleanup() {
+    if (__internal_allContextsEnabled()) {
+        for (uint32_t gpuid = 0; gpuid < __internal_getDeviceCount(); gpuid++) {
+            if(cudaSetDevice(gpuid) != 0) {
+                fprintf(stderr, "### error on cudaSetDevice at HandleSet cublas, skipping!\n");
+                continue;
+                cublasDestroy(handles[gpuid]);
+            }
+        }
+        cudaSetDevice(__internal_getCurrentDevice());
+    } else {
+        cublasDestroy(handles[0]);
+    }
+}
 
 absl::Mutex cudnn_handles_mu;
 GQueue *used_cudnn_handles ABSL_GUARDED_BY(cudnn_handles_mu);
@@ -93,13 +157,40 @@ void guestlib_cudnn_opt_fini(void) {}
 
 static inline int __gettid() { return gsl::narrow_cast<int>(syscall(SYS_gettid)); }
 
+cudnnHandle_t __get_cudnn_handle(cudnnHandle_t handle) {
+    if (__internal_allContextsEnabled()) {
+        GList* el = g_queue_find_custom(used_cudnn_handles, handle, HandleSet<cudnnHandle_t>::finder);
+        if (el == NULL) {
+            std::cerr << " ### Tried to get a non-existent cudnn handle, I guess." << std::endl;
+            return 1;
+        }
+        HandleSet<cudnnHandle_t>* set = el->data;
+        return set->getCurrentGPUHandle();
+    } else {
+        return handle;
+    }
+}
+
+cublasHandle_t __get_cublas_handle(cublasHandle_t handle) {
+    if (__internal_allContextsEnabled()) {
+        GList* el = g_queue_find_custom(used_cublas_handles, handle, HandleSet<cublasHandle_t>::finder);
+        if (el == NULL) {
+            std::cerr << " ### Tried to get a non-existent cublas handle, I guess." << std::endl;
+            return 1;
+        }
+        HandleSet<cublasHandle_t>* set = el->data;
+        return set->getCurrentGPUHandle();
+    } else {
+        return handle;
+    }
+}
+
 /*
  *  cleanup functions
  */
 void gq_delete(gpointer key, gpointer value, gpointer userdata) { delete value; }
 
 void worker_cudnn_opt_cleanup(void) {
-  // delete each element from queue
     {
         absl::MutexLock lk(&cudnn_handles_mu);
         g_queue_foreach(used_cudnn_handles, gq_delete, NULL);
@@ -108,8 +199,14 @@ void worker_cudnn_opt_cleanup(void) {
         g_queue_foreach(idle_cudnn_handles, gq_delete, NULL);
         g_queue_free(idle_cudnn_handles);
     }
+    {
+        absl::MutexLock lk(&cublas_handles_mu);
+        g_queue_foreach(used_cublas_handles, gq_delete, NULL);
+        g_queue_free(used_cublas_handles);
 
-    //TODO add cublas
+        g_queue_foreach(idle_cublas_handles, gq_delete, NULL);
+        g_queue_free(idle_cublas_handles);
+    }
 }
 
 /*
@@ -119,19 +216,25 @@ void worker_cudnn_opt_cleanup(void) {
 void worker_cudnn_opt_init(uint32_t n_handles) {
     used_cudnn_handles = g_queue_new();
     idle_cudnn_handles = g_queue_new();
+    used_cublas_handles = g_queue_new();
+    idle_cublas_handles = g_queue_new();
 
-    // create all queues
+    // create all cudnn
     {
         absl::MutexLock lk(&cudnn_handles_mu);
         for (int i = 0; i < n_handles; i++) {
-            auto handleset = new cudnnHandleSet<cudnnHandle_t>();
+            auto handleset = new HandleSet<cudnnHandle_t>();
             g_queue_push_tail(idle_cudnn_handles, (gpointer)handleset);
         }
     }
-
-    // TODO: add cublas
-
-    return;
+    // create all cublas
+    {
+        absl::MutexLock lk(&cublas_handles_mu);
+        for (int i = 0; i < n_handles; i++) {
+            auto handleset = new HandleSet<cublasHandle_t>();
+            g_queue_push_tail(idle_cublas_handles, (gpointer)handleset);
+        }
+    }
 }
 
 cudnnStatus_t __cudnnCreate(cudnnHandle_t *handle) {
@@ -143,40 +246,67 @@ cudnnStatus_t __cudnnCreate(cudnnHandle_t *handle) {
     absl::MutexLock lk(&cudnn_handles_mu);
 
     if (g_queue_is_empty(idle_cudnn_handles)) {
-        auto handleset = new cudnnHandleSet<cudnnHandle_t>();
+        auto handleset = new HandleSet<cudnnHandle_t>();
         *handle = handleset->getCurrentGPUHandle();
         g_queue_push_tail(used_cudnn_handles, (gpointer) handleset);
         return CUDNN_STATUS_SUCCESS;
     }
 
-    cudnnHandleSet<cudnnHandle_t> *handleset = g_queue_pop_head(idle_cudnn_handles);
+    HandleSet<cudnnHandle_t> *handleset = g_queue_pop_head(idle_cudnn_handles);
     *handle = handleset->getCurrentGPUHandle();
     g_queue_push_tail(used_cudnn_handles, (gpointer) handleset);
     return CUDNN_STATUS_SUCCESS;
 }
 
 cublasStatus_t __cublasCreate(cublasHandle_t *handle) {
-    //TBD
+#ifndef NDEBUG
+    auto tid = __gettid();
+    std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, CUBLAS_STATUS_SUCCESS);
+#endif
+  
+    absl::MutexLock lk(&cublas_handles_mu);
+
+    if (g_queue_is_empty(idle_cublas_handles)) {
+        auto handleset = new HandleSet<cublasHandle_t>();
+        *handle = handleset->getCurrentGPUHandle();
+        g_queue_push_tail(used_cublas_handles, (gpointer) handleset);
+        return CUBLAS_STATUS_SUCCESS;
+    }
+
+    HandleSet<cublasHandle_t> *handleset = g_queue_pop_head(idle_cublas_handles);
+    *handle = handleset->getCurrentGPUHandle();
+    g_queue_push_tail(used_cublas_handles, (gpointer) handleset);
+    return CUBLAS_STATUS_SUCCESS;
 }
 
-// TODO: the handle is not freed
 cublasStatus_t __helper_cublasDestroy(cublasHandle_t handle) {
+    absl::MutexLock lk(&cublas_handles_mu);
 
+    GList* el = g_queue_find_custom(used_cublas_handles, handle, HandleSet<cublasHandle_t>::finder);
+    if (el == NULL) {
+        std::cerr << " ### Tried to destroy a non-existent cublas handle, I guess." << std::endl;
+        return 1;
+    }
+    HandleSet<cublasHandle_t>* set = el->data;
+    //AFAIK this does not delete the pointer that is in the list, just the list element itself
+    g_queue_delete_link(used_cublas_handles, el);
+    g_queue_push_tail(idle_cublas_handles, (gpointer)set);
+    return 0;
 }
 
-// TODO: the handle is not freed
 cudnnStatus_t __helper_cudnnDestroy(cudnnHandle_t handle) {
     absl::MutexLock lk(&cudnn_handles_mu);
 
-    GList* el = g_queue_find_custom(used_cudnn_handles, handle, cudnnHandleSet<cudnnHandle_t>::finder);
+    GList* el = g_queue_find_custom(used_cudnn_handles, handle, HandleSet<cudnnHandle_t>::finder);
     if (el == NULL) {
         std::cerr << " ### Tried to destroy a non-existent cudnn handle, I guess." << std::endl;
         return 1;
     }
-    cudnnHandleSet<cudnnHandle_t>* set = el->data;
+    HandleSet<cudnnHandle_t>* set = el->data;
     //AFAIK this does not delete the pointer that is in the list, just the list element itself
     g_queue_delete_link(used_cudnn_handles, el);
     g_queue_push_tail(idle_cudnn_handles, (gpointer)set);
+    return 0;
 }
 
 /*
