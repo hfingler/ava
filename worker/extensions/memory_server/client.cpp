@@ -491,20 +491,16 @@ namespace GPUMemoryServer {
         pointer_map.clear();
 
         //iterate over map of maps, destroying streams
-        for (auto& kv : streams_map) {
-            for (auto& idx_st : kv.second) {
-                cudaStreamDestroy(idx_st.second);
-            }
-        }
+        for (auto& kv : streams_map) 
+            __helper_destroy_stream(kv.first);
         streams_map.clear();
 
         //clear leftover events
-        for (auto& kv : events_map) {
-            for (auto& idx_st : kv.second) {
-                cudaEventDestroy(idx_st.second);
-            }
-        }
+        for (auto& kv : events_map) 
+            __helper_cudaEventDestroy(kv.first);
         events_map.clear();
+
+        cudaSetDevice(current_device);
     }
 
 }

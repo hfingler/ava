@@ -92,7 +92,8 @@ cudaError_t __helper_create_stream(cudaStream_t *pStream, unsigned int flags, in
       if (i == cur_dvc) continue;
       cudaSetDevice(i);
       cudaStream_t new_stream;
-      cudaStreamCreateWithPriority(&new_stream, flags, priority);
+      if(cudaStreamCreateWithPriority(&new_stream, flags, priority) > 0 )
+        printf("### ERROR ON __helper_create_stream\n");
       GPUMemoryServer::Client::getInstance().streams_map[*pStream][i] = new_stream;
     }
     // reset back device and return OK
@@ -110,8 +111,9 @@ CUresult __helper_destroy_custream(CUstream stream) {
 }
 
 cudaError_t __helper_destroy_stream(cudaStream_t stream) {
+  if (stream == 0) return 0;
+  
   cudaError_t ret;
-
   if (__internal_allContextsEnabled()) {
     for (int i = 0; i < __internal_getDeviceCount(); i++) {
       cudaSetDevice(i);
@@ -120,6 +122,8 @@ cudaError_t __helper_destroy_stream(cudaStream_t stream) {
     }
     // reset back device and return OK
     cudaSetDevice(__internal_getCurrentDevice());
+    
+    GPUMemoryServer::Client::getInstance().streams_map.erase(stream);
     return (cudaError_t)0;
   } else {
     return cudaStreamDestroy(stream);
@@ -128,11 +132,14 @@ cudaError_t __helper_destroy_stream(cudaStream_t stream) {
 
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
                                    void **args, size_t sharedMem, cudaStream_t stream) {
-  /*
-  if (ret2 != 0) {
-    printf("\n\n\n ##### culaunch SAW AN ERROR:  %d\n\n\n", ret2);
-  }
-  */
+#ifndef NDEBUG
+    //cudaDeviceSynchronize();
+    cudaError_t ret2 = cudaGetLastError();
+    printf("peek error:  %d\n", ret2);
+    if(ret2) {
+      printf("\n\n\n ### __helper_launch_kernel ERROR \n\n\n");
+    }
+#endif
 
   // this might trigger and to migration
   __internal_kernelIn();
@@ -190,15 +197,15 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
     printf(">>> cuLaunchKernel returned %d\n", ret);
 #endif
 
-    /*
-    cudaError_t ret2;
-    cudaDeviceSynchronize();
-    ret2 = cudaGetLastError();
+#ifndef NDEBUG
+    //cudaDeviceSynchronize();
+    cudaError_t ret2 = cudaGetLastError();
     printf("peek error:  %d\n", ret2);
     if(ret2) {
-      printf("\n\n\n ### cuLaunchKernel ERROR \n\n\n");
+      printf("\n\n\n ### __helper_launch_kernel ERROR \n\n\n");
     }
-    */
+#endif
+
     // TODO: fix
     __internal_kernelOut();
     return ret;
@@ -270,23 +277,15 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
 
 cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind) {
   cudaError_t ret;
-  /*
-  cudaError_t ret2 = cudaGetLastError();
-  if (ret != 0) {
-    printf("\n\n\n ##### __helper_cudaMemcpy SAW AN ERROR:  %d\n\n\n", ret2);
-  }
-  */
 
-  /*
-    struct cudaPointerAttributes at;
-    ret = cudaPointerGetAttributes(&at, __translate_ptr(dst));
-    printf("curdvc %d  dst attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(),
-    ret, at.type, at.device, at.devicePointer, at.hostPointer);
-
-    ret = cudaPointerGetAttributes(&at, __translate_ptr(src));
-    printf("curdvc %d  src attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(),
-    ret, at.type, at.device, at.devicePointer, at.hostPointer); cudaGetLastError();
-  */
+#ifndef NDEBUG
+    //cudaDeviceSynchronize();
+    cudaError_t ret2 = cudaGetLastError();
+    printf("peek error:  %d\n", ret2);
+    if(ret2) {
+      printf("\n\n\n ### __helper_cudaMemcpy ERROR \n\n\n");
+    }
+#endif
 
   // auto start = std::chrono::steady_clock::now();
   ret = cudaMemcpy(__translate_ptr(dst), __translate_ptr(src), count, kind);
@@ -301,9 +300,14 @@ cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum c
 }
 
 cudaError_t __helper_cudaMemset(void *devPtr, int value, size_t count) {
-  // cudaError_t ret2;
-  // ret2 = cudaGetLastError();
-  // printf("__helper_cudaMemset  peek error:  %d\n", ret2);
+#ifndef NDEBUG
+    //cudaDeviceSynchronize();
+    cudaError_t ret2 = cudaGetLastError();
+    printf("peek error:  %d\n", ret2);
+    if(ret2) {
+      printf("\n\n\n ### __helper_cudaMemset ERROR \n\n\n");
+    }
+#endif
 
   // auto start = std::chrono::steady_clock::now();
   cudaError_t ret = cudaMemset(__translate_ptr(devPtr), value, count);
