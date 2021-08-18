@@ -16,6 +16,7 @@
 #include "common/logging.h"
 #include "cudart_nw_internal.h"
 #include "extensions/memory_server/client.hpp"
+#include "common/extensions/cudnn_optimization.h"
 
 static inline int __gettid() { return gsl::narrow_cast<int>(syscall(SYS_gettid)); }
 
