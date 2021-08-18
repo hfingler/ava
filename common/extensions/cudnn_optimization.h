@@ -49,6 +49,9 @@ cublasStatus_t __cublasCreate(cublasHandle_t *handle);
 cublasStatus_t __helper_cublasDestroy(cublasHandle_t handle);
 cudnnStatus_t __helper_cudnnDestroy(cudnnHandle_t handle);
 
+cudnnHandle_t __get_cudnn_handle(cudnnHandle_t handle);
+cublasHandle_t __get_cublas_handle(cublasHandle_t handle);
+
 #ifdef __cplusplus
 }
 #endif

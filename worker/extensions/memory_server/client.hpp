@@ -75,7 +75,11 @@ namespace GPUMemoryServer {
         std::map<uint64_t, std::unique_ptr<LocalAlloc>> local_allocs;
 
         //pointer translation
-        std::unordered_map<uint64_t, void*> pointer_map;
+        struct DevPointerTranslate {
+            uint64_t size;
+            uint64_t dstPtr;
+        };
+        std::map<uint64_t, DevPointerTranslate> pointer_map;
         void* translateDevicePointer(void* ptr);
         void tryRemoveFromPointerMap(void* ptr);
         bool isInPointerMap(void* ptr);

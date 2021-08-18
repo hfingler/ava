@@ -3449,6 +3449,12 @@ cublasStatus_t __helper_cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t 
     }
   }
 
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return __helper_cublasSgemm_v2(__get_cublas_handle(handle), transa, transb, m, n, k, alpha, A, lda, B, ldb, beta, 
+                                       C, ldc, alpha_is_gpu, beta_is_gpu);
+  }
+
   /*
 #warning Force synchronization of async buffers
   ava_execute();
@@ -5020,6 +5026,10 @@ cudnnStatus_t CUDNNWINAPI cudnnGetConvolutionForwardWorkspaceSize(cudnnHandle_t 
     ava_out;
     ava_buffer(1);
   }
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnGetConvolutionForwardWorkspaceSize(__get_cudnn_handle(handle), xDesc, wDesc, convDesc, yDesc, algo, sizeInBytes );
+  }
 }
 
 cudnnStatus_t CUDNNWINAPI cudnnGetConvolutionForwardAlgorithm(
@@ -6251,6 +6261,12 @@ cudnnStatus_t CUDNNWINAPI cudnnFindConvolutionForwardAlgorithmEx(
     cu_in_out_buffer(requestedAlgoCount, returnedAlgoCount);
   }
   ava_argument(workSpace) ava_opaque;
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnFindConvolutionForwardAlgorithmEx(__get_cudnn_handle(handle), xDesc,x, wDesc, w, convDesc, yDesc, y,
+    requestedAlgoCount, returnedAlgoCount, perfResults, workSpace, workSpaceSizeInBytes);
+  }
 }
 
 /* Convolution functions: All of the form "output = alpha * Op(inputs) + beta * output" */

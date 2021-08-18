@@ -193,9 +193,16 @@ namespace GPUMemoryServer {
             if (isInPointerMap(*devPtr)) {
                 std::cerr << "### Pointer conflict after memory migration ..." << std::endl;
                 uint64_t optr = *devPtr;
-                while (isInPointerMap(optr)) { optr += 1; }
+                
+                //lets flip a high order bit, this will not be dereferenced anyway
+                optr = optr ^ (1 << 62);
+                if (isInPointerMap(optr)) {
+                    printf("\n\n### FLIPING THE BIT WAS NOT ENOUGH, FIX IT!\n\n\n");
+                }
+
                 //add to the map
-                pointer_map[optr] = *devPtr;
+                pointer_map[optr].dstPtr = *devPtr;
+                pointer_map[optr].size = size;
                 //we now have a pointer that is not in the map
                 *devPtr = optr;
             }
@@ -337,8 +344,18 @@ namespace GPUMemoryServer {
     }
 
     bool Client::isInPointerMap(void* ptr) {
-        auto it = pointer_map.find((uint64_t)ptr);
-        return it != pointer_map.end();
+        auto it = pointer_map.upper_bound((uint64_t)ptr);
+        //if there is no upper bound or previous, return
+        if (it == pointer_map.end() || it == pointer_map.begin()) {
+            return false;
+        }
+
+        it = std::prev(it);
+        if( (uint64_t)ptr < it->first  &&  (uint64_t)ptr >= (it->first + it->second.size) ) {
+            return false;
+        }
+
+        return true;
     }
 
     void Client::tryRemoveFromPointerMap(void* ptr) {
@@ -349,12 +366,32 @@ namespace GPUMemoryServer {
     }
 
     void* Client::translateDevicePointer(void* ptr) {
-        auto it = pointer_map.find((uint64_t)ptr);
-        if (it == pointer_map.end()) {
+        //need to implement interval structure here. easiest idea is to
+        //use std::map, which has a value with {size, other_ptr}.
+        //this map can be queried with 
+        // auto it = pointer_map.upper_bound(ptr)
+        //then we go back one, since upper bound return the first
+        //higher ptr
+        // it = std::prev(it)
+        //and check if it is range
+        // if (ptr >= key)
+
+        auto it = pointer_map.upper_bound((uint64_t)ptr);
+        //if there is no upper bound or previous, return
+        if (it == pointer_map.end() || it == pointer_map.begin()) {
             return ptr;
         }
+
+        //there is an upper bound, check if it really is in the range        
+        it = std::prev(it);
+        if( (uint64_t)ptr < it->first  &&  (uint64_t)ptr >= (it->first + it->second.size) ) {
+            return ptr;
+        }
+
+        //offset is always >= 0
+        uint64_t offset = (uint64_t)ptr - it->first;
+        void* optr = (void*) (it->second.dstPtr + offset);
         //lets double check we need to translate
-        void* optr = it->second;
         cudaError_t ret;
         struct cudaPointerAttributes at;
         ret = cudaPointerGetAttributes(&at, optr);
@@ -402,7 +439,8 @@ namespace GPUMemoryServer {
                 //malloc on new device
                 localMalloc(&devPtr, al.second);
                 //update map
-                pointer_map[al.first] = devPtr;
+                pointer_map[al.first].dstPtr = devPtr;
+                pointer_map[al.first].size = al.second;
                 //cudaMemcpyPeer(devPtr, new_gpuid, al.first, og_device, al.second);
                 cudaMemcpyPeerAsync(devPtr, new_gpuid, al.first, og_device, al.second);
                 //printf("  [%s] copying %d bytes GPUs [%d]  ->  [%d]\n", uuid.c_str(), al.second, og_device, new_gpuid);

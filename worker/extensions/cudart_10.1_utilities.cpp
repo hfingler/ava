@@ -16,6 +16,7 @@
 #include "common/logging.h"
 #include "cudart_nw_internal.h"
 #include "extensions/memory_server/client.hpp"
+#include "common/extensions/cudnn_optimization.h"
 
 static inline int __gettid() { return gsl::narrow_cast<int>(syscall(SYS_gettid)); }
 
@@ -584,14 +585,11 @@ CUresult __helper_cuDeviceGet(CUdevice *device, int ordinal) {
 
 cudaError_t __helper_cudaEventCreateWithFlags(cudaEvent_t *event, unsigned int flags) {
   if (__internal_allContextsEnabled()) {
-    /*
     cudaEventCreateWithFlags(event, flags);
-    printf("------ return event %p\n", *event);
 
     // add current
     uint32_t cur_dvc = __internal_getCurrentDevice();
     GPUMemoryServer::Client::getInstance().events_map[*event][cur_dvc] = *event;
-    printf("------event dev [%d] :  %p\n", cur_dvc, *event);
 
     for (int i = 0; i < __internal_getDeviceCount(); i++) {
       if (i == cur_dvc) continue;
@@ -599,12 +597,10 @@ cudaError_t __helper_cudaEventCreateWithFlags(cudaEvent_t *event, unsigned int f
       cudaEvent_t new_event;
       cudaEventCreateWithFlags(&new_event, flags);
       GPUMemoryServer::Client::getInstance().events_map[*event][i] = new_event;
-
-      printf("------event dev [%d] :  %p\n", i, new_event);
     }
     // reset back device and return OK
     cudaSetDevice(cur_dvc);
-    */
+
     return (cudaError_t)0;
   } else
     return cudaEventCreateWithFlags(event, flags);
@@ -612,7 +608,6 @@ cudaError_t __helper_cudaEventCreateWithFlags(cudaEvent_t *event, unsigned int f
 
 cudaError_t __helper_cudaEventDestroy(cudaEvent_t event) {
   if (__internal_allContextsEnabled()) {
-    /*
     auto v = GPUMemoryServer::Client::getInstance().events_map[event];
     for (int i = 0; i < __internal_getDeviceCount(); i++) {
       cudaSetDevice(i);
@@ -620,7 +615,6 @@ cudaError_t __helper_cudaEventDestroy(cudaEvent_t event) {
     }
     GPUMemoryServer::Client::getInstance().events_map.erase(event);
     cudaSetDevice(__internal_getCurrentDevice());
-    */
     return (cudaError_t)0;
   } else
     return cudaEventDestroy(event);
@@ -628,27 +622,19 @@ cudaError_t __helper_cudaEventDestroy(cudaEvent_t event) {
 
 cudaError_t __helper_cudaEventRecord(cudaEvent_t event, cudaStream_t stream) {
   if (__internal_allContextsEnabled()) {
-    /*
-    printf("input event:  %p\n", event);
-
-    for (int i = 0; i < __internal_getDeviceCount(); i++) {
-      cudaSetDevice(i);
-      printf("------ record at %d :  %p -> %p\n", i, event,
-    GPUMemoryServer::Client::getInstance().events_map[event][i]);
-      cudaEventRecord(GPUMemoryServer::Client::getInstance().events_map[event][i],
-    GPUMemoryServer::Client::getInstance().streams_map[stream][i]); cudaError_t  ret = cudaGetLastError(); if (ret)
-        printf("__helper_cudaEventRecord last error:  %d\n", ret);
-    }
-    cudaSetDevice(__internal_getCurrentDevice());
-    */
-    return (cudaError_t)0;
+    uint32_t cur_dvc = __internal_getCurrentDevice();
+    cudaEvent_t real_event = GPUMemoryServer::Client::getInstance().events_map[event][cur_dvc];
+    return cudaEventRecord(real_event, __translate_stream(stream));
   } else
     return cudaEventRecord(event, stream);
 }
 
 cudaError_t __helper_cudaEventSynchronize(cudaEvent_t event) {
   if (__internal_allContextsEnabled()) {
-    cudaDeviceSynchronize();
+    //cudaDeviceSynchronize();
+    uint32_t cur_dvc = __internal_getCurrentDevice();
+    cudaEvent_t real_event = GPUMemoryServer::Client::getInstance().events_map[event][cur_dvc];
+    cudaEventSynchronize(real_event);
     return (cudaError_t)0;
   } else {
     return cudaEventSynchronize(event);
