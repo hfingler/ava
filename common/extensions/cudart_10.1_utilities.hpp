@@ -51,6 +51,8 @@ struct fatbin_function {
 };
 
 cudaError_t __helper_create_stream(cudaStream_t *pStream, unsigned int flag, int priority);
+cudaError_t __helper_destroy_stream(cudaStream_t stream);
+CUresult __helper_destroy_custream(CUstream stream);
 
 size_t __helper_fatbin_size(const void *cubin);
 

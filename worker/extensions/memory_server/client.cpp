@@ -121,6 +121,7 @@ cudaError_t __internal_cudaFree(void *devPtr) {
 
 cudaStream_t __translate_stream(cudaStream_t key) {
     if (__internal_allContextsEnabled()) {
+        if (key == 0) return 0;
         uint32_t cur_dvc = __internal_getCurrentDevice();
         auto v = GPUMemoryServer::Client::getInstance().streams_map[key];
         return v[cur_dvc];

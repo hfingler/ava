@@ -104,6 +104,28 @@ cudaError_t __helper_create_stream(cudaStream_t *pStream, unsigned int flags, in
   }
 }
 
+CUresult __helper_destroy_custream(CUstream stream) {
+  CUresult ret;
+  ret = (CUresult) __helper_destroy_stream((cudaStream_t) stream);
+}
+
+cudaError_t __helper_destroy_stream(cudaStream_t stream) {
+  cudaError_t ret;
+
+  if (__internal_allContextsEnabled()) {
+    for (int i = 0; i < __internal_getDeviceCount(); i++) {
+      cudaSetDevice(i);
+      //TODO: check if stream is in the map
+      cudaStreamDestroy(GPUMemoryServer::Client::getInstance().streams_map[stream][i]); 
+    }
+    // reset back device and return OK
+    cudaSetDevice(__internal_getCurrentDevice());
+    return (cudaError_t)0;
+  } else {
+    return cudaStreamDestroy(stream);
+  }
+}
+
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
                                    void **args, size_t sharedMem, cudaStream_t stream) {
   /*

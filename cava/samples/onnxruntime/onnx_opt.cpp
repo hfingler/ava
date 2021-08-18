@@ -1789,9 +1789,22 @@ CUresult CUDAAPI cuStreamAddCallback(CUstream hStream, CUstreamCallback callback
   ava_unsupported;
 }
 
-CUresult CUDAAPI cuStreamQuery(CUstream hStream) { ava_argument(hStream) ava_handle; }
+CUresult CUDAAPI cuStreamQuery(CUstream hStream) { 
+  ava_argument(hStream) ava_handle; 
+  
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cuStreamQuery(__helper_translate_stream(hStream));
+  }
+}
 
-CUresult CUDAAPI cuStreamDestroy(CUstream hStream) { ava_argument(hStream) ava_handle; }
+CUresult CUDAAPI cuStreamDestroy(CUstream hStream) { 
+  ava_argument(hStream) ava_handle; 
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return __helper_destroy_custream(hStream);
+  }
+}
 
 CUresult CUDAAPI cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
   ava_argument(dptr) {
@@ -4464,6 +4477,11 @@ CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSetStream(cublasHandle_t handle, cud
   ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(streamId) ava_handle;
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cublasSetStream(__get_cublas_handle(handle), __helper_translate_stream(streamId));
+  }
 }
 
 cublasStatus_t __helper_cublasDestroy(cublasHandle_t handle) {
@@ -4515,6 +4533,13 @@ cudnnStatus_t cudnnBatchNormalizationForwardInference_float(
   ava_argument(bnBias) ava_opaque;
   ava_argument(estimatedMean) ava_opaque;
   ava_argument(estimatedVariance) ava_opaque;
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnBatchNormalizationForwardInference_float(__get_cudnn_handle(handle), mode, alpha, beta, xDesc, x, 
+      yDesc, y, bnScaleBiasMeanVarDesc, bnScale, bnBias, estimatedMean, estimatedVariance, epsilon);
+  }
+
 }
 
 cudnnStatus_t cudnnBatchNormalizationForwardInference_double(
@@ -4633,6 +4658,12 @@ cudnnStatus_t __helper_cudnnConvolutionForward_float(cudnnHandle_t handle, const
   ava_argument(workSpace) ava_opaque;
   ava_argument(yDesc) ava_handle;
   ava_argument(y) ava_opaque;
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return __helper_cudnnConvolutionForward_float(__get_cudnn_handle(handle), alpha, xDesc, x, wDesc, w,
+          convDesc, algo, workSpace, workSpaceSizeInBytes, beta, yDesc, y);
+  }
 }
 
 ava_begin_replacement;
@@ -5209,6 +5240,11 @@ cudnnStatus_t CUDNNWINAPI cudnnSetStream(cudnnHandle_t handle, cudaStream_t stre
   ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(streamId) ava_handle;
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnSetStream(__get_cudnn_handle(handle), __helper_translate_stream(streamId));
+  }
 }
 
 cudnnStatus_t CUDNNWINAPI cudnnSetTensorNdDescriptor(cudnnTensorDescriptor_t tensorDesc, cudnnDataType_t dataType,
@@ -5754,6 +5790,11 @@ cudnnStatus_t cudnnAddTensor_float(cudnnHandle_t handle, const float *alpha, con
   }
   ava_argument(cDesc) ava_handle;
   ava_argument(C) ava_opaque;
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnAddTensor_float(__get_cudnn_handle(handle), alpha, aDesc, A, beta, cDesc, C);
+  }
 }
 
 ava_begin_replacement;
@@ -13897,6 +13938,10 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamGetFlags(cudaStream_
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamDestroy(cudaStream_t stream) {
   ava_argument(stream) ava_handle;
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return __helper_destroy_stream(stream);
+  }
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamWaitEvent(cudaStream_t stream, cudaEvent_t event,
