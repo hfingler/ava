@@ -1215,6 +1215,11 @@ cudaError_t __helper_cuda_memcpy_async_device_to_host(void *dst, const void *src
   if (ava_is_guest) {
     set_stream_synchronize_safe_async(stream, false);
   }
+  #warning Force synchronization of async buffers
+  ava_execute();
+  if (ava_is_worker) {
+    cudaStreamSynchronize(stream);
+  }
 }
 
 cudaError_t __helper_cuda_memcpy_async_device_to_device(void *dst, const void *src, size_t count, cudaStream_t stream) {
