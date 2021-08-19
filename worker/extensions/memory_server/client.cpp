@@ -377,13 +377,13 @@ namespace GPUMemoryServer {
         //and check if it is range
         // if (ptr >= key)
 
+        if (pointer_map.empty()) return ptr;
+
         auto it = pointer_map.upper_bound((uint64_t)ptr);
         //if there is no upper bound or previous, return
-        if (it == pointer_map.end() || it == pointer_map.begin()) {
-            return ptr;
-        }
+        if (it == pointer_map.begin()) return ptr;
 
-        //there is an upper bound, check if it really is in the range        
+        //there is an upper bound or it returned after last element, check if it really is in the range
         it = std::prev(it);
         if( (uint64_t)ptr < it->first  &&  (uint64_t)ptr >= (it->first + it->second.size) ) {
             return ptr;
@@ -391,6 +391,7 @@ namespace GPUMemoryServer {
 
         //offset is always >= 0
         uint64_t offset = (uint64_t)ptr - it->first;
+        std::cerr << "  in translation, offset is " << offset << "\n";
         void* optr = (void*) (it->second.dstPtr + offset);
         //lets double check we need to translate
         cudaError_t ret;
@@ -491,13 +492,14 @@ namespace GPUMemoryServer {
         pointer_map.clear();
 
         //iterate over map of maps, destroying streams
-        for (auto& kv : streams_map) 
-            __helper_destroy_stream(kv.first);
+        while (!streams_map.empty())
+            __helper_destroy_stream((streams_map.begin())->first);
+
         streams_map.clear();
 
         //clear leftover events
-        for (auto& kv : events_map) 
-            __helper_cudaEventDestroy(kv.first);
+        while (!events_map.empty()) 
+            __helper_cudaEventDestroy((events_map.begin())->first);
         events_map.clear();
 
         cudaSetDevice(current_device);

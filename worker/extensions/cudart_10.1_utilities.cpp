@@ -635,11 +635,11 @@ cudaError_t __helper_cudaEventCreateWithFlags(cudaEvent_t *event, unsigned int f
 
 cudaError_t __helper_cudaEventDestroy(cudaEvent_t event) {
   if (__internal_allContextsEnabled()) {
-    auto v = GPUMemoryServer::Client::getInstance().events_map[event];
     for (int i = 0; i < __internal_getDeviceCount(); i++) {
       cudaSetDevice(i);
-      cudaEventDestroy(v[i]);
+      cudaEventDestroy(GPUMemoryServer::Client::getInstance().events_map[event][i]);
     }
+    GPUMemoryServer::Client::getInstance().events_map[event].clear();
     GPUMemoryServer::Client::getInstance().events_map.erase(event);
     cudaSetDevice(__internal_getCurrentDevice());
     return (cudaError_t)0;
