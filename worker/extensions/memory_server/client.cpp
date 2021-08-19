@@ -398,7 +398,7 @@ namespace GPUMemoryServer {
         ret = cudaPointerGetAttributes(&at, optr);
         //if it really is a device pointer
         if (ret == 0 && at.type == 2) {
-            //std::cerr << "translated " << ptr << " to " << optr  << std::endl;
+            std::cerr << "translated " << ptr << " to " << optr  << std::endl;
             return optr;
         }
         else {
@@ -444,8 +444,8 @@ namespace GPUMemoryServer {
                 pointer_map[al.first].size = al.second;
                 //cudaMemcpyPeer(devPtr, new_gpuid, al.first, og_device, al.second);
                 cudaMemcpyPeerAsync(devPtr, new_gpuid, al.first, og_device, al.second);
-                //printf("  [%s] copying %d bytes GPUs [%d]  ->  [%d]\n", uuid.c_str(), al.second, og_device, new_gpuid);
-                //printf("      [%p] -> %p\n", al.first, devPtr);
+                printf("  [%s] copying %d bytes GPUs [%d]  ->  [%d]\n", uuid.c_str(), al.second, og_device, new_gpuid);
+                printf("      [%p] -> %p\n", al.first, devPtr);
             }
             cudaDeviceSynchronize();
 

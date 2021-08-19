@@ -76,6 +76,14 @@ cublasStatus_t __helper_cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t 
   auto tid = __gettid();
   std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
 #endif
+
+#ifndef NDEBUG
+    //cudaDeviceSynchronize();
+    cudaError_t ret2 = cudaGetLastError();
+    if(ret2) 
+      std::cerr << "\n ### __helper_cublasSgemm_v2 ERROR " << ret2 << "\n";
+#endif
+
   return ret;
 }
 
@@ -130,15 +138,25 @@ cudaError_t __helper_destroy_stream(cudaStream_t stream) {
   }
 }
 
+cudaError_t __helper_cudaStreamSynchronize_sync(cudaStream_t stream) {
+  if (__internal_allContextsEnabled()) {
+    for (int i = 0; i < __internal_getDeviceCount(); i++) {
+      cudaStreamSynchronize(GPUMemoryServer::Client::getInstance().streams_map[stream][i]);
+      return 0;
+    }
+  } else {
+    return cudaStreamSynchronize(stream);
+  }
+}
+
+
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
                                    void **args, size_t sharedMem, cudaStream_t stream) {
 #ifndef NDEBUG
     //cudaDeviceSynchronize();
     cudaError_t ret2 = cudaGetLastError();
-    printf("peek error:  %d\n", ret2);
-    if(ret2) {
-      printf("\n\n\n ### __helper_launch_kernel ERROR \n\n\n");
-    }
+    if(ret2) 
+      std::cerr << "\n ### __helper_launch_kernel ERROR " << ret2 << "\n";
 #endif
 
   // this might trigger and to migration
@@ -179,8 +197,6 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   // if we need to figure out the correct context to get function
   if (__internal_allContextsEnabled()) {
     for (int i = 0; i < func->argc; i++) {
-      // printf("  arg %d is handle? %d   size %d  ptr  %p\n", i, func->args[i].is_handle, func->args[i].size, *((void
-      // **)args[i]));
       // TODO: we need something that says if something is a pointer or not
       if (func->args[i].size == 8) {
         *((void **)args[i]) = __translate_ptr(*((void **)args[i]));
@@ -195,15 +211,10 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
 
 #ifndef NDEBUG
     printf(">>> cuLaunchKernel returned %d\n", ret);
-#endif
-
-#ifndef NDEBUG
-    //cudaDeviceSynchronize();
+    cudaDeviceSynchronize();
     cudaError_t ret2 = cudaGetLastError();
-    printf("peek error:  %d\n", ret2);
-    if(ret2) {
-      printf("\n\n\n ### __helper_launch_kernel ERROR \n\n\n");
-    }
+    if(ret2) 
+      std::cerr << "\n ### __helper_launch_kernel ERROR " << ret2 << "\n";
 #endif
 
     // TODO: fix
@@ -281,10 +292,8 @@ cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum c
 #ifndef NDEBUG
     //cudaDeviceSynchronize();
     cudaError_t ret2 = cudaGetLastError();
-    printf("peek error:  %d\n", ret2);
-    if(ret2) {
-      printf("\n\n\n ### __helper_cudaMemcpy ERROR \n\n\n");
-    }
+    if(ret2) 
+      std::cerr << "\n ### __helper_cudaMemcpy ERROR " << ret2 << "\n";
 #endif
 
   // auto start = std::chrono::steady_clock::now();
@@ -300,14 +309,6 @@ cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum c
 }
 
 cudaError_t __helper_cudaMemset(void *devPtr, int value, size_t count) {
-#ifndef NDEBUG
-    //cudaDeviceSynchronize();
-    cudaError_t ret2 = cudaGetLastError();
-    printf("peek error:  %d\n", ret2);
-    if(ret2) {
-      printf("\n\n\n ### __helper_cudaMemset ERROR \n\n\n");
-    }
-#endif
 
   // auto start = std::chrono::steady_clock::now();
   cudaError_t ret = cudaMemset(__translate_ptr(devPtr), value, count);
@@ -657,7 +658,7 @@ cudaError_t __helper_cudaEventRecord(cudaEvent_t event, cudaStream_t stream) {
 
 cudaError_t __helper_cudaEventSynchronize(cudaEvent_t event) {
   if (__internal_allContextsEnabled()) {
-    //cudaDeviceSynchronize();
+    cudaDeviceSynchronize();
     uint32_t cur_dvc = __internal_getCurrentDevice();
     cudaEvent_t real_event = GPUMemoryServer::Client::getInstance().events_map[event][cur_dvc];
     cudaEventSynchronize(real_event);
@@ -674,7 +675,38 @@ cudaStream_t __helper_translate_stream(cudaStream_t stream) { return __translate
 void *__helper_translate_ptr(void *ptr) { return __translate_ptr(ptr); }
 
 cudaError_t __helper_cudaPointerGetAttributes(struct cudaPointerAttributes *attributes, const void *ptr) {
-  return cudaPointerGetAttributes(attributes, ptr);
+  cudaError_t err;
+  
+#ifndef NDEBUG
+    //cudaDeviceSynchronize();
+    cudaError_t ret2 = cudaGetLastError();
+    if(ret2) 
+      std::cerr << "\n### __helper_cudaPointerGetAttributes BEFORE ERROR " << ret2 << "\n";
+#endif
+
+  err = cudaPointerGetAttributes(attributes, ptr);
+
+  //according to docs:
+  //  If pointer was not allocated in, mapped by or registered with context supporting unified addressing cudaErrorInvalidValue is returned. 
+  /*
+  if (cudaGetLastError() == cudaErrorInvalidValue && GPUMemoryServer::Client::getInstance().migrated_type ==  GPUMemoryServer::Migration::KERNEL) {
+    std::cerr << "\n\n\n ### switching from " << __internal_getCurrentDevice()  << " to "  << GPUMemoryServer::Client::getInstance().og_device << "\n\n";
+    cudaSetDevice( GPUMemoryServer::Client::getInstance().og_device ); 
+    err = cudaPointerGetAttributes(attributes, ptr);
+    std::cerr << "\n\n\n ### __helper_cudaPointerGetAttributes we migrated execution, so pointer is on another device, switching.. returned: " << err << "\n\n";
+    cudaSetDevice(__internal_getCurrentDevice()); 
+  }
+*/
+
+#ifndef NDEBUG
+    //cudaDeviceSynchronize();
+    cudaError_t ret3 = cudaGetLastError();
+    if(ret3) 
+      std::cerr << "\n ### __helper_cudaPointerGetAttributes AFTER ERROR " << ret3 << "\n";
+#endif
+
+
+  return err;
 }
 
 cudnnStatus_t __helper_cudnnConvolutionForward_double(cudnnHandle_t handle, const double *alpha,
