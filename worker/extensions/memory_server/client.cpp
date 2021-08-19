@@ -385,13 +385,13 @@ namespace GPUMemoryServer {
 
         //there is an upper bound or it returned after last element, check if it really is in the range
         it = std::prev(it);
-        if( (uint64_t)ptr < it->first  &&  (uint64_t)ptr >= (it->first + it->second.size) ) {
+        if( (uint64_t)ptr < it->first  ||  (uint64_t)ptr >= (it->first + it->second.size) ) {
             return ptr;
         }
 
         //offset is always >= 0
         uint64_t offset = (uint64_t)ptr - it->first;
-        std::cerr << "  in translation, offset is " << offset << "\n";
+        //std::cerr << "  in translation, offset is " << offset << "\n";
         void* optr = (void*) (it->second.dstPtr + offset);
         //lets double check we need to translate
         cudaError_t ret;

@@ -290,16 +290,31 @@ cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum c
   cudaError_t ret;
 
 #ifndef NDEBUG
+/*
     //cudaDeviceSynchronize();
+    int d;
+    cudaGetDevice(&d);
+    std::cerr << "\n ### __helper_cudaMemcpy at DEVICE " << d << " src/dest: " << std::hex << src << " " << std::hex << dst << "\n";
+
     cudaError_t ret2 = cudaGetLastError();
     if(ret2) 
-      std::cerr << "\n ### __helper_cudaMemcpy ERROR " << ret2 << "\n";
+      std::cerr << "\n ### __helper_cudaMemcpy LAST ERROR " << ret2 << "\n";
+*/
 #endif
 
   // auto start = std::chrono::steady_clock::now();
   ret = cudaMemcpy(__translate_ptr(dst), __translate_ptr(src), count, kind);
   // auto end = std::chrono::steady_clock::now();
   // std::cerr << ";;;" << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << std::endl;
+
+#ifndef NDEBUG
+/*
+  //cudaDeviceSynchronize();
+  cudaError_t ret3 = cudaGetLastError();
+  if(ret3) 
+    std::cerr << "\n ### __helper_cudaMemcpy CAUSED ERROR " << ret3 << "\n";
+*/
+#endif
 
 #ifndef NDEBUG
   auto tid = __gettid();
