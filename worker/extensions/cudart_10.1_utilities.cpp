@@ -16,6 +16,7 @@
 #include "common/logging.h"
 #include "cudart_nw_internal.h"
 #include "extensions/memory_server/client.hpp"
+#include "common/extensions/cudnn_optimization.h"
 
 static inline int __gettid() { return gsl::narrow_cast<int>(syscall(SYS_gettid)); }
 
@@ -91,7 +92,8 @@ cudaError_t __helper_create_stream(cudaStream_t *pStream, unsigned int flags, in
       if (i == cur_dvc) continue;
       cudaSetDevice(i);
       cudaStream_t new_stream;
-      cudaStreamCreateWithPriority(&new_stream, flags, priority);
+      if(cudaStreamCreateWithPriority(&new_stream, flags, priority) > 0 )
+        printf("### ERROR ON __helper_create_stream\n");
       GPUMemoryServer::Client::getInstance().streams_map[*pStream][i] = new_stream;
     }
     // reset back device and return OK
@@ -103,13 +105,41 @@ cudaError_t __helper_create_stream(cudaStream_t *pStream, unsigned int flags, in
   }
 }
 
+CUresult __helper_destroy_custream(CUstream stream) {
+  CUresult ret;
+  ret = (CUresult) __helper_destroy_stream((cudaStream_t) stream);
+}
+
+cudaError_t __helper_destroy_stream(cudaStream_t stream) {
+  if (stream == 0) return 0;
+  
+  cudaError_t ret;
+  if (__internal_allContextsEnabled()) {
+    for (int i = 0; i < __internal_getDeviceCount(); i++) {
+      cudaSetDevice(i);
+      //TODO: check if stream is in the map
+      cudaStreamDestroy(GPUMemoryServer::Client::getInstance().streams_map[stream][i]); 
+    }
+    // reset back device and return OK
+    cudaSetDevice(__internal_getCurrentDevice());
+    
+    GPUMemoryServer::Client::getInstance().streams_map.erase(stream);
+    return (cudaError_t)0;
+  } else {
+    return cudaStreamDestroy(stream);
+  }
+}
+
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
                                    void **args, size_t sharedMem, cudaStream_t stream) {
-  /*
-  if (ret2 != 0) {
-    printf("\n\n\n ##### culaunch SAW AN ERROR:  %d\n\n\n", ret2);
-  }
-  */
+#ifndef NDEBUG
+    //cudaDeviceSynchronize();
+    cudaError_t ret2 = cudaGetLastError();
+    printf("peek error:  %d\n", ret2);
+    if(ret2) {
+      printf("\n\n\n ### __helper_launch_kernel ERROR \n\n\n");
+    }
+#endif
 
   // this might trigger and to migration
   __internal_kernelIn();
@@ -167,15 +197,15 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
     printf(">>> cuLaunchKernel returned %d\n", ret);
 #endif
 
-    /*
-    cudaError_t ret2;
-    cudaDeviceSynchronize();
-    ret2 = cudaGetLastError();
+#ifndef NDEBUG
+    //cudaDeviceSynchronize();
+    cudaError_t ret2 = cudaGetLastError();
     printf("peek error:  %d\n", ret2);
     if(ret2) {
-      printf("\n\n\n ### cuLaunchKernel ERROR \n\n\n");
+      printf("\n\n\n ### __helper_launch_kernel ERROR \n\n\n");
     }
-    */
+#endif
+
     // TODO: fix
     __internal_kernelOut();
     return ret;
@@ -247,23 +277,15 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
 
 cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind) {
   cudaError_t ret;
-  /*
-  cudaError_t ret2 = cudaGetLastError();
-  if (ret != 0) {
-    printf("\n\n\n ##### __helper_cudaMemcpy SAW AN ERROR:  %d\n\n\n", ret2);
-  }
-  */
 
-  /*
-    struct cudaPointerAttributes at;
-    ret = cudaPointerGetAttributes(&at, __translate_ptr(dst));
-    printf("curdvc %d  dst attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(),
-    ret, at.type, at.device, at.devicePointer, at.hostPointer);
-
-    ret = cudaPointerGetAttributes(&at, __translate_ptr(src));
-    printf("curdvc %d  src attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", __internal_getCurrentDevice(),
-    ret, at.type, at.device, at.devicePointer, at.hostPointer); cudaGetLastError();
-  */
+#ifndef NDEBUG
+    //cudaDeviceSynchronize();
+    cudaError_t ret2 = cudaGetLastError();
+    printf("peek error:  %d\n", ret2);
+    if(ret2) {
+      printf("\n\n\n ### __helper_cudaMemcpy ERROR \n\n\n");
+    }
+#endif
 
   // auto start = std::chrono::steady_clock::now();
   ret = cudaMemcpy(__translate_ptr(dst), __translate_ptr(src), count, kind);
@@ -278,9 +300,14 @@ cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum c
 }
 
 cudaError_t __helper_cudaMemset(void *devPtr, int value, size_t count) {
-  // cudaError_t ret2;
-  // ret2 = cudaGetLastError();
-  // printf("__helper_cudaMemset  peek error:  %d\n", ret2);
+#ifndef NDEBUG
+    //cudaDeviceSynchronize();
+    cudaError_t ret2 = cudaGetLastError();
+    printf("peek error:  %d\n", ret2);
+    if(ret2) {
+      printf("\n\n\n ### __helper_cudaMemset ERROR \n\n\n");
+    }
+#endif
 
   // auto start = std::chrono::steady_clock::now();
   cudaError_t ret = cudaMemset(__translate_ptr(devPtr), value, count);
@@ -584,14 +611,11 @@ CUresult __helper_cuDeviceGet(CUdevice *device, int ordinal) {
 
 cudaError_t __helper_cudaEventCreateWithFlags(cudaEvent_t *event, unsigned int flags) {
   if (__internal_allContextsEnabled()) {
-    /*
     cudaEventCreateWithFlags(event, flags);
-    printf("------ return event %p\n", *event);
 
     // add current
     uint32_t cur_dvc = __internal_getCurrentDevice();
     GPUMemoryServer::Client::getInstance().events_map[*event][cur_dvc] = *event;
-    printf("------event dev [%d] :  %p\n", cur_dvc, *event);
 
     for (int i = 0; i < __internal_getDeviceCount(); i++) {
       if (i == cur_dvc) continue;
@@ -599,12 +623,10 @@ cudaError_t __helper_cudaEventCreateWithFlags(cudaEvent_t *event, unsigned int f
       cudaEvent_t new_event;
       cudaEventCreateWithFlags(&new_event, flags);
       GPUMemoryServer::Client::getInstance().events_map[*event][i] = new_event;
-
-      printf("------event dev [%d] :  %p\n", i, new_event);
     }
     // reset back device and return OK
     cudaSetDevice(cur_dvc);
-    */
+
     return (cudaError_t)0;
   } else
     return cudaEventCreateWithFlags(event, flags);
@@ -612,7 +634,6 @@ cudaError_t __helper_cudaEventCreateWithFlags(cudaEvent_t *event, unsigned int f
 
 cudaError_t __helper_cudaEventDestroy(cudaEvent_t event) {
   if (__internal_allContextsEnabled()) {
-    /*
     auto v = GPUMemoryServer::Client::getInstance().events_map[event];
     for (int i = 0; i < __internal_getDeviceCount(); i++) {
       cudaSetDevice(i);
@@ -620,7 +641,6 @@ cudaError_t __helper_cudaEventDestroy(cudaEvent_t event) {
     }
     GPUMemoryServer::Client::getInstance().events_map.erase(event);
     cudaSetDevice(__internal_getCurrentDevice());
-    */
     return (cudaError_t)0;
   } else
     return cudaEventDestroy(event);
@@ -628,27 +648,19 @@ cudaError_t __helper_cudaEventDestroy(cudaEvent_t event) {
 
 cudaError_t __helper_cudaEventRecord(cudaEvent_t event, cudaStream_t stream) {
   if (__internal_allContextsEnabled()) {
-    /*
-    printf("input event:  %p\n", event);
-
-    for (int i = 0; i < __internal_getDeviceCount(); i++) {
-      cudaSetDevice(i);
-      printf("------ record at %d :  %p -> %p\n", i, event,
-    GPUMemoryServer::Client::getInstance().events_map[event][i]);
-      cudaEventRecord(GPUMemoryServer::Client::getInstance().events_map[event][i],
-    GPUMemoryServer::Client::getInstance().streams_map[stream][i]); cudaError_t  ret = cudaGetLastError(); if (ret)
-        printf("__helper_cudaEventRecord last error:  %d\n", ret);
-    }
-    cudaSetDevice(__internal_getCurrentDevice());
-    */
-    return (cudaError_t)0;
+    uint32_t cur_dvc = __internal_getCurrentDevice();
+    cudaEvent_t real_event = GPUMemoryServer::Client::getInstance().events_map[event][cur_dvc];
+    return cudaEventRecord(real_event, __translate_stream(stream));
   } else
     return cudaEventRecord(event, stream);
 }
 
 cudaError_t __helper_cudaEventSynchronize(cudaEvent_t event) {
   if (__internal_allContextsEnabled()) {
-    cudaDeviceSynchronize();
+    //cudaDeviceSynchronize();
+    uint32_t cur_dvc = __internal_getCurrentDevice();
+    cudaEvent_t real_event = GPUMemoryServer::Client::getInstance().events_map[event][cur_dvc];
+    cudaEventSynchronize(real_event);
     return (cudaError_t)0;
   } else {
     return cudaEventSynchronize(event);
