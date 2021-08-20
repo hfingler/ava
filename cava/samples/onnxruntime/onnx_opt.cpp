@@ -6313,8 +6313,8 @@ cudnnStatus_t CUDNNWINAPI cudnnFindConvolutionForwardAlgorithmEx(
   if (ava_is_worker) {
     return cudnnFindConvolutionForwardAlgorithmEx(__get_cudnn_handle(handle), xDesc, __helper_translate_const_ptr(x), wDesc, 
       __helper_translate_const_ptr(w), convDesc, yDesc, __helper_translate_ptr(y), requestedAlgoCount, returnedAlgoCount, 
-      perfResults, 0, 0);
-      //perfResults, __helper_translate_ptr(workSpace), workSpaceSizeInBytes);
+      perfResults, __helper_translate_ptr(workSpace), workSpaceSizeInBytes);
+      //perfResults, 0, 0);
   }
 }
 
