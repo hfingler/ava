@@ -233,6 +233,7 @@ cudaError_t __helper_cudaEventSynchronize(cudaEvent_t event);
 cudaEvent_t __helper_translate_event(cudaEvent_t event);
 cudaStream_t __helper_translate_stream(cudaStream_t stream);
 void *__helper_translate_ptr(void *ptr);
+const void *__helper_translate_const_ptr(const void *ptr);
 
 cudnnStatus_t __helper_cudnnCreateActivationDescriptor(cudnnActivationDescriptor_t *activationDesc);
 cudnnStatus_t __helper_cudnnSetActivationDescriptor(cudnnActivationDescriptor_t activationDesc,

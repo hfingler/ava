@@ -1218,7 +1218,7 @@ cudaError_t __helper_cuda_memcpy_async_device_to_host(void *dst, const void *src
   #warning Force synchronization of async buffers
   ava_execute();
   if (ava_is_worker) {
-    cudaStreamSynchronize(stream);
+    cudaStreamSynchronize(__helper_translate_stream(stream));
   }
 }
 
@@ -1260,6 +1260,7 @@ cudaError_t __helper_cuda_memcpy_async_default(void *dst, const void *src, size_
   ava_argument(stream) ava_handle;
 }
 
+//the streams for these calls here are translated in vendor/ava/worker/extensions/cudart_10.1_utilities.cpp
 ava_begin_replacement;
 EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMemcpyAsync(void *dst, const void *src, size_t count,
                                                                            enum cudaMemcpyKind kind,
@@ -3498,12 +3499,12 @@ EXPORTED CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemm_v2(cublasHandle_t han
   bool alpha_is_gpu = false;
   bool beta_is_gpu = false;
   ret = __helper_cudaPointerGetAttributes(&alpha_attr, alpha);
-  // printf("alpha attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, alpha_attr.type, alpha_attr.device,
-  // alpha_attr.devicePointer, alpha_attr.hostPointer);
+  printf("alpha attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, alpha_attr.type, alpha_attr.device,
+  alpha_attr.devicePointer, alpha_attr.hostPointer);
   if (ret != cudaSuccess) {
     alpha_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(alpha));
     cudaGetLastError();
-    // printf(" alpha on GPU? %d\n", alpha_is_gpu);
+    printf(" alpha on GPU? %d\n", alpha_is_gpu);
   } else {
 #ifndef NDEBUG
     fprintf(stderr, "alpha type is %d\n", alpha_attr.type);
@@ -3511,12 +3512,12 @@ EXPORTED CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemm_v2(cublasHandle_t han
     alpha_is_gpu = (alpha_attr.type == cudaMemoryTypeDevice);
   }
   ret = __helper_cudaPointerGetAttributes(&beta_attr, beta);
-  // printf("beta attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, beta_attr.type, beta_attr.device,
-  // beta_attr.devicePointer, beta_attr.hostPointer);
+  printf("beta attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, beta_attr.type, beta_attr.device,
+  beta_attr.devicePointer, beta_attr.hostPointer);
   if (ret != cudaSuccess) {
     beta_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(beta));
     cudaGetLastError();
-    // printf(" beta on GPU? %d\n", alpha_is_gpu);
+    printf(" beta on GPU? %d\n", alpha_is_gpu);
   } else {
 #ifndef NDEBUG
     fprintf(stderr, "beta type is %d\n", beta_attr.type);
@@ -4666,8 +4667,8 @@ cudnnStatus_t __helper_cudnnConvolutionForward_float(cudnnHandle_t handle, const
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return __helper_cudnnConvolutionForward_float(__get_cudnn_handle(handle), alpha, xDesc, x, wDesc, w,
-          convDesc, algo, workSpace, workSpaceSizeInBytes, beta, yDesc, y);
+    return __helper_cudnnConvolutionForward_float(__get_cudnn_handle(handle), alpha, xDesc, __helper_translate_const_ptr(x), wDesc, __helper_translate_const_ptr(w),
+          convDesc, algo, __helper_translate_ptr(workSpace), workSpaceSizeInBytes, beta, yDesc, __helper_translate_ptr(y));
   }
 }
 
@@ -5798,7 +5799,7 @@ cudnnStatus_t cudnnAddTensor_float(cudnnHandle_t handle, const float *alpha, con
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnAddTensor_float(__get_cudnn_handle(handle), alpha, aDesc, A, beta, cDesc, C);
+    return cudnnAddTensor_float(__get_cudnn_handle(handle), alpha, aDesc, __helper_translate_const_ptr(A), beta, cDesc, __helper_translate_ptr(C));
   }
 }
 
@@ -6310,8 +6311,10 @@ cudnnStatus_t CUDNNWINAPI cudnnFindConvolutionForwardAlgorithmEx(
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnFindConvolutionForwardAlgorithmEx(__get_cudnn_handle(handle), xDesc,x, wDesc, w, convDesc, yDesc, y,
-    requestedAlgoCount, returnedAlgoCount, perfResults, workSpace, workSpaceSizeInBytes);
+    return cudnnFindConvolutionForwardAlgorithmEx(__get_cudnn_handle(handle), xDesc, __helper_translate_const_ptr(x), wDesc, 
+      __helper_translate_const_ptr(w), convDesc, yDesc, __helper_translate_ptr(y), requestedAlgoCount, returnedAlgoCount, 
+      perfResults, 0, 0);
+      //perfResults, __helper_translate_ptr(workSpace), workSpaceSizeInBytes);
   }
 }
 
@@ -6346,6 +6349,13 @@ cudnnStatus_t cudnnConvolutionBiasActivationForward_double(
   ava_argument(activationDesc) ava_handle;
   ava_argument(yDesc) ava_handle;
   ava_argument(y) ava_opaque;
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnConvolutionBiasActivationForward_double(__get_cudnn_handle(handle), alpha1, xDesc, __helper_translate_const_ptr(x), wDesc, 
+    __helper_translate_const_ptr(w), convDesc, algo, __helper_translate_ptr(workSpace), workSpaceSizeInBytes, alpha2, zDesc, __helper_translate_const_ptr(z), biasDesc, 
+    __helper_translate_const_ptr(bias), activationDesc, yDesc, __helper_translate_ptr(y));
+  }
 }
 
 cudnnStatus_t cudnnConvolutionBiasActivationForward_float(
@@ -6354,7 +6364,6 @@ cudnnStatus_t cudnnConvolutionBiasActivationForward_float(
     cudnnConvolutionFwdAlgo_t algo, void *workSpace, size_t workSpaceSizeInBytes, const float *alpha2,
     const cudnnTensorDescriptor_t zDesc, const void *z, const cudnnTensorDescriptor_t biasDesc, const void *bias,
     const cudnnActivationDescriptor_t activationDesc, const cudnnTensorDescriptor_t yDesc, void *y) {
-  // ava_disable_native_call;
   ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(alpha1) {
@@ -6379,11 +6388,12 @@ cudnnStatus_t cudnnConvolutionBiasActivationForward_float(
   ava_argument(yDesc) ava_handle;
   ava_argument(y) ava_opaque;
 
-  // if (ava_is_worker) {
-  //  return __helper_cudnnConvolutionBiasActivationForward(handle, alpha1, xDesc, x, wDesc, w, convDesc, algo,
-  //  workSpace,
-  //    workSpaceSizeInBytes, alpha2, zDesc, z, biasDesc, bias, activationDesc, yDesc, y);
-  //}
+   ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnConvolutionBiasActivationForward_float(__get_cudnn_handle(handle), alpha1, xDesc, __helper_translate_const_ptr(x), wDesc, 
+    __helper_translate_const_ptr(w), convDesc, algo, __helper_translate_ptr(workSpace), workSpaceSizeInBytes, alpha2, zDesc, 
+    __helper_translate_const_ptr(z), biasDesc, __helper_translate_const_ptr(bias), activationDesc, yDesc, __helper_translate_ptr(y));
+  }
 }
 
 ava_begin_replacement;
@@ -13971,13 +13981,13 @@ cudaError_t __helper_cudaStreamSynchronize_async(cudaStream_t stream) {
 ava_begin_replacement;
 EXPORTED __host__ cudaError_t CUDARTAPI cudaStreamSynchronize(cudaStream_t stream) {
   bool safe_ava_async = get_stream_synchronize_safe_async(stream);
-  if (safe_ava_async) {
-    return __helper_cudaStreamSynchronize_async(stream);
-  } else {
+  //if (safe_ava_async) {
+  //  return __helper_cudaStreamSynchronize_async(stream);
+  //} else {
     auto ret = __helper_cudaStreamSynchronize_sync(stream);
-    set_stream_synchronize_safe_async(stream, true);
+  //  set_stream_synchronize_safe_async(stream, true);
     return ret;
-  }
+  //}
 }
 ava_end_replacement;
 

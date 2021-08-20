@@ -31,6 +31,7 @@ using namespace std;
 #include <thread>
 #include <condition_variable>
 #include <mutex>
+#include <iostream>
 
 /*
  *   two condition variables to make thread and worker synchronize
@@ -191,7 +192,7 @@ void handle_command_and_notify(struct command_channel *chan, struct command_base
     printf(">>> shadow thread setting default device  [%d] \n", context->current_device);
   }
   if (tl_current_device != context->current_device) {
-    printf(">>> shadow thread detected change of device, changing..  [%d] -> [%d]\n", tl_current_device, context->current_device);
+    std::cerr << ">>> shadow thread detected change of device, changing from" << tl_current_device << " to " << context->current_device << std::endl;
     cudaSetDevice(context->current_device);
     tl_current_device = context->current_device;
   }

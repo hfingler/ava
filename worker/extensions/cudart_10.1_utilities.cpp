@@ -24,25 +24,25 @@ uint32_t __internal_getCurrentDeviceIndex() { return __internal_getCurrentDevice
 
 cudaError_t __helper_cuda_memcpy_async_host_to_host(void *dst, const void *src, size_t count, cudaStream_t stream) {
   cudaError_t ret;
-  ret = cudaMemcpyAsync(dst, src, count, cudaMemcpyHostToHost, stream);
+  ret = cudaMemcpyAsync(dst, src, count, cudaMemcpyHostToHost, __translate_stream(stream));
   return ret;
 }
 
 cudaError_t __helper_cuda_memcpy_async_host_to_device(void *dst, const void *src, size_t count, cudaStream_t stream) {
   cudaError_t ret;
-  ret = cudaMemcpyAsync(__translate_ptr(dst), src, count, cudaMemcpyHostToDevice, stream);
+  ret = cudaMemcpyAsync(__translate_ptr(dst), src, count, cudaMemcpyHostToDevice, __translate_stream(stream));
   return ret;
 }
 
 cudaError_t __helper_cuda_memcpy_async_device_to_host(void *dst, const void *src, size_t count, cudaStream_t stream) {
   cudaError_t ret;
-  ret = cudaMemcpyAsync(dst, __translate_ptr(src), count, cudaMemcpyDeviceToHost, stream);
+  ret = cudaMemcpyAsync(dst, __translate_ptr(src), count, cudaMemcpyDeviceToHost, __translate_stream(stream));
   return ret;
 }
 
 cudaError_t __helper_cuda_memcpy_async_device_to_device(void *dst, const void *src, size_t count, cudaStream_t stream) {
   cudaError_t ret;
-  ret = cudaMemcpyAsync(__translate_ptr(dst), __translate_ptr(src), count, cudaMemcpyDeviceToDevice, stream);
+  ret = cudaMemcpyAsync(__translate_ptr(dst), __translate_ptr(src), count, cudaMemcpyDeviceToDevice, __translate_stream(stream));
   return ret;
 }
 
@@ -50,7 +50,7 @@ cudaError_t __helper_cuda_memcpy_async_default(void *dst, const void *src, size_
                                                bool dst_is_gpu, bool src_is_gpu) {
   cudaError_t ret;
   ret = cudaMemcpyAsync(dst_is_gpu ? __translate_ptr(dst) : dst, src_is_gpu ? __translate_ptr(src) : src, count,
-                        cudaMemcpyDefault, stream);
+                        cudaMemcpyDefault, __translate_stream(stream));
   return ret;
 }
 
@@ -70,8 +70,9 @@ cublasStatus_t __helper_cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t 
                                        const float *A, int lda, const float *B, int ldb,
                                        const float *beta, /* host or device pointer */
                                        float *C, int ldc, bool alpha_is_gpu, bool beta_is_gpu) {
-  auto ret = cublasSgemm(handle, transa, transb, m, n, k, alpha_is_gpu ? __translate_ptr(alpha) : alpha, A, lda, B, ldb,
-                         beta_is_gpu ? __translate_ptr(beta) : beta, C, ldc);
+  auto ret = cublasSgemm(handle, transa, transb, m, n, k, 
+                        alpha_is_gpu ? __translate_ptr(alpha) : alpha, A, lda, B, ldb,
+                        beta_is_gpu ? __translate_ptr(beta) : beta, C, ldc);
 #ifndef NDEBUG
   auto tid = __gettid();
   std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
@@ -153,10 +154,10 @@ cudaError_t __helper_cudaStreamSynchronize_sync(cudaStream_t stream) {
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
                                    void **args, size_t sharedMem, cudaStream_t stream) {
 #ifndef NDEBUG
-    //cudaDeviceSynchronize();
+    cudaDeviceSynchronize();
     cudaError_t ret2 = cudaGetLastError();
     if(ret2) 
-      std::cerr << "\n ### __helper_launch_kernel ERROR " << ret2 << "\n";
+      std::cerr << "\n ### __helper_launch_kernel ERROR BEFORE " << ret2 << "\n";
 #endif
 
   // this might trigger and to migration
@@ -169,7 +170,7 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
     cur_dvc = 0;
 
 #ifndef NDEBUG
-  printf("__helper_launch_kernel on device slot [%d]\n", cur_dvc);
+  std::cerr << "__helper_launch_kernel on device slot " << cur_dvc << std::endl;
 #endif
 
   if (func == NULL) {
@@ -205,16 +206,16 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
 
     // auto start = std::chrono::steady_clock::now();
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[cur_dvc], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
-                                      blockDim.z, sharedMem, (CUstream)__helper_translate_stream(stream), args, NULL);
+                                      blockDim.z, sharedMem, (CUstream)__translate_stream(stream), args, NULL);
     // auto end = std::chrono::steady_clock::now();
     // std::cerr << "???" << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << std::endl;
 
 #ifndef NDEBUG
-    printf(">>> cuLaunchKernel returned %d\n", ret);
+    std::cerr << ">>> cuLaunchKernel returned " << ret << std::endl;
     cudaDeviceSynchronize();
     cudaError_t ret2 = cudaGetLastError();
     if(ret2) 
-      std::cerr << "\n ### __helper_launch_kernel ERROR " << ret2 << "\n";
+      std::cerr << "\n ### __helper_launch_kernel ERROR after sync " << ret2 << "\n";
 #endif
 
     // TODO: fix
@@ -290,7 +291,7 @@ cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum c
   cudaError_t ret;
 
 #ifndef NDEBUG
-/*
+
     //cudaDeviceSynchronize();
     int d;
     cudaGetDevice(&d);
@@ -299,7 +300,7 @@ cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum c
     cudaError_t ret2 = cudaGetLastError();
     if(ret2) 
       std::cerr << "\n ### __helper_cudaMemcpy LAST ERROR " << ret2 << "\n";
-*/
+
 #endif
 
   // auto start = std::chrono::steady_clock::now();
@@ -308,12 +309,12 @@ cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum c
   // std::cerr << ";;;" << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << std::endl;
 
 #ifndef NDEBUG
-/*
+
   //cudaDeviceSynchronize();
   cudaError_t ret3 = cudaGetLastError();
   if(ret3) 
     std::cerr << "\n ### __helper_cudaMemcpy CAUSED ERROR " << ret3 << "\n";
-*/
+
 #endif
 
 #ifndef NDEBUG
@@ -673,7 +674,7 @@ cudaError_t __helper_cudaEventRecord(cudaEvent_t event, cudaStream_t stream) {
 
 cudaError_t __helper_cudaEventSynchronize(cudaEvent_t event) {
   if (__internal_allContextsEnabled()) {
-    cudaDeviceSynchronize();
+    //cudaDeviceSynchronize();
     uint32_t cur_dvc = __internal_getCurrentDevice();
     cudaEvent_t real_event = GPUMemoryServer::Client::getInstance().events_map[event][cur_dvc];
     cudaEventSynchronize(real_event);
@@ -689,9 +690,9 @@ cudaStream_t __helper_translate_stream(cudaStream_t stream) { return __translate
 
 void *__helper_translate_ptr(void *ptr) { return __translate_ptr(ptr); }
 
+const void *__helper_translate_const_ptr(const void *ptr) { return __translate_ptr(ptr); }
+
 cudaError_t __helper_cudaPointerGetAttributes(struct cudaPointerAttributes *attributes, const void *ptr) {
-  cudaError_t err;
-  
 #ifndef NDEBUG
     //cudaDeviceSynchronize();
     cudaError_t ret2 = cudaGetLastError();
@@ -699,7 +700,7 @@ cudaError_t __helper_cudaPointerGetAttributes(struct cudaPointerAttributes *attr
       std::cerr << "\n### __helper_cudaPointerGetAttributes BEFORE ERROR " << ret2 << "\n";
 #endif
 
-  err = cudaPointerGetAttributes(attributes, ptr);
+  cudaError_t err = cudaPointerGetAttributes(attributes, ptr);
 
   //according to docs:
   //  If pointer was not allocated in, mapped by or registered with context supporting unified addressing cudaErrorInvalidValue is returned. 
@@ -719,7 +720,6 @@ cudaError_t __helper_cudaPointerGetAttributes(struct cudaPointerAttributes *attr
     if(ret3) 
       std::cerr << "\n ### __helper_cudaPointerGetAttributes AFTER ERROR " << ret3 << "\n";
 #endif
-
 
   return err;
 }
@@ -787,7 +787,23 @@ cudnnStatus_t cudnnAddTensor_double(cudnnHandle_t handle, const double *alpha, c
 
 cudnnStatus_t cudnnAddTensor_float(cudnnHandle_t handle, const float *alpha, const cudnnTensorDescriptor_t aDesc,
                                    const void *A, const float *beta, const cudnnTensorDescriptor_t cDesc, void *C) {
-  return cudnnAddTensor(handle, alpha, aDesc, A, beta, cDesc, C);
+#ifndef NDEBUG
+  cudaDeviceSynchronize();
+  cudaError_t ret2 = cudaGetLastError();
+  if(ret2) 
+    std::cerr << "\n ### cudnnAddTensor_float Before " << ret2 << "\n";
+#endif
+
+  cudnnStatus_t ret = cudnnAddTensor(handle, alpha, aDesc, A, beta, cDesc, C);
+
+#ifndef NDEBUG
+  cudaDeviceSynchronize();
+  cudaError_t ret3 = cudaGetLastError();
+  if(ret3) 
+    std::cerr << "\n ### cudnnAddTensor_float After " << ret3 << "\n";
+#endif
+
+
 }
 
 cudnnStatus_t cudnnReduceTensor_double(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
