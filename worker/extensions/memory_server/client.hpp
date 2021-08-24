@@ -72,7 +72,8 @@ namespace GPUMemoryServer {
                 cudaFree(devPtr);
             }
         };
-        std::map<uint64_t, std::unique_ptr<LocalAlloc>> local_allocs;
+        //std::map<uint64_t, std::unique_ptr<LocalAlloc>> local_allocs;
+        std::vector<std::unique_ptr<LocalAlloc>> local_allocs;
 
         //pointer translation
         struct DevPointerTranslate {
@@ -83,6 +84,7 @@ namespace GPUMemoryServer {
         void* translateDevicePointer(void* ptr);
         void tryRemoveFromPointerMap(void* ptr);
         bool isInPointerMap(void* ptr);
+        bool pointerIsMapped(void* ptr, int32_t gpuid = -1);
 
         //stream translation
         std::map<cudaStream_t, std::map<uint32_t,cudaStream_t>> streams_map;

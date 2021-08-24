@@ -4520,7 +4520,7 @@ cudnnStatus_t cudnnBatchNormalizationForwardInference_float(
     const cudnnTensorDescriptor_t yDesc, void *y,                        /* NxCxHxW */
     const cudnnTensorDescriptor_t bnScaleBiasMeanVarDesc, const void *bnScale, const void *bnBias,
     const void *estimatedMean, const void *estimatedVariance, double epsilon) {
-  ava_async;
+  //ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(alpha) {
     ava_in;
@@ -4545,7 +4545,6 @@ cudnnStatus_t cudnnBatchNormalizationForwardInference_float(
     return cudnnBatchNormalizationForwardInference_float(__get_cudnn_handle(handle), mode, alpha, beta, xDesc, x, 
       yDesc, y, bnScaleBiasMeanVarDesc, bnScale, bnBias, estimatedMean, estimatedVariance, epsilon);
   }
-
 }
 
 cudnnStatus_t cudnnBatchNormalizationForwardInference_double(
@@ -4574,6 +4573,12 @@ cudnnStatus_t cudnnBatchNormalizationForwardInference_double(
   ava_argument(bnBias) ava_opaque;
   ava_argument(estimatedMean) ava_opaque;
   ava_argument(estimatedVariance) ava_opaque;
+
+   ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnBatchNormalizationForwardInference_double(__get_cudnn_handle(handle), mode, alpha, beta, xDesc, x, 
+      yDesc, y, bnScaleBiasMeanVarDesc, bnScale, bnBias, estimatedMean, estimatedVariance, epsilon);
+  }
 }
 
 ava_begin_replacement;
@@ -5110,10 +5115,11 @@ cudnnStatus_t CUDNNWINAPI cudnnGetProperty(libraryPropertyType type, int *value)
   }
 }
 
+
 cudnnStatus_t cudnnPoolingForward_float(cudnnHandle_t handle, const cudnnPoolingDescriptor_t poolingDesc,
                                         const float *alpha, const cudnnTensorDescriptor_t xDesc, const void *x,
                                         const float *beta, const cudnnTensorDescriptor_t yDesc, void *y) {
-  ava_async;
+  //ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(poolingDesc) ava_handle;
   ava_argument(alpha) {
@@ -5128,6 +5134,11 @@ cudnnStatus_t cudnnPoolingForward_float(cudnnHandle_t handle, const cudnnPooling
   }
   ava_argument(yDesc) ava_handle;
   ava_argument(y) ava_opaque;
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnPoolingForward_float(__get_cudnn_handle(handle), poolingDesc, alpha, xDesc, x, beta, yDesc, y);
+  }
 }
 
 cudnnStatus_t cudnnPoolingForward_double(cudnnHandle_t handle, const cudnnPoolingDescriptor_t poolingDesc,
@@ -5148,6 +5159,11 @@ cudnnStatus_t cudnnPoolingForward_double(cudnnHandle_t handle, const cudnnPoolin
   }
   ava_argument(yDesc) ava_handle;
   ava_argument(y) ava_opaque;
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnPoolingForward_double(__get_cudnn_handle(handle), poolingDesc, alpha, xDesc, x, beta, yDesc, y);
+  }
 }
 
 ava_begin_replacement;
@@ -5778,6 +5794,11 @@ cudnnStatus_t cudnnAddTensor_double(cudnnHandle_t handle, const double *alpha, c
   }
   ava_argument(cDesc) ava_handle;
   ava_argument(C) ava_opaque;
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnAddTensor_double(__get_cudnn_handle(handle), alpha, aDesc, A, beta, cDesc, C);
+  }
 }
 
 cudnnStatus_t cudnnAddTensor_float(cudnnHandle_t handle, const float *alpha, const cudnnTensorDescriptor_t aDesc,
@@ -5799,7 +5820,7 @@ cudnnStatus_t cudnnAddTensor_float(cudnnHandle_t handle, const float *alpha, con
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnAddTensor_float(__get_cudnn_handle(handle), alpha, aDesc, __helper_translate_const_ptr(A), beta, cDesc, __helper_translate_ptr(C));
+    return cudnnAddTensor_float(__get_cudnn_handle(handle), alpha, aDesc, A, beta, cDesc, C);
   }
 }
 
@@ -5869,14 +5890,8 @@ cudnnStatus_t CUDNNWINAPI cudnnSetReduceTensorDescriptor(cudnnReduceTensorDescri
                                                          cudnnNanPropagation_t reduceTensorNanOpt,
                                                          cudnnReduceTensorIndices_t reduceTensorIndices,
                                                          cudnnIndicesType_t reduceTensorIndicesType) {
-  ava_async;
-  // ava_disable_native_call;
+  //ava_async;
   ava_argument(reduceTensorDesc) ava_handle;
-
-  // if (ava_is_worker) {
-  //  return __helper_cudnnSetReduceTensorDescriptor(reduceTensorDesc, reduceTensorOp, reduceTensorCompType,
-  //               reduceTensorNanOpt, reduceTensorIndices, reduceTensorIndicesType);
-  //}
 }
 
 cudnnStatus_t CUDNNWINAPI cudnnGetReduceTensorDescriptor(const cudnnReduceTensorDescriptor_t reduceTensorDesc,
@@ -5973,10 +5988,11 @@ cudnnStatus_t cudnnReduceTensor_double(cudnnHandle_t handle, const cudnnReduceTe
   ava_argument(workspace) ava_opaque;
   ava_argument(indices) ava_opaque;
 
-  // if (ava_is_worker) {
-  //  return __helper_cudnnReduceTensor(handle, reduceTensorDesc, indices, indicesSizeInBytes, workspace,
-  //                                          workspaceSizeInBytes, alpha, aDesc, A, beta, cDesc, C);
-  //}
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnReduceTensor_double(__get_cudnn_handle(handle), reduceTensorDesc, indices, indicesSizeInBytes, workspace,
+                                            workspaceSizeInBytes, alpha, aDesc, A, beta, cDesc, C);
+  }
 }
 
 cudnnStatus_t cudnnReduceTensor_float(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
@@ -5984,7 +6000,7 @@ cudnnStatus_t cudnnReduceTensor_float(cudnnHandle_t handle, const cudnnReduceTen
                                       size_t workspaceSizeInBytes, const float *alpha,
                                       const cudnnTensorDescriptor_t aDesc, const void *A, const float *beta,
                                       const cudnnTensorDescriptor_t cDesc, void *C) {
-  ava_async;
+  //ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(reduceTensorDesc) ava_handle;
   ava_argument(alpha) {
@@ -6001,6 +6017,12 @@ cudnnStatus_t cudnnReduceTensor_float(cudnnHandle_t handle, const cudnnReduceTen
   ava_argument(C) ava_opaque;
   ava_argument(workspace) ava_opaque;
   ava_argument(indices) ava_opaque;
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnReduceTensor_float(__get_cudnn_handle(handle), reduceTensorDesc, indices, indicesSizeInBytes, workspace,
+                                            workspaceSizeInBytes, alpha, aDesc, A, beta, cDesc, C);
+  }
 }
 
 ava_begin_replacement;
@@ -6046,7 +6068,7 @@ cudnnStatus_t CUDNNWINAPI cudnnSetTensor(cudnnHandle_t handle, const cudnnTensor
 
 cudnnStatus_t cudnnScaleTensor_float(cudnnHandle_t handle, const cudnnTensorDescriptor_t yDesc, void *y,
                                      const float *alpha) {
-  ava_async;
+  //ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(yDesc) ava_handle;
   ava_argument(y) ava_opaque;
@@ -6054,17 +6076,27 @@ cudnnStatus_t cudnnScaleTensor_float(cudnnHandle_t handle, const cudnnTensorDesc
     ava_in;
     ava_buffer(1);
   }
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnScaleTensor_float(__get_cudnn_handle(handle),yDesc, y, alpha);
+  }
 }
 
 cudnnStatus_t cudnnScaleTensor_double(cudnnHandle_t handle, const cudnnTensorDescriptor_t yDesc, void *y,
                                       const double *alpha) {
-  ava_async;
+  //ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(yDesc) ava_handle;
   ava_argument(y) ava_opaque;
   ava_argument(alpha) {
     ava_in;
     ava_buffer(1);
+  }
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnScaleTensor_double(__get_cudnn_handle(handle),yDesc, y, alpha);
   }
 }
 
@@ -6311,10 +6343,14 @@ cudnnStatus_t CUDNNWINAPI cudnnFindConvolutionForwardAlgorithmEx(
 
   ava_disable_native_call;
   if (ava_is_worker) {
+    /*
     return cudnnFindConvolutionForwardAlgorithmEx(__get_cudnn_handle(handle), xDesc, __helper_translate_const_ptr(x), wDesc, 
       __helper_translate_const_ptr(w), convDesc, yDesc, __helper_translate_ptr(y), requestedAlgoCount, returnedAlgoCount, 
       perfResults, __helper_translate_ptr(workSpace), workSpaceSizeInBytes);
-      //perfResults, 0, 0);
+    */
+    return __helper_cudnnFindConvolutionForwardAlgorithmEx(__get_cudnn_handle(handle), xDesc, x, wDesc, 
+        w, convDesc, yDesc, y, requestedAlgoCount, returnedAlgoCount, 
+        perfResults, workSpace, workSpaceSizeInBytes);
   }
 }
 
@@ -6352,9 +6388,9 @@ cudnnStatus_t cudnnConvolutionBiasActivationForward_double(
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnConvolutionBiasActivationForward_double(__get_cudnn_handle(handle), alpha1, xDesc, __helper_translate_const_ptr(x), wDesc, 
-    __helper_translate_const_ptr(w), convDesc, algo, __helper_translate_ptr(workSpace), workSpaceSizeInBytes, alpha2, zDesc, __helper_translate_const_ptr(z), biasDesc, 
-    __helper_translate_const_ptr(bias), activationDesc, yDesc, __helper_translate_ptr(y));
+    return cudnnConvolutionBiasActivationForward_double(__get_cudnn_handle(handle), alpha1, xDesc, x, wDesc, 
+    w, convDesc, algo, workSpace, workSpaceSizeInBytes, alpha2, zDesc, z, biasDesc, 
+    bias, activationDesc, yDesc, y);
   }
 }
 
@@ -6388,11 +6424,11 @@ cudnnStatus_t cudnnConvolutionBiasActivationForward_float(
   ava_argument(yDesc) ava_handle;
   ava_argument(y) ava_opaque;
 
-   ava_disable_native_call;
+  ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnConvolutionBiasActivationForward_float(__get_cudnn_handle(handle), alpha1, xDesc, __helper_translate_const_ptr(x), wDesc, 
-    __helper_translate_const_ptr(w), convDesc, algo, __helper_translate_ptr(workSpace), workSpaceSizeInBytes, alpha2, zDesc, 
-    __helper_translate_const_ptr(z), biasDesc, __helper_translate_const_ptr(bias), activationDesc, yDesc, __helper_translate_ptr(y));
+    return cudnnConvolutionBiasActivationForward_float(__get_cudnn_handle(handle), alpha1, xDesc, x, wDesc, 
+    w, convDesc, algo, workSpace, workSpaceSizeInBytes, alpha2, zDesc, 
+    z, biasDesc, bias, activationDesc, yDesc, y);
   }
 }
 
@@ -6643,7 +6679,7 @@ cudnnStatus_t CUDNNWINAPI cudnnIm2Col(cudnnHandle_t handle, const cudnnTensorDes
 cudnnStatus_t cudnnSoftmaxForward_double(cudnnHandle_t handle, cudnnSoftmaxAlgorithm_t algo, cudnnSoftmaxMode_t mode,
                                          const double *alpha, const cudnnTensorDescriptor_t xDesc, const void *x,
                                          const double *beta, const cudnnTensorDescriptor_t yDesc, void *y) {
-  ava_async;
+  //ava_async;
   ava_argument(handle) ava_handle;
   ava_argument(x) ava_opaque;
   ava_argument(xDesc) ava_handle;
@@ -6656,6 +6692,11 @@ cudnnStatus_t cudnnSoftmaxForward_double(cudnnHandle_t handle, cudnnSoftmaxAlgor
   ava_argument(beta) {
     ava_in;
     ava_buffer(1);
+  }
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnSoftmaxForward_double(__get_cudnn_handle(handle), algo, mode, alpha, xDesc, x, beta, yDesc, y);
   }
 }
 
@@ -6675,6 +6716,11 @@ cudnnStatus_t cudnnSoftmaxForward_float(cudnnHandle_t handle, cudnnSoftmaxAlgori
   ava_argument(beta) {
     ava_in;
     ava_buffer(1);
+  }
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnSoftmaxForward_float(__get_cudnn_handle(handle), algo, mode, alpha, xDesc, x, beta, yDesc, y);
   }
 }
 
@@ -6800,27 +6846,17 @@ cudnnStatus_t CUDNNWINAPI cudnnGetPooling2dForwardOutputDim(const cudnnPoolingDe
 
 /* Activation functions: All of the form "output = alpha * Op(inputs) + beta * output" */
 cudnnStatus_t CUDNNWINAPI cudnnCreateActivationDescriptor(cudnnActivationDescriptor_t *activationDesc) {
-  // ava_disable_native_call;
   ava_argument(activationDesc) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
   }
-
-  // if (ava_is_worker) {
-  //  return __helper_cudnnCreateActivationDescriptor(activationDesc);
-  //}
 }
 
 cudnnStatus_t CUDNNWINAPI cudnnSetActivationDescriptor(cudnnActivationDescriptor_t activationDesc,
                                                        cudnnActivationMode_t mode, cudnnNanPropagation_t reluNanOpt,
                                                        double coef) {
-  ava_disable_native_call;
   ava_argument(activationDesc) ava_handle;
-  if (ava_is_worker) {
-    return __helper_cudnnSetActivationDescriptor(activationDesc, mode, reluNanOpt, coef);
-  }
-
 } /* ceiling for clipped RELU, alpha for ELU */
 
 cudnnStatus_t CUDNNWINAPI cudnnGetActivationDescriptor(const cudnnActivationDescriptor_t activationDesc,

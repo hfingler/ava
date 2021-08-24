@@ -235,32 +235,14 @@ cudaStream_t __helper_translate_stream(cudaStream_t stream);
 void *__helper_translate_ptr(void *ptr);
 const void *__helper_translate_const_ptr(const void *ptr);
 
-cudnnStatus_t __helper_cudnnCreateActivationDescriptor(cudnnActivationDescriptor_t *activationDesc);
-cudnnStatus_t __helper_cudnnSetActivationDescriptor(cudnnActivationDescriptor_t activationDesc,
-                                                       cudnnActivationMode_t mode, cudnnNanPropagation_t reluNanOpt,
-                                                       double coef);
-cudnnStatus_t __helper_cudnnConvolutionBiasActivationForward(
-    cudnnHandle_t handle, const void *alpha1, const cudnnTensorDescriptor_t xDesc, const void *x,
-    const cudnnFilterDescriptor_t wDesc, const void *w, const cudnnConvolutionDescriptor_t convDesc,
-    cudnnConvolutionFwdAlgo_t algo, void *workSpace, size_t workSpaceSizeInBytes, const void *alpha2,
-    const cudnnTensorDescriptor_t zDesc, const void *z, const cudnnTensorDescriptor_t biasDesc, const void *bias,
-    const cudnnActivationDescriptor_t activationDesc, const cudnnTensorDescriptor_t yDesc, void *y);
-
-cudnnStatus_t __helper_cudnnSetReduceTensorDescriptor(cudnnReduceTensorDescriptor_t reduceTensorDesc,
-                                                         cudnnReduceTensorOp_t reduceTensorOp,
-                                                         cudnnDataType_t reduceTensorCompType,
-                                                         cudnnNanPropagation_t reduceTensorNanOpt,
-                                                         cudnnReduceTensorIndices_t reduceTensorIndices,
-                                                         cudnnIndicesType_t reduceTensorIndicesType);
-
-cudnnStatus_t __helper_cudnnReduceTensor(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
-                                            void *indices, size_t indicesSizeInBytes, void *workspace,
-                                            size_t workspaceSizeInBytes, const void *alpha,
-                                            const cudnnTensorDescriptor_t aDesc, const void *A, const void *beta,
-                                            const cudnnTensorDescriptor_t cDesc, void *C);
 cudaError_t __helper_cudaStreamSynchronize_sync(cudaStream_t stream);
 cudaError_t __helper_cudaStreamSynchronize_async(cudaStream_t stream);
 
+cudnnStatus_t __helper_cudnnFindConvolutionForwardAlgorithmEx(
+    cudnnHandle_t handle, const cudnnTensorDescriptor_t xDesc, const void *x, const cudnnFilterDescriptor_t wDesc,
+    const void *w, const cudnnConvolutionDescriptor_t convDesc, const cudnnTensorDescriptor_t yDesc, void *y,
+    const int requestedAlgoCount, int *returnedAlgoCount, cudnnConvolutionFwdAlgoPerf_t *perfResults, void *workSpace,
+    size_t workSpaceSizeInBytes);
 
 #if defined(__cplusplus)
 }
