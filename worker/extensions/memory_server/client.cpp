@@ -453,7 +453,7 @@ namespace GPUMemoryServer {
                 current_allocs[(uint64_t)al->devPtr] = al->size;
             }
 
-            //cudaDeviceEnablePeerAccess(og_device, 0);
+            cudaDeviceEnablePeerAccess(og_device, 0);
             for (auto const& al : current_allocs) {
                 void* devPtr;
                 //malloc on new device. localMalloc makes sure it is an unmapped range

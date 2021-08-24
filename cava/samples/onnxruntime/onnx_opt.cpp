@@ -957,7 +957,7 @@ void CUDARTAPI __cudaRegisterTexture(void **fatCubinHandle,
 __host__ cudaError_t CUDARTAPI cudaLaunchKernel(const void *func, dim3 gridDim, dim3 blockDim, void **args,
                                                 size_t sharedMem, cudaStream_t stream) {
   /* May lead to TensorFlow internal race condition but safe for ONNX. */
-  ava_async;
+  //ava_async;
   ava_disable_native_call;
 
   ava_implicit_argument void *func_id = ava_metadata(func)->func_id;
@@ -13932,26 +13932,26 @@ __host__ cudaError_t CUDARTAPI cudaSetDeviceFlags(unsigned int flags) { ava_unsu
 __host__ cudaError_t CUDARTAPI cudaGetDeviceFlags(unsigned int *flags) { ava_unsupported; }
 
 __host__ cudaError_t CUDARTAPI cudaStreamCreate(cudaStream_t *pStream) {
-  ava_disable_native_call;
   ava_argument(pStream) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
   }
 
+  ava_disable_native_call;
   if (ava_is_worker) {
     return __helper_create_stream(pStream, 0, 0);
   }
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamCreateWithFlags(cudaStream_t *pStream, unsigned int flags) {
-  ava_disable_native_call;
   ava_argument(pStream) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
   }
 
+  ava_disable_native_call;
   if (ava_is_worker) {
     return __helper_create_stream(pStream, flags, 0);
   }
@@ -13959,13 +13959,13 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamCreateWithFlags(cuda
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaStreamCreateWithPriority(cudaStream_t *pStream,
                                                                                unsigned int flags, int priority) {
-  ava_disable_native_call;
   ava_argument(pStream) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
   }
 
+  ava_disable_native_call;
   if (ava_is_worker) {
     return __helper_create_stream(pStream, flags, priority);
   }
