@@ -67,6 +67,53 @@ void __helper_print_kernel_info(struct fatbin_function *func, void **args) {
   }
 }
 
+//nothing is translated at this point
+cublasStatus_t  __helper_cublasSetStream(cublasHandle_t handle, cudaStream_t streamId) {
+  if (__internal_allContextsEnabled()) {
+    uint32_t real_cur_dvc = GPUMemoryServer::Client::getInstance().current_device;
+    //save real current gpu
+    for (int i = 0; i < __internal_getDeviceCount(); i++) {
+      cudaSetDevice(i);
+      //we need to fakely switch current_device because that's what the translation
+      //functions use
+      GPUMemoryServer::Client::getInstance().current_device = i;
+      cublasStatus_t err = cublasSetStream(__get_cublas_handle(handle), __translate_stream(streamId));
+      if (err > 0)
+        std::cerr << " ### error on cublas set stream for gpu " << i << std::endl;
+    }
+    // reset back device and return OK
+    GPUMemoryServer::Client::getInstance().current_device = real_cur_dvc;
+    cudaSetDevice(__internal_getCurrentDevice());
+    return (cublasStatus_t)0;
+  } else {
+    cublasStatus_t err = cublasSetStream(handle, streamId);
+    return err;
+  }
+}
+
+cudnnStatus_t __helper_cudnnSetStream(cudnnHandle_t handle, cudaStream_t streamId) {
+  if (__internal_allContextsEnabled()) {
+    uint32_t real_cur_dvc = GPUMemoryServer::Client::getInstance().current_device;
+    //save real current gpu
+    for (int i = 0; i < __internal_getDeviceCount(); i++) {
+      cudaSetDevice(i);
+      //we need to fakely switch current_device because that's what the translation
+      //functions use
+      GPUMemoryServer::Client::getInstance().current_device = i;
+      cudnnStatus_t err = cudnnSetStream(__get_cudnn_handle(handle), __translate_stream(streamId));
+      if (err > 0)
+        std::cerr << " ### error on cublas set stream for gpu " << i << std::endl;
+    }
+    // reset back device and return OK
+    GPUMemoryServer::Client::getInstance().current_device = real_cur_dvc;
+    cudaSetDevice(__internal_getCurrentDevice());
+    return (cudnnStatus_t)0;
+  } else {
+    cudnnStatus_t err = cudnnSetStream(handle, streamId);
+    return err;
+  }
+}
+
 cublasStatus_t __helper_cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m,
                                        int n, int k, const float *alpha, /* host or device pointer */
                                        const float *A, int lda, const float *B, int ldb,
@@ -74,7 +121,7 @@ cublasStatus_t __helper_cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t 
                                        float *C, int ldc, bool alpha_is_gpu, bool beta_is_gpu) {
 
 #ifndef NDEBUG
-    cudaDeviceSynchronize();
+    //cudaDeviceSynchronize();
     cudaError_t ret1 = cudaGetLastError();
     if(ret1) 
       std::cerr << "\n ### __helper_cublasSgemm_v2 error before " << ret1 << "\n";
@@ -90,7 +137,7 @@ cublasStatus_t __helper_cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t 
   auto tid = __gettid();
   std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
 
-  cudaDeviceSynchronize();
+  //cudaDeviceSynchronize();
   cudaError_t ret2 = cudaGetLastError();
   if(ret2) 
     std::cerr << "\n ### __helper_cublasSgemm_v2 ERROR " << ret2 << "\n";
@@ -153,8 +200,8 @@ cudaError_t __helper_destroy_stream(cudaStream_t stream) {
 cudaError_t __helper_cudaStreamSynchronize_sync(cudaStream_t stream) {
   if (__internal_allContextsEnabled()) {
     for (int i = 0; i < __internal_getDeviceCount(); i++) {
-      cudaDeviceSynchronize();
-      //cudaStreamSynchronize(GPUMemoryServer::Client::getInstance().streams_map[stream][i]);
+      //cudaDeviceSynchronize();
+      cudaStreamSynchronize(GPUMemoryServer::Client::getInstance().streams_map[stream][i]);
       return 0;
     }
   } else {
@@ -165,7 +212,7 @@ cudaError_t __helper_cudaStreamSynchronize_sync(cudaStream_t stream) {
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
                                    void **args, size_t sharedMem, cudaStream_t stream) {
 #ifndef NDEBUG
-    cudaDeviceSynchronize();
+    //cudaDeviceSynchronize();
     cudaError_t ret2 = cudaGetLastError();
     if(ret2) 
       std::cerr << "\n ### __helper_launch_kernel ERROR BEFORE " << ret2 << "\n";
@@ -223,7 +270,7 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
 
 #ifndef NDEBUG
     std::cerr << ">>> cuLaunchKernel returned " << ret << std::endl;
-    cudaDeviceSynchronize();
+    //cudaDeviceSynchronize();
     cudaError_t ret2 = cudaGetLastError();
     if(ret2) 
       std::cerr << "\n ### __helper_launch_kernel ERROR after sync " << ret2 << "\n";
@@ -303,7 +350,7 @@ cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum c
   cudaError_t ret;
 
 #ifndef NDEBUG
-    cudaDeviceSynchronize();
+    //cudaDeviceSynchronize();
     //int d;
     //cudaGetDevice(&d);
     //std::cerr << "\n ### __helper_cudaMemcpy at DEVICE " << d << " src/dest: " << std::hex << src << " " << std::hex << dst << "\n";
@@ -320,7 +367,7 @@ cudaError_t __helper_cudaMemcpy(void *dst, const void *src, size_t count, enum c
 
 #ifndef NDEBUG
 
-  cudaDeviceSynchronize();
+  //cudaDeviceSynchronize();
   cudaError_t ret3 = cudaGetLastError();
   if(ret3) 
     std::cerr << "\n ### __helper_cudaMemcpy CAUSED ERROR " << ret3 << "\n";
@@ -686,18 +733,19 @@ cudaError_t __helper_cudaEventSynchronize(cudaEvent_t event) {
   if (__internal_allContextsEnabled()) {
 
     //testing
+    /*
     for (int i = 0; i < __internal_getDeviceCount(); i++) {
       //testing
       cudaSetDevice(i);
       cudaDeviceSynchronize();
     }
+    */
     cudaSetDevice(__internal_getCurrentDevice());
-  /*
-    cudaDeviceSynchronize();
+    //cudaDeviceSynchronize();
     uint32_t cur_dvc = __internal_getCurrentDevice();
     cudaEvent_t real_event = GPUMemoryServer::Client::getInstance().events_map[event][cur_dvc];
     cudaEventSynchronize(real_event);
-  */
+  
     return (cudaError_t)0;
   } else {
     return cudaEventSynchronize(event);
@@ -714,7 +762,7 @@ const void *__helper_translate_const_ptr(const void *ptr) { return __translate_p
 
 cudaError_t __helper_cudaPointerGetAttributes(struct cudaPointerAttributes *attributes, const void *ptr) {
 #ifndef NDEBUG
-    cudaDeviceSynchronize();
+    //cudaDeviceSynchronize();
     cudaError_t ret2 = cudaGetLastError();
     if(ret2) 
       std::cerr << "\n### __helper_cudaPointerGetAttributes BEFORE ERROR " << ret2 << "\n";
@@ -732,7 +780,7 @@ cudaError_t __helper_cudaPointerGetAttributes(struct cudaPointerAttributes *attr
         std::cerr << "\n ### __helper_cudaPointerGetAttributes error: " << err << "\n";
     }
     */
-    cudaDeviceSynchronize();
+    //cudaDeviceSynchronize();
     cudaError_t ret3 = cudaGetLastError();
     if(ret3) 
       std::cerr << "\n ### __helper_cudaPointerGetAttributes AFTER ERROR (if 1, probably fine) " << ret3 << "\n";
@@ -763,7 +811,7 @@ cudnnStatus_t __helper_cudnnConvolutionForward_float(cudnnHandle_t handle, const
                                                      const cudnnTensorDescriptor_t yDesc, void *y) {
 
 #ifndef NDEBUG
-    cudaDeviceSynchronize();
+    //cudaDeviceSynchronize();
     cudaError_t ret2 = cudaGetLastError();
     if(ret2) 
       std::cerr << "\n### __helper_cudnnConvolutionForward_float BEFORE ERROR " << ret2 << "\n";
@@ -772,7 +820,7 @@ cudnnStatus_t __helper_cudnnConvolutionForward_float(cudnnHandle_t handle, const
             algo, __translate_ptr(workSpace), workSpaceSizeInBytes, beta, yDesc, __translate_ptr(y));
 
 #ifndef NDEBUG
-    cudaDeviceSynchronize();
+    //cudaDeviceSynchronize();
     cudaError_t ret3 = cudaGetLastError();
     if(ret3) 
       std::cerr << "\n### __helper_cudnnConvolutionForward_float BEFORE ERROR " << ret3 << "\n";
@@ -791,7 +839,7 @@ cudnnStatus_t cudnnBatchNormalizationForwardInference_float(
     const void *estimatedMean, const void *estimatedVariance, double epsilon) {
   
 #ifndef NDEBUG
-  cudaDeviceSynchronize();
+  //cudaDeviceSynchronize();
   cudaError_t ret3 = cudaGetLastError();
   if(ret3) 
     std::cerr << "\n ### cudnnBatchNormalizationForwardInference_float  before " << ret3 << "\n";
@@ -802,7 +850,7 @@ cudnnStatus_t cudnnBatchNormalizationForwardInference_float(
           __translate_ptr(estimatedMean), __translate_ptr(estimatedVariance), epsilon);
 
 #ifndef NDEBUG
-  cudaDeviceSynchronize();
+  //cudaDeviceSynchronize();
   cudaError_t ret2 = cudaGetLastError();
   if(ret2) 
     std::cerr << "\n ### cudnnBatchNormalizationForwardInference_float  after " << ret2 << "\n";
@@ -847,7 +895,7 @@ cudnnStatus_t cudnnAddTensor_double(cudnnHandle_t handle, const double *alpha, c
 cudnnStatus_t cudnnAddTensor_float(cudnnHandle_t handle, const float *alpha, const cudnnTensorDescriptor_t aDesc,
                                    const void *A, const float *beta, const cudnnTensorDescriptor_t cDesc, void *C) {
 #ifndef NDEBUG
-  cudaDeviceSynchronize();
+  //cudaDeviceSynchronize();
   cudaError_t ret2 = cudaGetLastError();
   if(ret2) 
     std::cerr << "\n ### cudnnAddTensor_float Before " << ret2 << "\n";
@@ -856,7 +904,7 @@ cudnnStatus_t cudnnAddTensor_float(cudnnHandle_t handle, const float *alpha, con
   cudnnStatus_t ret = cudnnAddTensor(handle, alpha, aDesc, __translate_ptr(A), beta, cDesc, __translate_ptr(C));
 
 #ifndef NDEBUG
-  cudaDeviceSynchronize();
+  //cudaDeviceSynchronize();
   cudaError_t ret3 = cudaGetLastError();
   if(ret3) 
     std::cerr << "\n ### cudnnAddTensor_float After " << ret3 << "\n";

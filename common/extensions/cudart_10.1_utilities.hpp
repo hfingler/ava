@@ -238,6 +238,9 @@ const void *__helper_translate_const_ptr(const void *ptr);
 cudaError_t __helper_cudaStreamSynchronize_sync(cudaStream_t stream);
 cudaError_t __helper_cudaStreamSynchronize_async(cudaStream_t stream);
 
+cublasStatus_t __helper_cublasSetStream(cublasHandle_t handle, cudaStream_t streamId);
+cudnnStatus_t __helper_cudnnSetStream(cudnnHandle_t handle, cudaStream_t streamId);
+
 cudnnStatus_t __helper_cudnnFindConvolutionForwardAlgorithmEx(
     cudnnHandle_t handle, const cudnnTensorDescriptor_t xDesc, const void *x, const cudnnFilterDescriptor_t wDesc,
     const void *w, const cudnnConvolutionDescriptor_t convDesc, const cudnnTensorDescriptor_t yDesc, void *y,

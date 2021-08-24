@@ -4486,7 +4486,7 @@ CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSetStream(cublasHandle_t handle, cud
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return cublasSetStream(__get_cublas_handle(handle), __helper_translate_stream(streamId));
+    return __helper_cublasSetStream(handle, streamId);
   }
 }
 
@@ -5265,7 +5265,7 @@ cudnnStatus_t CUDNNWINAPI cudnnSetStream(cudnnHandle_t handle, cudaStream_t stre
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnSetStream(__get_cudnn_handle(handle), __helper_translate_stream(streamId));
+    return __helper_cudnnSetStream(handle, streamId);
   }
 }
 

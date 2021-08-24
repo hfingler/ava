@@ -13,7 +13,6 @@
 #include "common/endpoint_lib.hpp"
 #include "worker/extensions/memory_server/client.hpp"
 
-//WANTED: make this generic
 template <class handle_type>
 struct HandleSet {
     std::vector<handle_type> handles;
@@ -34,8 +33,7 @@ struct HandleSet {
 
     handle_type getCurrentGPUHandle() {
         if (__internal_allContextsEnabled()) {
-            auto current = __internal_getCurrentDevice();
-            return handles[current];
+            return handles[__internal_getCurrentDevice()];
         } else {
             return handles[0];
         }
@@ -183,6 +181,14 @@ cublasHandle_t __get_cublas_handle(cublasHandle_t handle) {
     } else {
         return handle;
     }
+}
+
+cudnnHandle_t __get_all_cudnn_handles(cudnnHandle_t handle) {
+
+}
+
+cublasHandle_t __get_all_cublas_handles(cublasHandle_t handle) {
+
 }
 
 /*

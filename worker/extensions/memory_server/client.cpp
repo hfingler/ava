@@ -453,7 +453,7 @@ namespace GPUMemoryServer {
                 current_allocs[(uint64_t)al->devPtr] = al->size;
             }
 
-            cudaDeviceEnablePeerAccess(og_device, 0);
+            //cudaDeviceEnablePeerAccess(og_device, 0);
             for (auto const& al : current_allocs) {
                 void* devPtr;
                 //malloc on new device. localMalloc makes sure it is an unmapped range
@@ -462,12 +462,12 @@ namespace GPUMemoryServer {
                 //update map
                 pointer_map[al.first].dstPtr = devPtr;
                 pointer_map[al.first].size = al.second;
-                cudaError_t ret = cudaMemcpy(devPtr, al.first, al.second, cudaMemcpyDeviceToDevice);
-                if (ret > 0) {
-                    std::cerr << " ### error on cudaMemcpy during migration\n"; 
-                }
+                //cudaError_t ret = cudaMemcpy(devPtr, al.first, al.second, cudaMemcpyDeviceToDevice);
+                //if (ret > 0) {
+                //    std::cerr << " ### error on cudaMemcpy during migration\n"; 
+                //}
                 //cudaMemcpyPeer(devPtr, new_gpuid, al.first, og_device, al.second);
-                //cudaMemcpyPeerAsync(devPtr, new_gpuid, al.first, og_device, al.second);
+                cudaMemcpyPeerAsync(devPtr, new_gpuid, al.first, og_device, al.second);
                 fprintf (stderr, "  [%s] copying %d bytes GPUs [%d]  ->  [%d]\n", uuid.c_str(), al.second, og_device, new_gpuid);
                 fprintf (stderr, "      [%p] -> %p\n", al.first, devPtr);
             }
