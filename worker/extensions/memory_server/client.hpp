@@ -56,6 +56,7 @@ namespace GPUMemoryServer {
         int current_device, og_device;
         int device_count;
         Migration migrated_type;
+        uint32_t listen_port;
 
         std::string uuid;
         //local mallocs
@@ -94,12 +95,16 @@ namespace GPUMemoryServer {
         //migration
         void migrateToGPU(uint32_t new_gpuid, Migration migration_type);
 
+        void setListenPort(uint32_t port) {
+            listen_port = port;
+        }
         void setUuid(std::string id) {
             uuid = id;
         }
         cudaError_t localMalloc(void** devPtr, size_t size);
         cudaError_t localFree(void* devPtr);
         void cleanup(uint32_t cd);
+        void notifyReady();
         void fullCleanup();
         void kernelIn();
         void kernelOut();

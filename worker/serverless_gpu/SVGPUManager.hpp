@@ -2,68 +2,88 @@
 #define __SVGPU_MANAGER_HPP__
 
 #include <grpcpp/grpcpp.h>
-#include <vector>
+
 #include <map>
-#include "gpuserver.grpc.pb.h"
+#include <vector>
+
 #include "manager_service.hpp"
 #include "manager_service.proto.h"
 #include "resmngr.grpc.pb.h"
 #include "scheduling/BaseScheduler.hpp"
 #include "scheduling/RoundRobin.hpp"
 #include "extensions/memory_server/server.hpp"
+#include "extensions/memory_server/common.hpp"
 
 using ava_manager::ManagerServiceServerBase;
-using gpuserver::GPU;
-using gpuserver::SpawnGPUWorkerReply;
-using gpuserver::SpawnGPUWorkerRequest;
 using grpc::Channel;
 using grpc::ClientContext;
-using grpc::Server;
-using grpc::ServerBuilder;
-using grpc::ServerContext;
 using grpc::Status;
 using resmngr::RegisterGPUNodeRequest;
 using resmngr::RegisterGPUNodeResponse;
 using resmngr::ResMngrService;
 
-class SVGPUManager : public ManagerServiceServerBase, public GPU::Service {
- public:
-  class ResMngrClient {
-    public:
-      ResMngrClient(std::shared_ptr<Channel> channel)
-      : stub_(ResMngrService::NewStub(channel)) {}
-      
-      //TODO: get gpus as arguments and set
-      void RegisterSelf(uint32_t& gpu_offset, uint32_t& n_gpus, std::map<uint32_t, uint64_t> &gpu_memory);
+struct SVGPUManager : public ManagerServiceServerBase {
+  /**************************************
+   *        INTERNAL CLASSES
+   **************************************/
+    struct ResMngrClient {
+        ResMngrClient(std::shared_ptr<Channel> channel) : stub_(ResMngrService::NewStub(channel)) {}
+        // TODO: get gpus as arguments and set
+        void registerSelf();
+        std::unique_ptr<ResMngrService::Stub> stub_;
+    };
 
-    private:
-      std::unique_ptr<ResMngrService::Stub> stub_;
-  };
+    struct GPUWorkerState {
+        uint32_t port;
+        bool busy;
+    };
 
-  // fields
-  BaseScheduler *scheduler;
-  std::string resmngr_address;
-  ResMngrClient *resmngr_client;
-  std::unique_ptr<Server> grpc_server;
-  uint32_t n_gpus;
-  uint32_t gpu_offset;
-  bool serverless_mode;
-  std::map<uint32_t, uint64_t> gpu_memory;
-  std::vector<std::unique_ptr<GPUMemoryServer::Server>> memory_servers;
-  uint32_t uuid_counter;
+    struct GPUState {
+        std::vector<GPUWorkerState> workers;
+        uint64_t total_memory;
+        uint64_t used_memory;
+    };
 
-  // methods
-  SVGPUManager(uint32_t port, uint32_t worker_port_base, std::string worker_path, std::vector<std::string> &worker_argv,
-            std::vector<std::string> &worker_env, uint16_t ngpus, uint16_t gpu_offset);
+    /**************************************
+     *        FIELDS
+     **************************************/
+    // gRPC related fields
+    std::string resmngr_address;
+    ResMngrClient *resmngr_client;
 
-  void setRealGPUOffsetCount();
-  void RegisterSelf();
-  void LaunchService();
-  void LaunchMemoryServers();
-  Status SpawnGPUWorker(ServerContext *context, const SpawnGPUWorkerRequest *request,
-                        SpawnGPUWorkerReply *response) override;
-  ava_proto::WorkerAssignReply HandleRequest(const ava_proto::WorkerAssignRequest &request) override;
-  uint32_t LaunchWorker(uint32_t gpu_id);
+    // internal state
+    uint32_t n_gpus, gpu_offset;
+    uint32_t uuid_counter;
+
+    // GPU and worker information
+    BaseScheduler *scheduler;
+    std::vector<std::unique_ptr<GPUMemoryServer::Server>> memory_servers;
+    std::thread central_server_thread;
+    void* zmq_context;
+    void* zmq_central_socket;
+    std::string central_server_unix_socket_path;
+
+    std::map<uint32_t, GPUState> gpu_states;
+    std::map<uint32_t, std::map<uint32_t, GPUWorkerState>> gpu_workers;
+
+    uint32_t precreated_workers;
+
+    /**************************************
+     *        METHODS
+     **************************************/
+    SVGPUManager(uint32_t port, uint32_t worker_port_base, std::string worker_path, 
+            std::vector<std::string> &worker_argv, std::vector<std::string> &worker_env, 
+            uint16_t ngpus, uint16_t gpu_offset, std::string resmngr_address, 
+            std::string scheduler_name, uint32_t precreated_workers);
+
+    void setRealGPUOffsetCount();
+    void registerSelf();
+    void launchReportServers();
+    void centralManagerLoop();
+    void handleRequest(GPUMemoryServer::Request& req, GPUMemoryServer::Reply& rep);
+    uint32_t launchWorker(uint32_t gpu_id);
+    //ava overrides
+    ava_proto::WorkerAssignReply HandleRequest(const ava_proto::WorkerAssignRequest &request) override;
 };
 
 #endif

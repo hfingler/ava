@@ -178,7 +178,7 @@ namespace GPUMemoryServer {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             printf(" !!! GPU Client couldn't connect to server [%d], this is WRONG! The server probably died due to a bug\n", gpuid);
         }
-        printf("GPU Client succesfully connected to server [%d]\n", gpuid);
+        //printf("GPU Client succesfully connected to server [%d]\n", gpuid);
     }
 
     bool Client::pointerIsMapped(void* devptr, int32_t gpuid) {
@@ -226,13 +226,6 @@ namespace GPUMemoryServer {
         return err;
     }
 
-    void Client::reportMalloc(uint64_t size) {
-        Request req;
-        req.type = RequestType::ALLOC;
-        req.data.size = size;
-        sendRequest(req);
-    }
-    
     cudaError_t Client::localFree(void* devPtr) {
         //there is a use-after-free bug with execution (KERNEL) migration, where
         //if the app frees a buffer immediately after a kernel launch, an error 700
@@ -273,23 +266,9 @@ namespace GPUMemoryServer {
         return cudaErrorInvalidValue;   
     }
 
-    void Client::reportFree(uint64_t size) {
-        Request req;
-        req.type = RequestType::FREE;
-        req.data.size = size;
-        sendRequest(req);
-    }
-
-    void Client::reportMemoryRequested(uint64_t mem_mb) {
-        Request req;
-        req.type = RequestType::MEMREQUESTED;
-        req.data.size = mem_mb;
-        //sendRequest(req);
-    }
-
     void Client::sendRequest(Request &req) {
-        //just quit if we are not reporting to gpu server
-        if (enable_reporting == false) {
+        //just quit if we are not reporting to gpu server, except READY, which must go through
+        if (enable_reporting == false && req.type != READY) {
             return;
         }
 
@@ -314,8 +293,8 @@ namespace GPUMemoryServer {
 
     void Client::handleReply(Reply& reply) {
         //only migrate if server told us so and we haven't migrated before
-        if (reply.migrate != Migration::NOPE && current_device == og_device)
-            migrateToGPU(reply.target_device, reply.migrate);
+        if (reply.data.migrate != Migration::NOPE && current_device == og_device)
+            migrateToGPU(reply.target_device, reply.data.migrate);
     }
 
     void Client::setCurrentGPU(int id) {
@@ -324,7 +303,7 @@ namespace GPUMemoryServer {
             printf("### CUDA err on cudaSetDevice(%d): %d\n", id, err);
             exit(1);
         }
-        printf("Worker [%s] setting current device to %d\n", uuid.c_str(), id);
+        //printf("Worker [%s] setting current device to %d\n", uuid.c_str(), id);
         if (og_device == -1) 
             og_device = id;
         current_device = id;
@@ -335,28 +314,11 @@ namespace GPUMemoryServer {
     }
 
     void Client::resetCurrentGPU() {
-        if (og_device != current_device) {
-            setCurrentGPU(og_device);
-            current_device = og_device;
-        }
+        current_device = og_device;
+        setCurrentGPU(current_device);
+        auto ccontext = ava::CommonContext::instance();
+        ccontext->current_device = current_device;
         migrated_type = Migration::NOPE;
-    }
-
-    void Client::kernelIn() {
-        //printf("%d kernels\n", ++kc);
-        if (migrated_type != Migration::NOPE) {
-            //if we have migrated, lets just skip..
-            return;
-        }
-        Request req;
-        req.type = RequestType::KERNEL_IN;
-        sendRequest(req);
-    }
-    
-    void Client::kernelOut() {
-        Request req;
-        req.type = RequestType::KERNEL_OUT;
-        //sendRequest(req);
     }
 
     bool Client::isInPointerMap(void* ptr) {
@@ -462,10 +424,6 @@ namespace GPUMemoryServer {
                 //update map
                 pointer_map[al.first].dstPtr = devPtr;
                 pointer_map[al.first].size = al.second;
-                //cudaError_t ret = cudaMemcpy(devPtr, al.first, al.second, cudaMemcpyDeviceToDevice);
-                //if (ret > 0) {
-                //    std::cerr << " ### error on cudaMemcpy during migration\n"; 
-                //}
                 //cudaMemcpyPeer(devPtr, new_gpuid, al.first, og_device, al.second);
                 cudaMemcpyPeerAsync(devPtr, new_gpuid, al.first, og_device, al.second);
                 fprintf (stderr, "  [%s] copying %d bytes GPUs [%d]  ->  [%d]\n", uuid.c_str(), al.second, og_device, new_gpuid);
@@ -494,16 +452,8 @@ namespace GPUMemoryServer {
         }
         //report to server
         reportCleanup(cd);
-        
         //reset to device
         cudaSetDevice(current_device);
-    }
-
-    void Client::reportCleanup(uint32_t gpuid) {
-        Request req;
-        req.type = RequestType::FINISHED;
-        //TODO: report cleanup only device
-        //sendRequest(req);
     }
 
     void Client::fullCleanup() {
@@ -526,7 +476,62 @@ namespace GPUMemoryServer {
             __helper_cudaEventDestroy((events_map.begin())->first);
         events_map.clear();
 
+        //reset
         cudaSetDevice(current_device);
     }
 
+    void Client::notifyReady() {
+        Request req;
+        req.type = RequestType::READY;
+        req.data.ready.port = listen_port;
+        req.data.ready.gpu = current_device;
+        std::cerr << "  worker on port " << listen_port << " sending ready message" << std::endl;
+        sendRequest(req);
+    }
+
+    void Client::reportCleanup(uint32_t gpuid) {
+        Request req;
+        req.type = RequestType::FINISHED;
+        //TODO: report cleanup only device
+        //sendRequest(req);
+    }
+
+    void Client::kernelIn() {
+        //printf("%d kernels\n", ++kc);
+        if (migrated_type != Migration::NOPE) {
+            //if we have migrated, lets just skip..
+            return;
+        }
+        Request req;
+        req.type = RequestType::KERNEL_IN;
+        sendRequest(req);
+    }
+    
+    void Client::kernelOut() {
+        Request req;
+        req.type = RequestType::KERNEL_OUT;
+        //sendRequest(req);
+    }
+
+        void Client::reportFree(uint64_t size) {
+        Request req;
+        req.type = RequestType::FREE;
+        req.data.size = size;
+        sendRequest(req);
+    }
+
+    void Client::reportMemoryRequested(uint64_t mem_mb) {
+        Request req;
+        req.type = RequestType::MEMREQUESTED;
+        req.data.size = mem_mb;
+        //sendRequest(req);
+    }
+
+    void Client::reportMalloc(uint64_t size) {
+        Request req;
+        req.type = RequestType::ALLOC;
+        req.data.size = size;
+        sendRequest(req);
+    }
+    
 }

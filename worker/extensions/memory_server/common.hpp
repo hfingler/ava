@@ -13,23 +13,35 @@ namespace GPUMemoryServer {
         return std::string("ipc:///tmp/gpumemserver_sock_");
     }
 
-    enum RequestType { ALLOC, FREE, FINISHED, MEMREQUESTED,
-        KERNEL_IN, KERNEL_OUT};
-
-    enum Migration { NOPE, TOTAL, KERNEL};
+    enum RequestType { READY, 
+        ALLOC, FREE, FINISHED, MEMREQUESTED,
+        KERNEL_IN, KERNEL_OUT,
+        SCHEDULE };
 
     union RequestData {
         uint64_t size;
+        struct {
+            uint32_t port, gpu;
+        } ready;
     };
-
+    
     struct Request {
         RequestType type;
         RequestData data;
         char worker_id[MAX_UUID_LEN]; //36 is the size of a uuid v4
     };
 
-    struct Reply {
+    enum Migration { NOPE, TOTAL, KERNEL};
+    enum ReplyCode { OK, RETRY };
+    
+    union ReplyData {
         Migration migrate;
+        ReplyCode code;
+    };
+
+    struct Reply {
+        ReplyData data;
+        //Migration migrate;
         uint32_t target_device;
     };
 

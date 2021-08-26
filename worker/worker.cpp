@@ -136,11 +136,6 @@ static void nvml_setDeviceCount() {
   __internal_setDeviceCount(device_count);
 }
 
-static void destroy_cuda_contexts(){
-  for (int i = 0; i < __internal_getDeviceCount(); i++)
-    cudaDeviceReset();
-}
-
 static void create_cuda_contexts() {
   for (int i = 0; i < __internal_getDeviceCount(); i++) {
     cudaSetDevice(i);
@@ -217,12 +212,10 @@ int main(int argc, char *argv[]) {
 
   /* define arguments */
   auto wctx = ava::WorkerContext::instance();
-
-  unsigned int listen_port;
   nw_worker_id = 0;
-
   /* parse arguments */
-  listen_port = (unsigned int)atoi(argv[1]);
+  uint32_t listen_port = (uint32_t)atoi(argv[1]);
+  GPUMemoryServer::Client::getInstance().setListenPort(listen_port);
   wctx->set_api_server_listen_port(listen_port);
   std::cerr << "[worker#" << listen_port << "] To check the state of AvA remoting progress, use `tail -f "
             << wctx->log_file << "`" << std::endl;
@@ -240,6 +233,9 @@ int main(int argc, char *argv[]) {
 
     // only loop if we are in serverless mode
     do {
+      //tell manager we are ready
+      GPUMemoryServer::Client::getInstance().notifyReady();
+
       // get a guestlib connection
       std::cerr << "[worker#" << listen_port << "] waiting for connection" << std::endl;
       //ttc.notify(7);
@@ -251,7 +247,6 @@ int main(int argc, char *argv[]) {
       /*
        *  sync with worker until we get vmid and memory requested
        */
-      
       wait_for_worker_setup();
       printf("CV: worker was notified vmid was received..\n");
       // if this is serverless, we need to update our id
@@ -282,41 +277,17 @@ int main(int argc, char *argv[]) {
 
       // clean up allocations, local and remote
       GPUMemoryServer::Client::getInstance().fullCleanup();
-
-/*
-      // explode and reset cuda contexts
-      if (enable_all_ctx == "yes") {
-        destroy_cuda_contexts();
-        create_cuda_contexts();
-      }
-      else {
-        cudaDeviceReset();
-        cudaSetDevice(std::stoi(gpu_device));
-        cudaFree(0);
-      }
-*/
       // go back to original GPU
       GPUMemoryServer::Client::getInstance().resetCurrentGPU();
       //ttc.notify(12);
-    } while (std::getenv("SERVERLESS_MODE"));
+    } while (std::getenv("REUSE_WORKER"));
 
     std::cerr << "[worker#" << listen_port << "] freeing channel and quiting." << std::endl;
     command_channel_free(chan);
     command_channel_free((struct command_channel *)nw_record_command_channel);
     return 0;
-  } else {
-    printf("Unsupported AVA_CHANNEL type (export AVA_CHANNEL=[TCP]\n");
-    return 0;
   }
 
-  // nw_record_command_channel = command_channel_log_new(listen_port);
-  init_internal_command_handler();
-  init_command_handler(channel_create);
-  LOG_INFO << "[worker#" << listen_port << "] start polling tasks";
-  wait_for_command_handler();
-  command_channel_free(chan);
-  command_channel_free((struct command_channel *)nw_record_command_channel);
-  if (chan_hv) command_channel_hv_free(chan_hv);
-
-  return 0;
+  printf("Unsupported AVA_CHANNEL type (export AVA_CHANNEL=[TCP]\n");
+  return 1;
 }

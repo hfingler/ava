@@ -2,10 +2,8 @@
 #include <absl/debugging/symbolize.h>
 #include <absl/flags/flag.h>
 #include <absl/flags/parse.h>
-
 #include <chrono>
 #include <thread>
-
 #include "SVGPUManager.hpp"
 
 // arguments to this manager
@@ -17,10 +15,10 @@ ABSL_FLAG(std::vector<std::string>, worker_env, {},
           "(OPTIONAL) Specify environment variables, e.g. HOME=/home/ubuntu, passed to API servers");
 ABSL_FLAG(uint16_t, ngpus, 0, "(OPTIONAL) Number of GPUs the manager should use");
 ABSL_FLAG(uint16_t, gpuoffset, 0, "(OPTIONAL)GPU id offset");
-ABSL_FLAG(std::string, resmngr_addr, "",
-          "(OPTIONAL) Address of the Alouatta resource manager. If enabled will run on grpc mode.");
+ABSL_FLAG(std::string, scheduler, "random", "(OPTIONAL) choose GPU scheduler, default is random. Options are: random");
+ABSL_FLAG(uint32_t, precreated_workers, 1, "(OPTIONAL) How many workers per GPU we pre create. Default is 1.");
 
-ABSL_FLAG(std::string, keepworkeralive, "no", "(OPTIONAL) (debug) forcefully make the worker not die when not in serverlss mode");
+ABSL_FLAG(std::string, keepworkeralive, "no", "(OPTIONAL) (debug) forcefully make the worker not die when not in serverless mode");
 ABSL_FLAG(std::string, allctx, "no", "(OPTIONAL) turn on setting up all device ctx on workers (required for migration)");
 ABSL_FLAG(std::string, reporting, "no", "(OPTIONAL) turn on client reports to gpu server (required for migration)");
 ABSL_FLAG(std::string, debug_migration, "no", "(OPTIONAL) turn on debug migration (1 for execution, 2 for memory, 3 for random)");
@@ -50,22 +48,7 @@ int main(int argc, const char *argv[]) {
     setenv("SG_DEBUG_MIGRATION", absl::GetFlag(FLAGS_debug_migration).c_str(), 1);
   }
 
-  char *rm_addr = std::getenv("RESMNGR_ADDR");
-  if (rm_addr) {
-    //let's just rename this thing since a lot of parts will use it
-    setenv("SERVERLESS_MODE", "1", 1);
-    std::string kmd = "SERVERLESS_MODE=1";
-    worker_env.push_back(kmd);
-  }
-
-  if (!rm_addr && absl::GetFlag(FLAGS_keepworkeralive) == "yes") {
-    std::cerr << "[SVLESS-MNGR]: Forcing worker to loop so it can be reused manually." << std::endl;
-    worker_env.push_back("SERVERLESS_MODE=1");
-  }
-
-  /*
-   *  Check all contexts option
-   */
+  // Check all contexts option
   if (absl::GetFlag(FLAGS_allctx) == "yes") {
     std::cerr << "[SVLESS-MNGR]: All context init is enabled." << std::endl;
     worker_env.push_back("AVA_ENABLE_ALL_CTX=yes");
@@ -75,15 +58,13 @@ int main(int argc, const char *argv[]) {
     worker_env.push_back("AVA_ENABLE_ALL_CTX=no");
   }
 
-  /*
-   *  Check reporting option
-   */
+  // Check reporting option
   if (absl::GetFlag(FLAGS_reporting) == "yes") {
-    std::cerr << "[SVLESS-MNGR]: Reporting is enabled, launching GPU Servers.." << std::endl;
+    std::cerr << "[SVLESS-MNGR]: Worker usage reporting is enabled.." << std::endl;
     worker_env.push_back("AVA_ENABLE_REPORTING=yes");
   }
   else {
-    std::cerr << "[SVLESS-MNGR]: Reporting is not enabled, no GPU servers will be launched" << std::endl;
+    std::cerr << "[SVLESS-MNGR]: Reporting is disabled, no migration or reporting will be done" << std::endl;
     worker_env.push_back("AVA_ENABLE_REPORTING=no");
   }
 
@@ -95,43 +76,32 @@ int main(int argc, const char *argv[]) {
     worker_env.push_back(kmd);
   }
 
+  // if serverless mode or force reuse
+  char *rm_addr = std::getenv("RESMNGR_ADDR");
+  if (rm_addr || absl::GetFlag(FLAGS_keepworkeralive) == "yes") {
+    setenv("REUSE_WORKER", "1", 1);
+    std::string kmd = "REUSE_WORKER=1";
+    worker_env.push_back(kmd);
+  }
+
+  std::string resmngr_addr = "";
+  if (rm_addr) {
+    resmngr_addr = std::string(rm_addr);
+    resmngr_addr += ":";
+    resmngr_addr += std::getenv("RESMNGR_PORT");
+    std::cerr << "[SVLESS-MNGR]: Running manager on serverless mode, rm at " << resmngr_addr << std::endl;   
+  }
+  
   /*
    *  Create the manager 
    */
   std::cerr << "[SVLESS-MNGR]: Using port " << port << " for AvA" << std::endl;
   SVGPUManager *manager =
       new SVGPUManager(port, absl::GetFlag(FLAGS_worker_port_base), absl::GetFlag(FLAGS_worker_path), worker_argv,
-                       worker_env, absl::GetFlag(FLAGS_ngpus), absl::GetFlag(FLAGS_gpuoffset));
+                       worker_env, absl::GetFlag(FLAGS_ngpus), absl::GetFlag(FLAGS_gpuoffset), 
+                       resmngr_addr, absl::GetFlag(FLAGS_scheduler), absl::GetFlag(FLAGS_precreated_workers) );
 
-  if (rm_addr) {
-    std::string full_addr(rm_addr);
-    full_addr += ":";
-    full_addr += std::getenv("RESMNGR_PORT");
-    std::cerr << "[SVLESS-MNGR]: Running manager on serverless mode, rm at " << full_addr << std::endl;
-    manager->resmngr_address = full_addr;
-  }
-  
-  if (absl::GetFlag(FLAGS_reporting) == "yes") {
-    manager->LaunchMemoryServers();
-    std::cerr << "[SVLESS-MNGR]: Launched memory servers, sleeping to give them time to spin up" << std::endl;
-    std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-  }
-
-  // normal ava mode
-  if (!rm_addr) {
-    std::cerr << "[SVLESS-MNGR]: Running manager on normal manager mode" << std::endl;
-    manager->RunServer();
-  }
-  // gRPC mode
-  else {
-    manager->LaunchService();
-    // wait a bit
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    manager->RegisterSelf();
-
-    // block forever
-    manager->grpc_server->Wait();
-  }
-
+  //loop forever
+  manager->RunServer();
   return 0;
 }

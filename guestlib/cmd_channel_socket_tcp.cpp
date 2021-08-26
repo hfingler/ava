@@ -34,74 +34,73 @@ std::vector<struct command_channel *> command_channel_socket_tcp_guest_new() {
   //addresses of workers we will connect to (usually one)
   std::vector<std::string> worker_address;
 
-  //try to get direct worker address from env to avoid talking to manager.
-  if(const char* env_worker_addr = std::getenv("AVA_WORKER_ADDR")) {
-    worker_address.push_back(std::string(env_worker_addr));
-    std::cerr << "AVA_WORKER_ADDR is in env vars, using it as worker address:" << env_worker_addr << std::endl;  
-  }
-  //if we can't do the default
-  else {  
-    // Connect API server manager
-    std::vector<std::string> manager_addr =
-        absl::StrSplit(guestconfig::config->manager_address_, absl::ByAnyChar(":-/ "));
-    DCHECK(manager_addr.size() == 2) << "Invalid API server manager address";
-    struct sockaddr_in addr;
-    if (!ava::support::ResolveTcpAddr(&addr, manager_addr[0], manager_addr[1])) {
-      AVA_LOG(FATAL) << fmt::format("Cannot resolve manager address {}:{}", manager_addr[0], manager_addr[1]);
-      abort();
-    }
-
-    int manager_sock = ava::support::TcpSocketConnect(&addr);
-    if (manager_sock == -1) {
-      AVA_LOG(FATAL) << "Cannot connect to manager";
-      abort();
-    }
-
-    // Serialize configurations
-    ava_proto::WorkerAssignRequest request;
-    request.gpu_count() = guestconfig::config->gpu_memory_.size();
-    for (auto m : guestconfig::config->gpu_memory_) {
-      request.gpu_mem().push_back(m << 20);
-    }
-    std::vector<unsigned char> request_buf;
-    zpp::serializer::memory_output_archive out(request_buf);
-    out(request);
-    uint32_t request_length = static_cast<uint32_t>(request_buf.size());
-    if (!ava::support::SendData(manager_sock, reinterpret_cast<const char *>(&request_length), sizeof(uint32_t))) {
-      AVA_LOG(FATAL) << "Fail to send request len to manager";
-      abort();
-    }
-    if (!ava::support::SendData(manager_sock, reinterpret_cast<const char *>(request_buf.data()), request_length)) {
-      AVA_LOG(FATAL) << "Fail to send request body to manager";
-      abort();
-    }
-
-    // De-serialize API server addresses
-    uint32_t reply_length = 0;
-    if (!ava::support::RecvData(manager_sock, reinterpret_cast<char *>(&reply_length), sizeof(uint32_t),
-                                /* eof= */ nullptr)) {
-      AVA_LOG(FATAL) << "Fail to receive reply len";
-      abort();
-    }
-
-    std::vector<unsigned char> reply_buf(reply_length);
-    zpp::serializer::memory_input_archive in(reply_buf);
-
-    if (!ava::support::RecvData(manager_sock, reinterpret_cast<char *>(reply_buf.data()), reply_length,
-                                /* eof= */ nullptr)) {
-      AVA_LOG(FATAL) << "Fail to receive reply from manager";
-      abort();
-    }
-    ava_proto::WorkerAssignReply reply;
-    in(reply);
-    for (auto &wa : reply.worker_address()) {
-      worker_address.push_back(wa);
-    }
-    if (worker_address.empty()) {
-      AVA_ERROR << "No API server is assigned";
-    }
+  std::vector<std::string> manager_addr;
+  //env variable takes priority
+  if(const char* env_mngr_addr = std::getenv("AVA_MANAGER_ADDR")) {
+    std::string addr(std::getenv("AVA_MANAGER_ADDR"));
+    manager_addr = absl::StrSplit(addr, absl::ByAnyChar(":-/ "));
+  } else {
+    manager_addr = absl::StrSplit(guestconfig::config->manager_address_, absl::ByAnyChar(":-/ "));
   }
 
+  // Connect API server manager
+  DCHECK(manager_addr.size() == 2) << "Invalid API server manager address";
+  struct sockaddr_in addr;
+  if (!ava::support::ResolveTcpAddr(&addr, manager_addr[0], manager_addr[1])) {
+    AVA_LOG(FATAL) << fmt::format("Cannot resolve manager address {}:{}", manager_addr[0], manager_addr[1]);
+    abort();
+  }
+
+  int manager_sock = ava::support::TcpSocketConnect(&addr);
+  if (manager_sock == -1) {
+    AVA_LOG(FATAL) << "Cannot connect to manager";
+    abort();
+  }
+
+  // Serialize configurations
+  ava_proto::WorkerAssignRequest request;
+  request.gpu_count() = guestconfig::config->gpu_memory_.size();
+  for (auto m : guestconfig::config->gpu_memory_) {
+    request.gpu_mem().push_back(m << 20);
+  }
+  std::vector<unsigned char> request_buf;
+  zpp::serializer::memory_output_archive out(request_buf);
+  out(request);
+  uint32_t request_length = static_cast<uint32_t>(request_buf.size());
+  if (!ava::support::SendData(manager_sock, reinterpret_cast<const char *>(&request_length), sizeof(uint32_t))) {
+    AVA_LOG(FATAL) << "Fail to send request len to manager";
+    abort();
+  }
+  if (!ava::support::SendData(manager_sock, reinterpret_cast<const char *>(request_buf.data()), request_length)) {
+    AVA_LOG(FATAL) << "Fail to send request body to manager";
+    abort();
+  }
+
+  // De-serialize API server addresses
+  uint32_t reply_length = 0;
+  if (!ava::support::RecvData(manager_sock, reinterpret_cast<char *>(&reply_length), sizeof(uint32_t),
+                              /* eof= */ nullptr)) {
+    AVA_LOG(FATAL) << "Fail to receive reply len";
+    abort();
+  }
+
+  std::vector<unsigned char> reply_buf(reply_length);
+  zpp::serializer::memory_input_archive in(reply_buf);
+
+  if (!ava::support::RecvData(manager_sock, reinterpret_cast<char *>(reply_buf.data()), reply_length,
+                              /* eof= */ nullptr)) {
+    AVA_LOG(FATAL) << "Fail to receive reply from manager";
+    abort();
+  }
+  ava_proto::WorkerAssignReply reply;
+  in(reply);
+  for (auto &wa : reply.worker_address()) {
+    worker_address.push_back(wa);
+  }
+  if (worker_address.empty()) {
+    AVA_ERROR << "No API server is assigned";
+  }
+  
   /* Connect API servers. */
   std::vector<struct command_channel *> channels;
   for (const auto &wa : worker_address) {
