@@ -1,4 +1,4 @@
-#include "SVGPUManager.hpp"
+#include "svgpu_manager.hpp"
 #include <nvml.h>
 #include <sys/wait.h>
 #include <boost/algorithm/string/join.hpp>
@@ -7,8 +7,10 @@
 #include <memory>
 #include <zmq.h>
 #include "extensions/memory_server/common.hpp"
-#include "extensions/memory_server/server.hpp"
+#include "resmngr.grpc.pb.h"
+#include "resmngr.pb.h"
 
+#include "scheduling/first_fit.hpp"
 
 /*************************************
  *
@@ -16,12 +18,30 @@
  *
  *************************************/
 
-void SVGPUManager::ResMngrClient::registerSelf() {
-    RegisterGPUNodeRequest request;
+std::string SVGPUManager::ResMngrClient::registerSelf() {
+    resmngr::RegisterGPUNodeRequest request;
     std::cout << "[SVLESS-MNGR]: registerSelf to resource manager.. " << std::endl;
     ClientContext context;
-    RegisterGPUNodeResponse reply;
+    resmngr::RegisterGPUNodeResponse reply;
     Status status = stub_->RegisterGPUNode(&context, request, &reply);
+    if (!status.ok()) {
+        std::cerr << "Error registering self with resmngr:" << status.error_code() << ": " << status.error_message()
+                << std::endl;
+        std::exit(1);
+    }
+
+    return reply.uuid();
+}
+
+void SVGPUManager::ResMngrClient::addGPUWorker(std::string uuid) {
+    resmngr::AddGPUWorkerRequest request;
+    request.set_uuid(uuid);
+    request.set_workers(1);
+
+    std::cout << "[SVLESS-MNGR]: adding gpu worker to resource manager.. " << std::endl;
+    ClientContext context;
+    resmngr::AddGPUWorkerResponse reply;
+    Status status = stub_->AddGPUWorker(&context, request, &reply);
     if (!status.ok()) {
         std::cerr << "Error registering self with resmngr:" << status.error_code() << ": " << status.error_message()
                 << std::endl;
@@ -31,7 +51,7 @@ void SVGPUManager::ResMngrClient::registerSelf() {
 
 void SVGPUManager::registerSelf() {
     resmngr_client = new ResMngrClient(grpc::CreateChannel(resmngr_address, grpc::InsecureChannelCredentials()));
-    resmngr_client->registerSelf();
+    uuid = resmngr_client->registerSelf();
 }
 
 /*************************************
@@ -48,6 +68,7 @@ ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::Worker
         return reply;
     }
 
+    std::cerr << "[SVLESS-MNGR]: API server request arrived, asking for schedule.." << std::endl;
     while (true) {
         GPUMemoryServer::Request req;
         req.type = GPUMemoryServer::RequestType::SCHEDULE;
@@ -58,77 +79,16 @@ ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::Worker
         GPUMemoryServer::Reply rep;
         zmq_recv(zmq_central_socket, &rep, sizeof(GPUMemoryServer::Reply), 0);
         
-        if (rep.data.code == GPUMemoryServer::ReplyCode::OK) {
-            reply.worker_address().push_back("0.0.0.0:" + std::to_string(rep.target_device));
+        if (rep.code == GPUMemoryServer::ReplyCode::OK) {
+            std::cerr << "[SVLESS-MNGR]: scheduled at port " << rep.data.ready.port << std::endl;
+            reply.worker_address().push_back("0.0.0.0:" + std::to_string(rep.data.ready.port));
             return reply;
         }
-        else if (rep.data.code == GPUMemoryServer::ReplyCode::RETRY) {
+        else if (rep.code == GPUMemoryServer::ReplyCode::RETRY) {
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
         }
     }
 }
-
-/*************************************
- *
- *    Central Manager
- *
- *************************************/
-
-void SVGPUManager::centralManagerLoop() {
-    void *context = zmq_ctx_new();
-    void *responder = zmq_socket(context, ZMQ_REP);
-    //make sure it doesn't exist
-    unlink(central_server_unix_socket_path.c_str());
-    int rc = zmq_bind(responder, central_server_unix_socket_path.c_str());
-    if (rc == -1)
-        printf("BIND FAILED with code %d\n", rc);
-
-    std::cerr << "[SVLESS-MNGR]: central manager up and running" << std::endl;
-
-    GPUMemoryServer::Reply rep;
-    GPUMemoryServer::Request req;
-    while(1) {
-        zmq_recv(responder, &req, sizeof(GPUMemoryServer::Request), 0);
-        std::cerr << "[SVLESS-MNGR]: got request" << std::endl;
-        handleRequest(req, rep);
-        zmq_send(responder, &rep, sizeof(GPUMemoryServer::Reply), 0);
-        std::cerr << "[SVLESS-MNGR]: sent" << std::endl;
-    }
-}
-
-void SVGPUManager::handleRequest(GPUMemoryServer::Request& req, GPUMemoryServer::Reply& rep) {
-    /*************************
-     *   schedule request
-     *************************/
-    if (req.type == GPUMemoryServer::RequestType::SCHEDULE) {
-        //TODO
-
-        for (auto& gpu_wks : gpu_workers) {
-            std::cerr << "checking gpu " << gpu_wks.first << std::endl;
-            for (auto& port_wk : gpu_wks.second) {
-                std::cerr << "checking port " << port_wk.first << std::endl;
-                if (port_wk.second.busy == false) {
-                    port_wk.second.busy = true;
-                    rep.target_device = port_wk.first;
-                    rep.data.code = GPUMemoryServer::ReplyCode::OK;
-                    return;
-                }
-            }
-        }
-
-        rep.data.code = GPUMemoryServer::ReplyCode::RETRY;
-    }
-    /*************************
-     *  worker is ready
-     *************************/
-    else if (req.type == GPUMemoryServer::RequestType::READY) {
-        auto port = req.data.ready.port;
-        auto gpu = req.data.ready.gpu;
-    
-        gpu_workers[gpu][port].busy = false;
-    }
-}
-
 
 /*************************************
  *
@@ -137,34 +97,16 @@ void SVGPUManager::handleRequest(GPUMemoryServer::Request& req, GPUMemoryServer:
  *************************************/
 
 void SVGPUManager::launchReportServers() {
-    std::string base_path = GPUMemoryServer::get_base_socket_path();
-    central_server_unix_socket_path = base_path + "central";
-
     // launch central
     central_server_thread = std::thread(&SVGPUManager::centralManagerLoop, this);
     std::cerr << "[SVLESS-MNGR]: Launched central server, sleeping to give them time to spin up" << std::endl;
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-    for (unsigned int i = gpu_offset; i < gpu_offset+n_gpus; i++) {
-        std::ostringstream stringStream;
-        stringStream << base_path << i;
-        std::cerr << "[SVLESS-MNGR]:  Launching GPU memory server for GPU " << i << " at socket "
-            << stringStream.str() << std::endl;
-
-        auto sv = std::make_unique<GPUMemoryServer::Server>
-            (i, stringStream.str(), central_server_unix_socket_path);
-
-        sv->start();
-        memory_servers.push_back(std::move(sv));
-    }
-    std::cerr << "[SVLESS-MNGR]: Launched memory servers, sleeping to give them time to spin up" << std::endl;
-    std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-
     //lets connect ourself to the central server, so that when we need to schedule we can talk to it
     zmq_context = zmq_ctx_new();
     zmq_central_socket = zmq_socket(zmq_context, ZMQ_REQ);
     while (1) { 
-        int ret = zmq_connect(zmq_central_socket, central_server_unix_socket_path.c_str());
+        int ret = zmq_connect(zmq_central_socket, GPUMemoryServer::get_central_socket_path().c_str());
         if (ret == 0) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         printf(" !!! Manager couldn't connect to central server\n");
@@ -176,10 +118,7 @@ SVGPUManager::SVGPUManager(uint32_t port, uint32_t worker_port_base, std::string
             std::string scheduler_name, uint32_t precreated_workers)
     : ManagerServiceServerBase(port, worker_port_base, worker_path, worker_argv, worker_env) {
 
-    if (scheduler_name == "random") {
-        this->scheduler = new RoundRobin(ngpus, gpu_offset);
-    }
-
+    
     this->n_gpus = ngpus;
     this->gpu_offset = gpu_offset;
     this->uuid_counter = 0;
@@ -279,4 +218,11 @@ void SVGPUManager::setRealGPUOffsetCount() {
     } 
 
     std::cout << "[SVLESS-MNGR]: set GPU offset to " << gpu_offset << " and GPU count to " << n_gpus << std::endl;
+}
+
+void SVGPUManager::createScheduler(std::string name) {
+    if (name == "firstfit") {
+        this->scheduler = new FirstFit(&gpu_workers, &gpu_states);
+    }
+
 }

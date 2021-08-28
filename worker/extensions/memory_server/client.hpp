@@ -48,7 +48,7 @@ namespace GPUMemoryServer {
         public:
         //zmq and comms stuff
         void* context;
-        void* sockets[4];
+        void* central_socket;
         std::mutex sockmtx;
         bool enable_reporting;
 
@@ -110,7 +110,7 @@ namespace GPUMemoryServer {
         void kernelOut();
         void resetCurrentGPU();
         void setCurrentGPU(int id);
-        void connectToGPU(uint32_t gpuid);
+        void connectToCentral();
         void reportMalloc(uint64_t size);
         void reportFree(uint64_t size);
         void reportCleanup(uint32_t gpuid);

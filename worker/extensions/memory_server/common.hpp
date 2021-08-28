@@ -8,9 +8,8 @@
 
 #define MAX_UUID_LEN 40
 namespace GPUMemoryServer {
-
-    inline std::string get_base_socket_path() {
-        return std::string("ipc:///tmp/gpumemserver_sock_");
+    inline std::string get_central_socket_path() {
+        return std::string("ipc:///tmp/gpumemserver_sock_central");
     }
 
     enum RequestType { READY, 
@@ -21,28 +20,34 @@ namespace GPUMemoryServer {
     union RequestData {
         uint64_t size;
         struct {
-            uint32_t port, gpu;
+            uint32_t port;
         } ready;
     };
     
     struct Request {
         RequestType type;
         RequestData data;
+        uint32_t gpu;
         char worker_id[MAX_UUID_LEN]; //36 is the size of a uuid v4
     };
 
     enum Migration { NOPE, TOTAL, KERNEL};
-    enum ReplyCode { OK, RETRY };
+    enum ReplyCode { OK, RETRY, MIGRATE };
     
     union ReplyData {
-        Migration migrate;
-        ReplyCode code;
+        struct {
+            Migration type;
+            uint32_t target_device;
+        } migration;
+
+        struct {
+            uint32_t port;
+        } ready;
     };
 
     struct Reply {
+        ReplyCode code;
         ReplyData data;
-        //Migration migrate;
-        uint32_t target_device;
     };
 
 }

@@ -38,7 +38,7 @@ add_custom_command(
   DEPENDS "${rm_proto}")
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR}
-  ${CMAKE_CURRENT_BINARY_DIR}/memory_server
+  ${CMAKE_CURRENT_BINARY_DIR}
   "/usr/local/cuda-10.1/include"
   ${CMAKE_SOURCE_DIR}
 )
@@ -56,8 +56,8 @@ target_link_libraries(grpc_proto
 
 add_executable(svgpu-manager
   manager.cpp
-  SVGPUManager.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../extensions/memory_server/server.cpp
+  svgpu_manager.cpp
+  central_manager.cpp
   ${manager_service_proto_srcs}
   ${manager_service_ava_srcs}
 )

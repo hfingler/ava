@@ -1,17 +1,16 @@
-#include <map>
-#include <memory>
-#include <string>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <random>
+#include "svgpu_manager.hpp"
 #include <zmq.h>
-#include "server.hpp"
+#include <random>
 #include "extensions/memory_server/common.hpp"
-#include <iostream>
 
-namespace GPUMemoryServer {
+
+/*************************************
+ *
+ *    Central Manager
+ *
+ *************************************/
+
+using namespace GPUMemoryServer;
 
 static uint32_t debug_kernel_count = 0;
 //std::random_device rdd;
@@ -20,52 +19,52 @@ std::mt19937 rgen{0};
 std::uniform_real_distribution<float> dis01(0, 1);
 //std::uniform_int_distribution<int> intdist(0,1);
 
-Server::Server(uint16_t gpu, std::string self_unix_socket_path, std::string central_server_unix_socket_path) {
-    this->gpu = gpu;
-    //this->gpu_memory_total = total_memory;  
-    this->gpu_memory_used = 0;
-    this->kernels_queued = 0;
-    this->self_unix_socket_path = self_unix_socket_path;
-    this->central_server_unix_socket_path = central_server_unix_socket_path;
-}
 
-void Server::run() {
-    //create zmq listener
+void SVGPUManager::centralManagerLoop() {
     void *context = zmq_ctx_new();
     void *responder = zmq_socket(context, ZMQ_REP);
     //make sure it doesn't exist
-    unlink(self_unix_socket_path.c_str());
-    int rc = zmq_bind(responder, self_unix_socket_path.c_str());
-    if (rc == -1) {
-        printf("BIND FAILED\n");
-    }
-    printf("Memory server of GPU %d ready, bound to %s\n", gpu, self_unix_socket_path.c_str());
-    
-    central_socket = zmq_socket(context, ZMQ_REQ);
-    while (1) { 
-        int ret = zmq_connect(central_socket, central_server_unix_socket_path.c_str());
-        if (ret == 0) break;
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        printf(" !!! GPU Client couldn't connect to central server\n");
-    }
+    unlink(GPUMemoryServer::get_central_socket_path().c_str());
+    int rc = zmq_bind(responder, GPUMemoryServer::get_central_socket_path().c_str());
+    if (rc == -1)
+        printf("BIND FAILED with code %d\n", rc);
+
+    std::cerr << "[SVLESS-MNGR]: central manager up and running" << std::endl;
 
     Reply rep;
     Request req;
     while(1) {
         zmq_recv(responder, &req, sizeof(Request), 0);
+        std::cerr << "[SVLESS-MNGR]: recvd" << std::endl;
         handleRequest(req, rep);
         zmq_send(responder, &rep, sizeof(Reply), 0);
+        std::cerr << "[SVLESS-MNGR]: sent" << std::endl;
     }
 }
 
-void Server::handleRequest(Request& req, Reply& rep) {
+void SVGPUManager::handleRequest(Request& req, Reply& rep) {
     //reset reply
-    rep.data.migrate = Migration::NOPE;
+    rep.data.migration.type = Migration::NOPE;
+    rep.code = ReplyCode::OK;
 
     /*************************
-     *   cudaMalloc request
+     *   schedule request
      *************************/
-    if (req.type == RequestType::ALLOC) {
+    if (req.type == RequestType::SCHEDULE) {
+        std::cerr << "[SVLESS-MNGR]: handling SCHEDULE message" << std::endl;
+        handleSchedule(req, rep);
+    }
+    /*************************
+     *  worker is ready
+     *************************/
+    else if (req.type == RequestType::READY) {
+        std::cerr << "[SVLESS-MNGR]: handling READY message" << std::endl;
+        handleReady(req, rep);
+    }
+    /*************************
+     *  cudaMalloc
+     *************************/
+    else if (req.type == RequestType::ALLOC) {
         handleMalloc(req, rep);
     }
     /*************************
@@ -98,29 +97,37 @@ void Server::handleRequest(Request& req, Reply& rep) {
     else if (req.type == RequestType::KERNEL_OUT) {
         handleKernelOut(req, rep);
     }
-    /*************************
-     *  worker ready
-     *************************/
-    else if (req.type == RequestType::READY) {
-        handleReady(req, rep);
-    }
     else {
         std::cerr << " Server got an unknown request type!\n";
     }
 }
 
-void Server::handleReady(Request& req, Reply& rep) {
-    //just forward to central
-    if (zmq_send(central_socket, &req, sizeof(Request), 0) == -1) {
-        printf(" ### zmq_send errno %d\n", errno);
+void SVGPUManager::handleSchedule(Request& req, Reply& rep) {
+    int32_t port = scheduler->getGPU();
+    if (port > 0) {
+        rep.data.ready.port = port;
+        rep.code = ReplyCode::OK;
+    }
+    else {
+        rep.code = ReplyCode::RETRY;
     }
 }
 
-void Server::handleMalloc(Request& req, Reply& rep) {
+void SVGPUManager::handleReady(Request& req, Reply& rep) {
+    auto port = req.data.ready.port;
+    auto gpu = req.gpu;
+    gpu_workers[gpu][port].busy = false;
+
+    //notify backend, if there is one, that we can handle another function
+    if (!resmngr_address.empty())
+        resmngr_client->addGPUWorker(uuid);
+}
+
+void SVGPUManager::handleMalloc(Request& req, Reply& rep) {
     uint64_t requested = req.data.size;
     std::string worker_id(req.worker_id);
 
-    workers_info[worker_id].mem_used += requested;
+    //workers_info[worker_id].mem_used += requested;
     (void)rep;
     
     //if (requested > gpu_memory_total-gpu_memory_used) {
@@ -129,26 +136,26 @@ void Server::handleMalloc(Request& req, Reply& rep) {
     //}
 }
 
-void Server::handleFree(Request& req, Reply& rep) {
+void SVGPUManager::handleFree(Request& req, Reply& rep) {
     std::string worker_id(req.worker_id);
-    workers_info[worker_id].mem_used -= req.data.size;
+    //workers_info[worker_id].mem_used -= req.data.size;
     (void)rep;
 }
 
-void Server::handleRequestedMemory(Request& req, Reply& rep) {
+void SVGPUManager::handleRequestedMemory(Request& req, Reply& rep) {
     std::string worker_id(req.worker_id);
-    workers_info[worker_id].requested_memory = req.data.size;
+    //workers_info[worker_id].requested_memory = req.data.size;
     (void)rep;
 }
 
-void Server::handleFinish(Request& req, Reply& rep) {
+void SVGPUManager::handleFinish(Request& req, Reply& rep) {
     std::string worker_id(req.worker_id);
-    workers_info.erase(worker_id);
+    //workers_info.erase(worker_id);
     (void)rep;
 }
 
-void Server::handleKernelIn(Request& req, Reply& rep) {
-    kernels_queued++;
+void SVGPUManager::handleKernelIn(Request& req, Reply& rep) {
+    //kernels_queued++;
     //std::cerr << " >>in: there are now" <<  kernels_queued << "kernels queued" <<std::endl;
 
     //check if we are just debugging
@@ -163,13 +170,13 @@ void Server::handleKernelIn(Request& req, Reply& rep) {
 
             if (!strcmp(dbg_mig, "1")) {
                 printf("SG_DEBUG_MIGRATION:  setting EXECUTION migration on\n");
-                rep.data.migrate = Migration::KERNEL;
-                rep.target_device = gpu == 1 ? 2 : 1;
+                rep.data.migration.type = Migration::KERNEL;
+                rep.data.migration.target_device = req.gpu == 1 ? 0 : 1;
             }
             else if (!strcmp(dbg_mig, "2")) {
                 printf("SG_DEBUG_MIGRATION:  setting MEMORY migration on\n");
-                rep.data.migrate = Migration::TOTAL;
-                rep.target_device = gpu == 1 ? 2 : 1;
+                rep.data.migration.type = Migration::TOTAL;
+                rep.data.migration.target_device = req.gpu == 1 ? 0 : 1;
             }
         }
         //if a multiple of 10, divide 1 by it and that's the prob
@@ -177,20 +184,20 @@ void Server::handleKernelIn(Request& req, Reply& rep) {
             float prob = 1.0 / dbgi;
             if (dis01(rgen) <= prob) { 
             //if (1) {
-                rep.data.migrate = Migration::TOTAL;
-                uint32_t dg = gpu == 0 ? 1 : 0;
-                rep.target_device = dg;
-                std::cerr << " SG_DEBUG_MIGRATION: TOTAL random migration triggered:  " << gpu  << " -> " << dg << " with prob " << prob << std::endl;
+                rep.data.migration.type = Migration::TOTAL;
+                uint32_t dg = req.gpu == 0 ? 1 : 0;
+                rep.data.migration.target_device = dg;
+                std::cerr << " SG_DEBUG_MIGRATION: TOTAL random migration triggered:  " << req.gpu  << " -> " << dg << " with prob " << prob << std::endl;
             }
         }
         //if a multiple of 10 after -1, divide 1 by it and that's the prob, use kernel migration
         else if (dbgi >= 11 && (dbgi-1) % 10 == 0) {
             float prob = 1.0 / dbgi;
             if (dis01(rgen) <= prob) { 
-                rep.data.migrate = Migration::KERNEL;
-                uint32_t dg = gpu == 0 ? 1 : 0;
-                rep.target_device = dg;
-                std::cerr << " SG_DEBUG_MIGRATION: KERNEL random migration triggered:  " << gpu  << " -> " << dg << " with prob " << prob << std::endl;
+                rep.data.migration.type = Migration::KERNEL;
+                uint32_t dg = req.gpu == 0 ? 1 : 0;
+                rep.data.migration.target_device = dg;
+                std::cerr << " SG_DEBUG_MIGRATION: KERNEL random migration triggered:  " << req.gpu  << " -> " << dg << " with prob " << prob << std::endl;
             }  
         }
     }
@@ -198,12 +205,8 @@ void Server::handleKernelIn(Request& req, Reply& rep) {
     (void)req;
 }
 
-void Server::handleKernelOut(Request& req, Reply& rep) {
+void SVGPUManager::handleKernelOut(Request& req, Reply& rep) {
     (void)req; (void)rep;
-    kernels_queued--;
+    //kernels_queued--;
     //printf(" <<out: there are now %d kernels queued\n", kernels_queued);
 }
-
-//end of namespace
-};
-

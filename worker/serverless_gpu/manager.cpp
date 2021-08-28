@@ -4,7 +4,7 @@
 #include <absl/flags/parse.h>
 #include <chrono>
 #include <thread>
-#include "SVGPUManager.hpp"
+#include "svgpu_manager.hpp"
 
 // arguments to this manager
 ABSL_FLAG(uint32_t, manager_port, 3333, "(OPTIONAL) Specify manager port number");

@@ -154,29 +154,22 @@ namespace GPUMemoryServer {
     Client::Client() {
         og_device = -1;
         context = zmq_ctx_new();
-        for (int i = 0 ; i < 4; i++) {
-            sockets[i] = 0;
-        }
         migrated_type = Migration::NOPE;
+
+        connectToCentral();
      }
 
      Client::~Client() {
-        for (int i = 0 ; i < device_count ; i++) {
-            zmq_close(sockets[i]);
-        }
-        //zmq_ctx_destroy(context);
+        zmq_close(central_socket);
     }
 
-    void Client::connectToGPU(uint32_t gpuid) {
-        std::ostringstream stringStream;
-        stringStream << GPUMemoryServer::get_base_socket_path() << gpuid;
-        sockets[gpuid] = zmq_socket(context, ZMQ_REQ);
-
+    void Client::connectToCentral() {
+        central_socket = zmq_socket(context, ZMQ_REQ);
         while (1) { 
-            int ret = zmq_connect(sockets[gpuid], stringStream.str().c_str());
+            int ret = zmq_connect(central_socket, GPUMemoryServer::get_central_socket_path().c_str());
             if (ret == 0) break;
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            printf(" !!! GPU Client couldn't connect to server [%d], this is WRONG! The server probably died due to a bug\n", gpuid);
+            printf(" !!! GPU Client couldn't connect to central server [%d]\n");
         }
         //printf("GPU Client succesfully connected to server [%d]\n", gpuid);
     }
@@ -272,29 +265,28 @@ namespace GPUMemoryServer {
             return;
         }
 
-        sockmtx.lock();
+        req.gpu = current_device;
         strncpy(req.worker_id, uuid.c_str(), MAX_UUID_LEN);
         if (strlen(uuid.c_str()) > MAX_UUID_LEN) {
             printf(" ### uuid %S IS LONGER THAN %d, THIS IS AN ISSUE\n", uuid.c_str(), MAX_UUID_LEN);
         }
-        //if not connected yet, do it
-        if (sockets[current_device] == 0) {
-            connectToGPU(current_device);
-        }
-        if (zmq_send(sockets[current_device], &req, sizeof(Request), 0) == -1) {
+
+        sockmtx.lock();
+        if (zmq_send(central_socket, &req, sizeof(Request), 0) == -1) {
             printf(" ### zmq_send errno %d\n", errno);
         }
         Reply rep;
-        zmq_recv(sockets[current_device], &rep, sizeof(Reply), 0);
+        zmq_recv(central_socket, &rep, sizeof(Reply), 0);
         sockmtx.unlock();
+
         //unlock and handle it
         handleReply(rep);
     }
 
     void Client::handleReply(Reply& reply) {
         //only migrate if server told us so and we haven't migrated before
-        if (reply.data.migrate != Migration::NOPE && current_device == og_device)
-            migrateToGPU(reply.target_device, reply.data.migrate);
+        if (reply.code == ReplyCode::MIGRATE && current_device == og_device)
+            migrateToGPU(reply.data.migration.target_device, reply.data.migration.type);
     }
 
     void Client::setCurrentGPU(int id) {
@@ -484,7 +476,6 @@ namespace GPUMemoryServer {
         Request req;
         req.type = RequestType::READY;
         req.data.ready.port = listen_port;
-        req.data.ready.gpu = current_device;
         std::cerr << "  worker on port " << listen_port << " sending ready message" << std::endl;
         sendRequest(req);
     }
