@@ -81,7 +81,14 @@ ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::Worker
         
         if (rep.code == GPUMemoryServer::ReplyCode::OK) {
             std::cerr << "[SVLESS-MNGR]: scheduled at port " << rep.data.ready.port << std::endl;
-            reply.worker_address().push_back("0.0.0.0:" + std::to_string(rep.data.ready.port));
+
+            std::string ip = "0.0.0.0:";
+            if (std::getenv("RESMNGR_ADDR")) {
+                ip = std::string(std::getenv("RESMNGR_ADDR"));
+                ip += ":";
+            }
+
+            reply.worker_address().push_back(ip + std::to_string(rep.data.ready.port));
             return reply;
         }
         else if (rep.code == GPUMemoryServer::ReplyCode::RETRY) {
@@ -118,13 +125,14 @@ SVGPUManager::SVGPUManager(uint32_t port, uint32_t worker_port_base, std::string
             std::string scheduler_name, uint32_t precreated_workers)
     : ManagerServiceServerBase(port, worker_port_base, worker_path, worker_argv, worker_env) {
 
-    
     this->n_gpus = ngpus;
     this->gpu_offset = gpu_offset;
     this->uuid_counter = 0;
     this->resmngr_address = resmngr_address;
     //update to real values using nvml
     setRealGPUOffsetCount();
+
+    createScheduler(scheduler_name);
 
     launchReportServers();
     
@@ -144,9 +152,9 @@ uint32_t SVGPUManager::launchWorker(uint32_t gpu_id) {
     // Start from input environment variables
     std::vector<std::string> environments(worker_env_);
 
-    for (std::string &e : environments) {
-        printf("   %s", e.c_str());
-    }
+    //for (std::string &e : environments) {
+    //    printf("   %s", e.c_str());
+    //}
 
     std::string visible_devices = "GPU_DEVICE=" + std::to_string(gpu_id);
     environments.push_back(visible_devices);
@@ -168,9 +176,9 @@ uint32_t SVGPUManager::launchWorker(uint32_t gpu_id) {
         parameters.push_back(argv);
     }
 
-    for (auto& element : environments) {
-        printf("  > %s\n", element.c_str());
-    }
+    //for (auto& element : environments) {
+    //    printf("  > %s\n", element.c_str());
+    //}
 
     std::cerr << "Spawn API server at 0.0.0.0:" << port << " (cmdline=\"" << boost::algorithm::join(environments, " ")
                 << " " << boost::algorithm::join(parameters, " ") << "\")" << std::endl;
@@ -225,4 +233,8 @@ void SVGPUManager::createScheduler(std::string name) {
         this->scheduler = new FirstFit(&gpu_workers, &gpu_states);
     }
 
+    //default
+    else {
+        this->scheduler = new FirstFit(&gpu_workers, &gpu_states);
+    }
 }

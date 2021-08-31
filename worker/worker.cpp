@@ -155,6 +155,8 @@ int main(int argc, char *argv[]) {
   }
   absl::InitializeSymbolizer(argv[0]);
 
+  std::cerr << "Worker spinning up.." << std::endl;
+
   char const *ttc_str = getenv("TTC_ADDR");
   if(ttc_str) {
     ttc.connect_to(std::string(ttc_str));

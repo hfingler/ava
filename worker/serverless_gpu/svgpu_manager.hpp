@@ -32,7 +32,6 @@ struct SVGPUManager : public ManagerServiceServerBase {
         std::unique_ptr<ResMngrService::Stub> stub_;
     };
 
-    
 
     /**************************************
      *        FIELDS

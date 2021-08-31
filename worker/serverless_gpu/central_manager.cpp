@@ -35,10 +35,10 @@ void SVGPUManager::centralManagerLoop() {
     Request req;
     while(1) {
         zmq_recv(responder, &req, sizeof(Request), 0);
-        std::cerr << "[SVLESS-MNGR]: recvd" << std::endl;
+        //std::cerr << "[SVLESS-MNGR]: recvd" << std::endl;
         handleRequest(req, rep);
         zmq_send(responder, &rep, sizeof(Reply), 0);
-        std::cerr << "[SVLESS-MNGR]: sent" << std::endl;
+        //std::cerr << "[SVLESS-MNGR]: sent" << std::endl;
     }
 }
 
