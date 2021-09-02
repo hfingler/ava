@@ -15,7 +15,7 @@ ABSL_FLAG(std::vector<std::string>, worker_env, {},
           "(OPTIONAL) Specify environment variables, e.g. HOME=/home/ubuntu, passed to API servers");
 ABSL_FLAG(uint16_t, ngpus, 0, "(OPTIONAL) Number of GPUs the manager should use");
 ABSL_FLAG(uint16_t, gpuoffset, 0, "(OPTIONAL)GPU id offset");
-ABSL_FLAG(std::string, scheduler, "firstfit", "(OPTIONAL) choose GPU scheduler, default is firstfit. Options are: firstfit");
+ABSL_FLAG(std::string, scheduler, "bestfit", "(OPTIONAL) choose GPU scheduler, default is bestfit. Options are: bestfit");
 ABSL_FLAG(uint32_t, precreated_workers, 1, "(OPTIONAL) How many workers per GPU we pre create. Default is 1.");
 
 ABSL_FLAG(std::string, keepworkeralive, "no", "(OPTIONAL) (debug) forcefully make the worker not die when not in serverless mode");

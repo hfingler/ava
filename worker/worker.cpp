@@ -107,7 +107,7 @@ EXPORTED_WEAKLY std::string worker_init_log() {
     }
   }
   plog::init(logger_severity, log_file.c_str());
-  std::cerr << "To check the state of AvA remoting progress, use `tail -f " << log_file << "`" << std::endl;
+  //std::cerr << "To check the state of AvA remoting progress, use `tail -f " << log_file << "`" << std::endl;
   return log_file;
 }
 
@@ -155,12 +155,7 @@ int main(int argc, char *argv[]) {
   }
   absl::InitializeSymbolizer(argv[0]);
 
-  std::cerr << "Worker spinning up.." << std::endl;
-
-  char const *ttc_str = getenv("TTC_ADDR");
-  if(ttc_str) {
-    ttc.connect_to(std::string(ttc_str));
-  }
+  //std::cerr << "Worker spinning up.." << std::endl;
   //ttc.notify(0);
 
   char const *gpu_device_str = getenv("GPU_DEVICE");
@@ -242,7 +237,7 @@ int main(int argc, char *argv[]) {
       std::cerr << "[worker#" << listen_port << "] waiting for connection" << std::endl;
       //ttc.notify(7);
       chan = command_channel_listen(chan);
-      //ttc.notify(8);
+      ttc.notify(8);
       // this launches the thread that listens for commands
       init_command_handler(channel_create);
       //ttc.notify(9);
@@ -250,7 +245,7 @@ int main(int argc, char *argv[]) {
        *  sync with worker until we get vmid and memory requested
        */
       wait_for_worker_setup();
-      printf("CV: worker was notified vmid was received..\n");
+      //printf("CV: worker was notified vmid was received..\n");
       // if this is serverless, we need to update our id
       if (svless_vmid == "NO_VMID" || svless_vmid == "") {
         printf("svless_vmid is default, using %s\n", worker_uuid.c_str());
@@ -263,7 +258,7 @@ int main(int argc, char *argv[]) {
       // now wait for cubin flag to be set
       wait_for_cubin_loaded();
       
-      printf("CV: worker was notified cubin was loaded..\n");
+      //printf("CV: worker was notified cubin was loaded..\n");
       // report our max memory requested
       GPUMemoryServer::Client::getInstance().reportMemoryRequested(requested_gpu_mem);
 

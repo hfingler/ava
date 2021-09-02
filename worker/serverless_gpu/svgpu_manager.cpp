@@ -11,6 +11,7 @@
 #include "resmngr.pb.h"
 
 #include "scheduling/first_fit.hpp"
+#include "scheduling/best_fit.hpp"
 
 /*************************************
  *
@@ -68,10 +69,13 @@ ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::Worker
         return reply;
     }
 
-    std::cerr << "[SVLESS-MNGR]: API server request arrived, asking for schedule.." << std::endl;
+    uint32_t gpu_mem = request.gpu_mem()[0];
+
+    std::cerr << "[SVLESS-MNGR]: API server request arrived, asking for schedule with memory " << gpu_mem << std::endl;
     while (true) {
         GPUMemoryServer::Request req;
         req.type = GPUMemoryServer::RequestType::SCHEDULE;
+        req.data.size = gpu_mem;
         if (zmq_send(zmq_central_socket, &req, sizeof(GPUMemoryServer::Request), 0) == -1) {
             printf(" ### zmq_send errno %d\n", errno);
         }
@@ -225,6 +229,12 @@ void SVGPUManager::setRealGPUOffsetCount() {
         n_gpus = device_count - gpu_offset;
     } 
 
+    //TODO: get real memory from nvml
+    for (int i = gpu_offset ; i < gpu_offset+n_gpus ; i++) {
+        gpu_states[i].total_memory = 15000;
+        gpu_states[i].used_memory = 0;
+    }
+    
     std::cout << "[SVLESS-MNGR]: set GPU offset to " << gpu_offset << " and GPU count to " << n_gpus << std::endl;
 }
 
@@ -232,9 +242,11 @@ void SVGPUManager::createScheduler(std::string name) {
     if (name == "firstfit") {
         this->scheduler = new FirstFit(&gpu_workers, &gpu_states);
     }
-
+    else if (name == "bestfit") {
+        this->scheduler = new BestFit(&gpu_workers, &gpu_states);
+    }
     //default
     else {
-        this->scheduler = new FirstFit(&gpu_workers, &gpu_states);
+        this->scheduler = new BestFit(&gpu_workers, &gpu_states);
     }
 }

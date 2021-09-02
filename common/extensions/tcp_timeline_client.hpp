@@ -10,9 +10,43 @@
 #include <arpa/inet.h>
 #include <iostream>
 
-#define PORT 40057
+#define TTCPORT 40057
 
-class TCPTimelineClient {
+struct TCPTimelineClient {
+    int sock;
+
+    TCPTimelineClient() {
+        sock = -1;
+    }
+
+    void notify(int e) {
+        if (sock == -1) {
+            sock = socket(AF_INET,SOCK_DGRAM,0);
+            if(sock < 0)
+                perror("cannot open socket");
+        }
+        printf("sending ttc to %s\n", getenv("TTC_ADDR"));
+
+        char const *ttc_str = getenv("TTC_ADDR");
+        if (!ttc_str) return;
+
+        sockaddr_in servaddr;
+        memset(&servaddr, 0, sizeof(servaddr));
+        servaddr.sin_family = AF_INET;
+        servaddr.sin_addr.s_addr = inet_addr(ttc_str);
+        servaddr.sin_port = htons(TTCPORT);
+
+        std::string s = std::to_string(e);
+
+        if (sendto(sock, s.c_str(), s.size()+1, 0,
+               (sockaddr*)&servaddr, sizeof(servaddr)) < 0){
+            perror("cannot send message");
+            return;
+        }
+    }
+
+
+    /*
     int sock;
     public:
     void connect_to(std::string address) {
@@ -49,6 +83,7 @@ class TCPTimelineClient {
 
         send(sock, &e, sizeof(int), 0);
     }
+    */
 };
 
 

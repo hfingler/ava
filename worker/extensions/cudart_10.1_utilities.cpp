@@ -31,20 +31,46 @@ cudaError_t __helper_cuda_memcpy_async_host_to_host(void *dst, const void *src, 
 cudaError_t __helper_cuda_memcpy_async_host_to_device(void *dst, const void *src, size_t count, cudaStream_t stream) {
   cudaError_t ret;
   ret = cudaMemcpyAsync(__translate_ptr(dst), src, count, cudaMemcpyHostToDevice, __translate_stream(stream));
+  
+#ifndef NDEBUG
+  //cudaDeviceSynchronize();
+  if(ret) 
+    std::cerr << "\n ### __helper_cuda_memcpy_async_host_to_device ERROR after " << ret << "\n";
+#endif
+  
   return ret;
 }
 
 cudaError_t __helper_cuda_memcpy_async_device_to_host(void *dst, const void *src, size_t count, cudaStream_t stream) {
+#ifndef NDEBUG
+    //cudaDeviceSynchronize();
+    cudaError_t ret1 = cudaGetLastError();
+    if(ret1) 
+      std::cerr << "\n ### __helper_cuda_memcpy_async_device_to_host error before " << ret1 << "\n";
+#endif
+  
   cudaError_t ret;
   ret = cudaMemcpyAsync(dst, __translate_ptr(src), count, cudaMemcpyDeviceToHost, __translate_stream(stream));
-  //testing
-  //cudaDeviceSynchronize();();
+
+#ifndef NDEBUG
+    //cudaDeviceSynchronize();
+    if(ret) 
+      std::cerr << "\n ### __helper_cuda_memcpy_async_device_to_host error after " << ret << "\n";
+#endif
+
   return ret;
 }
 
 cudaError_t __helper_cuda_memcpy_async_device_to_device(void *dst, const void *src, size_t count, cudaStream_t stream) {
   cudaError_t ret;
   ret = cudaMemcpyAsync(__translate_ptr(dst), __translate_ptr(src), count, cudaMemcpyDeviceToDevice, __translate_stream(stream));
+  
+#ifndef NDEBUG
+  //cudaDeviceSynchronize();
+  if(ret) 
+    std::cerr << "\n ### __helper_cuda_memcpy_async_host_to_device ERROR after " << ret << "\n";
+#endif
+  
   return ret;
 }
 
@@ -270,7 +296,7 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
 
 #ifndef NDEBUG
     std::cerr << ">>> cuLaunchKernel returned " << ret << std::endl;
-    //cudaDeviceSynchronize();
+    cudaDeviceSynchronize();
     cudaError_t ret2 = cudaGetLastError();
     if(ret2) 
       std::cerr << "\n ### __helper_launch_kernel ERROR after sync " << ret2 << "\n";
@@ -422,8 +448,8 @@ void __helper_register_function(struct fatbin_function *func, const char *hostFu
     // Only register the first host function
     // if (func->hostfunc != NULL) return;
     if (func->hostfunc[i] != NULL) {
-      std::cerr << "----------------------- func->hostfunc[i] != NULL in __helper_register_function------------"
-                << std::endl;
+      //std::cerr << "----------------------- func->hostfunc[i] != NULL in __helper_register_function------------"
+      //          << std::endl;
       continue;
     }
 
@@ -783,7 +809,7 @@ cudaError_t __helper_cudaPointerGetAttributes(struct cudaPointerAttributes *attr
     //cudaDeviceSynchronize();
     cudaError_t ret3 = cudaGetLastError();
     if(ret3) 
-      std::cerr << "\n ### __helper_cudaPointerGetAttributes AFTER ERROR (if 1, probably fine) " << ret3 << "\n";
+      std::cerr << "__helper_cudaPointerGetAttributes AFTER ERROR (if 1, probably fine) " << ret3 << "\n";
 #endif
 
   return err;
@@ -989,7 +1015,7 @@ cudnnStatus_t __helper_cudnnFindConvolutionForwardAlgorithmEx(
             size_t workSpaceSizeInBytes) {
 
 #ifndef NDEBUG
-  //cudaDeviceSynchronize();();
+  cudaDeviceSynchronize();
   cudaError_t ret3 = cudaGetLastError();
   if(ret3) 
     std::cerr << "\n ### __helper_cudnnFindConvolutionForwardAlgorithmEx  before " << ret3 << "\n";
@@ -999,17 +1025,35 @@ cudnnStatus_t __helper_cudnnFindConvolutionForwardAlgorithmEx(
     __translate_ptr(w), convDesc, yDesc, __translate_ptr(y), requestedAlgoCount, returnedAlgoCount, 
     perfResults, __translate_ptr(workSpace), workSpaceSizeInBytes);
 
+#ifndef NDEBUG
   std::cerr << "__helper_cudnnFindConvolutionForwardAlgorithmEx returned  " << err << "\n";
   if( err > 0) {
     std::cerr << " ### ERROR ON __helper_cudnnFindConvolutionForwardAlgorithmEx  \n";
   }
 
-#ifndef NDEBUG
-  //cudaDeviceSynchronize();();
+  cudaDeviceSynchronize();
   cudaError_t ret2 = cudaGetLastError();
   if(ret2) 
     std::cerr << "\n ### __helper_cudnnFindConvolutionForwardAlgorithmEx  before " << ret2 << "\n";
 #endif
 
+  return err;
+}
 
+cublasStatus_t __helper_cublasSgemmStridedBatched(
+    cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k,
+    const float *alpha,                                                /* host or device pointer */
+    const float *A, int lda, long long int strideA,                    /* purposely signed */
+    const float *B, int ldb, long long int strideB, const float *beta, /* host or device pointer */
+    float *C, int ldc, long long int strideC, int batchCount,  bool alpha_is_gpu, bool beta_is_gpu) {
+
+  return cublasSgemmStridedBatched(__get_cublas_handle(handle), transa, transb, m, n, k,
+    alpha_is_gpu ? __translate_ptr(alpha) : alpha, 
+    (const float*)__helper_translate_ptr((const void*)A), 
+    lda, strideA, 
+    (const float*)__helper_translate_ptr((const void*)B), ldb, 
+    strideB, 
+    beta_is_gpu ? __translate_ptr(beta) : beta, 
+    (const float*)__helper_translate_ptr((const void*)C), 
+    ldc, strideC, batchCount);
 }

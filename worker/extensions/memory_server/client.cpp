@@ -103,12 +103,21 @@ void __internal_kernelOut() {
 CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
                                 unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
                                 unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
+    // TODO
     CUresult cur;
     GPUMemoryServer::Client::getInstance().kernelIn();
     cur = cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
                 sharedMemBytes, hStream, kernelParams, extra);
     GPUMemoryServer::Client::getInstance().kernelOut();
     return cur;
+}
+
+CUresult __internal_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
+    void* ptr;
+    cudaError_t err = GPUMemoryServer::Client::getInstance().localMalloc(&ptr, bytesize);
+    *dptr = ptr;
+
+    return (CUresult) err;
 }
 
 cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
@@ -192,10 +201,15 @@ namespace GPUMemoryServer {
 
     cudaError_t Client::localMalloc(void** devPtr, size_t size) {
         cudaError_t err = cudaMalloc(devPtr, size);
+        if (err != 0){
+            cudaGetLastError();
+            return err;
+        } 
+
         local_allocs.push_back(std::make_unique<Client::LocalAlloc>(*devPtr, size, current_device));
-        int d;
-        cudaGetDevice(&d);
-        printf("  malloc %p  size %lu  at device %d, ret=%d\n", *devPtr, size, d, err);
+        //int d;
+        //cudaGetDevice(&d);
+        //printf("  malloc %p  size %lu  at device %d, ret=%d\n", *devPtr, size, d, err);
         
         if (migrated_type == Migration::TOTAL && pointerIsMapped(*devPtr, og_device)) {
             //here's the issue.. if we have migrated memory, cudaMalloc may return a pointer that was

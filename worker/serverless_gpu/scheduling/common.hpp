@@ -4,14 +4,15 @@
 #include <stdint.h>
 
 struct GPUWorkerState {
-        uint32_t port;
-        bool busy;
+  //uint32_t port;
+  bool busy;
+  uint64_t used_memory;
 };
 
 struct GPUState {
-    std::vector<GPUWorkerState> workers;
-    uint64_t total_memory;
-    uint64_t used_memory;
+  std::vector<GPUWorkerState> workers;
+  uint64_t total_memory;
+  uint64_t used_memory;
 };
 
 struct BaseScheduler {
@@ -24,7 +25,7 @@ struct BaseScheduler {
     workers(workers), gpu_states(gpu_states)
   {}
 
-  virtual int32_t getGPU() = 0;
+  virtual int32_t getGPU(uint64_t requested_memory) = 0;
 };
 
 

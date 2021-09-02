@@ -130,6 +130,7 @@ CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned
                                    unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
                                    unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra);
 cudaError_t __internal_cudaMalloc(void **devPtr, size_t size);
+CUresult __internal_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize);
 cudaError_t __internal_cudaFree(void *devPtr);
 
 uint32_t __internal_getCurrentDeviceIndex();
@@ -246,6 +247,15 @@ cudnnStatus_t __helper_cudnnFindConvolutionForwardAlgorithmEx(
     const void *w, const cudnnConvolutionDescriptor_t convDesc, const cudnnTensorDescriptor_t yDesc, void *y,
     const int requestedAlgoCount, int *returnedAlgoCount, cudnnConvolutionFwdAlgoPerf_t *perfResults, void *workSpace,
     size_t workSpaceSizeInBytes);
+
+cublasStatus_t __helper_cublasSgemmStridedBatched(
+    cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k,
+    const float *alpha,                                                /* host or device pointer */
+    const float *A, int lda, long long int strideA,                    /* purposely signed */
+    const float *B, int ldb, long long int strideB, const float *beta, /* host or device pointer */
+    float *C, int ldc, long long int strideC, int batchCount,  bool alpha_is_gpu, bool beta_is_gpu);
+
+
 
 #if defined(__cplusplus)
 }

@@ -61,7 +61,7 @@ void wait_for_worker_setup() {
 void worker_setup_done() {
   std::unique_lock<std::mutex> lk(received_vmid_mutex);
   received_vmid = true;
-  printf("CV: cmd_handler notifying vmid was received..\n");
+  //printf("CV: cmd_handler notifying vmid was received..\n");
   received_vmid_cv.notify_all();
 }
 
@@ -183,7 +183,7 @@ void handle_command_and_notify(struct command_channel *chan, struct command_base
   if (!threads_ready && cmd->command_id != COMMAND_HANDLER_REGISTER_VMID && cmd->command_id != COMMAND_HANDLER_REGISTER_DUMP_DIR) {
     //wait for worker to set up and let us go
     wait_for_shadow_threads_release();
-    printf("  #### shadow thread unlocked for handling!\n");
+    //printf("  #### shadow thread unlocked for handling!\n");
   }
 
   if (tl_current_device == -1) {
@@ -483,11 +483,11 @@ void internal_api_handler(struct command_channel *chan, struct nw_handle_pool *h
     size_t offset = sizeof(uint32_t) / sizeof(char);
     const char* dump_dir = (const char*)&cmd->reserved_area[offset];
     memcpy(&requested_gpu_mem, cmd->reserved_area, sizeof(uint32_t));
-    printf("\n//! Requested GPU memory: %u\n\n", requested_gpu_mem);
+    //printf("\n//! Requested GPU memory: %u\n\n", requested_gpu_mem);
 
     //if it wasnt specified, use default
     if (strcmp(dump_dir, "") == 0) {
-      printf("dump_dir not specified in COMMAND_HANDLER_REGISTER_DUMP_DIR, using default /cuda_dumps\n");
+      //printf("dump_dir not specified in COMMAND_HANDLER_REGISTER_DUMP_DIR, using default /cuda_dumps\n");
       dump_dir = "/cuda_dumps";
     }
 
@@ -496,7 +496,7 @@ void internal_api_handler(struct command_channel *chan, struct nw_handle_pool *h
     ava_load_cubin_worker(dump_dir);
 #endif
 
-    printf("  !!! cubin loading done, signaling\n");
+    //printf("  !!! cubin loading done, signaling\n");
     //loading is done
     set_cubin_loaded();
 

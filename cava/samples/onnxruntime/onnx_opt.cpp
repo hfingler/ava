@@ -821,9 +821,9 @@ bytes\n", hostVar, deviceAddress, deviceName, size);
 ava_begin_replacement;
 EXPORTED void CUDARTAPI __cudaRegisterVar(void **fatCubinHandle, char *hostVar, char *deviceAddress,
                                           const char *deviceName, int ext, size_t size, int constant, int global) {
-  fprintf(stderr, "__cudaRegisterVar is a dummpy implementation. ");
-  fprintf(stderr, "hostPtr=%p; deviceAddress=%s; deviceName=%s; Registering const memory of %lu bytes\n", hostVar,
-          deviceAddress, deviceName, size);
+  //fprintf(stderr, "__cudaRegisterVar is a dummpy implementation. ");
+  //fprintf(stderr, "hostPtr=%p; deviceAddress=%s; deviceName=%s; Registering const memory of %lu bytes\n", hostVar,
+  //        deviceAddress, deviceName, size);
 }
 
 EXPORTED void CUDARTAPI __cudaRegisterFatBinaryEnd(void **fatCubinHandle) {
@@ -1040,6 +1040,7 @@ cudaError_t __internal_cudaMalloc(void **devPtr, size_t size) {
 
 ava_begin_replacement;
 EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMalloc(void **devPtr, size_t size) {
+  
   return __internal_cudaMalloc(devPtr, size);
 }
 ava_end_replacement;
@@ -1773,12 +1774,18 @@ CUresult CUDAAPI cuFuncSetCacheConfig(CUfunction hfunc, CUfunc_cache config) { a
 
 CUresult CUDAAPI cuCtxGetSharedMemConfig(CUsharedconfig *pConfig) { ava_unsupported; }
 
-CUresult CUDAAPI cuStreamCreate(CUstream *phStream, unsigned int Flags) {
+CUresult CUDAAPI cuStreamCreate(CUstream *phStream, unsigned int flags) {
   ava_argument(phStream) {
     ava_out;
     ava_buffer(1);
     ava_element ava_handle;
   }
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return (CUresult) __helper_create_stream(phStream, flags, 0);
+  }
+
 }
 
 CUresult CUDAAPI cuStreamGetCtx(CUstream hStream, CUcontext *pctx) {
@@ -1812,7 +1819,8 @@ CUresult CUDAAPI cuStreamDestroy(CUstream hStream) {
   }
 }
 
-CUresult CUDAAPI cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
+
+CUresult CUDAAPI __internal_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
   ava_argument(dptr) {
     ava_out;
     ava_buffer(1);
@@ -1827,6 +1835,13 @@ CUresult CUDAAPI cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
     __helper_save_gpu_address_range((uint64_t)(*dptr), bytesize, static_cast<void *>(&ret));
   }
 }
+
+
+ava_begin_replacement;
+CUresult CUDAAPI cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
+  return __internal_cuMemAlloc(dptr, bytesize);
+}
+ava_end_replacement;
 
 /*
 CUresult CUDAAPI
@@ -3499,12 +3514,12 @@ EXPORTED CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemm_v2(cublasHandle_t han
   bool alpha_is_gpu = false;
   bool beta_is_gpu = false;
   ret = __helper_cudaPointerGetAttributes(&alpha_attr, alpha);
-  printf("alpha attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, alpha_attr.type, alpha_attr.device,
-  alpha_attr.devicePointer, alpha_attr.hostPointer);
+  //printf("alpha attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, alpha_attr.type, alpha_attr.device,
+  //alpha_attr.devicePointer, alpha_attr.hostPointer);
   if (ret != cudaSuccess) {
     alpha_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(alpha));
     cudaGetLastError();
-    printf(" alpha on GPU? %d\n", alpha_is_gpu);
+    //printf(" alpha on GPU? %d\n", alpha_is_gpu);
   } else {
 #ifndef NDEBUG
     fprintf(stderr, "alpha type is %d\n", alpha_attr.type);
@@ -3512,15 +3527,15 @@ EXPORTED CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemm_v2(cublasHandle_t han
     alpha_is_gpu = (alpha_attr.type == cudaMemoryTypeDevice);
   }
   ret = __helper_cudaPointerGetAttributes(&beta_attr, beta);
-  printf("beta attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, beta_attr.type, beta_attr.device,
-  beta_attr.devicePointer, beta_attr.hostPointer);
+  //printf("beta attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, beta_attr.type, beta_attr.device,
+  //beta_attr.devicePointer, beta_attr.hostPointer);
   if (ret != cudaSuccess) {
     beta_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(beta));
     cudaGetLastError();
-    printf(" beta on GPU? %d\n", alpha_is_gpu);
+    //printf(" beta on GPU? %d\n", alpha_is_gpu);
   } else {
 #ifndef NDEBUG
-    fprintf(stderr, "beta type is %d\n", beta_attr.type);
+    //fprintf(stderr, "beta type is %d\n", beta_attr.type);
 #endif
     beta_is_gpu = (beta_attr.type == cudaMemoryTypeDevice);
   }
@@ -4063,14 +4078,14 @@ CUBLASAPI cublasStatus_t CUBLASWINAPI cublasGemmStridedBatchedEx(
   ava_unsupported;
 }
 
-CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemmStridedBatched(
+
+CUBLASAPI cublasStatus_t CUBLASWINAPI __helper_cublasSgemmStridedBatched(
     cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k,
     const float *alpha,                                                /* host or device pointer */
     const float *A, int lda, long long int strideA,                    /* purposely signed */
     const float *B, int ldb, long long int strideB, const float *beta, /* host or device pointer */
-    float *C, int ldc, long long int strideC, int batchCount) {
-  ava_implicit_argument bool alpha_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(alpha));
-  ava_implicit_argument bool beta_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(beta));
+    float *C, int ldc, long long int strideC, int batchCount, bool alpha_is_gpu, bool beta_is_gpu) {
+
   ava_argument(handle) ava_handle;
   ava_argument(A) ava_opaque;
   ava_argument(B) ava_opaque;
@@ -4102,7 +4117,57 @@ CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemmStridedBatched(
       ava_depends_on(beta_is_gpu);
     }
   }
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return __helper_cublasSgemmStridedBatched(__get_cublas_handle(handle), transa, transb, m, n, k,
+      alpha, A, lda, strideA, B, ldb, strideB, beta, C, ldc, strideC, batchCount, alpha_is_gpu, beta_is_gpu);
+  }
 }
+
+ava_begin_replacement;
+EXPORTED CUBLASAPI cublasStatus_t CUBLASWINAPI cublasSgemmStridedBatched(
+    cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k,
+    const float *alpha,                                                /* host or device pointer */
+    const float *A, int lda, long long int strideA,                    /* purposely signed */
+    const float *B, int ldb, long long int strideB, const float *beta, /* host or device pointer */
+    float *C, int ldc, long long int strideC, int batchCount) {
+ 
+  cudaError_t ret;
+  struct cudaPointerAttributes alpha_attr;
+  struct cudaPointerAttributes beta_attr;
+  bool alpha_is_gpu = false;
+  bool beta_is_gpu = false;
+  ret = __helper_cudaPointerGetAttributes(&alpha_attr, alpha);
+  //printf("alpha attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, alpha_attr.type, alpha_attr.device,
+  //alpha_attr.devicePointer, alpha_attr.hostPointer);
+  if (ret != cudaSuccess) {
+    alpha_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(alpha));
+    cudaGetLastError();
+    //printf(" alpha on GPU? %d\n", alpha_is_gpu);
+  } else {
+#ifndef NDEBUG
+    fprintf(stderr, "alpha type is %d\n", alpha_attr.type);
+#endif
+    alpha_is_gpu = (alpha_attr.type == cudaMemoryTypeDevice);
+  }
+  ret = __helper_cudaPointerGetAttributes(&beta_attr, beta);
+  //printf("beta attr ret %d  type %d  device  %d    dvcptr %p hostptr %p\n", ret, beta_attr.type, beta_attr.device,
+  //beta_attr.devicePointer, beta_attr.hostPointer);
+  if (ret != cudaSuccess) {
+    beta_is_gpu = is_gpu_address(reinterpret_cast<uint64_t>(beta));
+    cudaGetLastError();
+    //printf(" beta on GPU? %d\n", alpha_is_gpu);
+  } else {
+#ifndef NDEBUG
+    //fprintf(stderr, "beta type is %d\n", beta_attr.type);
+#endif
+    beta_is_gpu = (beta_attr.type == cudaMemoryTypeDevice);
+  }
+  return __helper_cublasSgemmStridedBatched(handle, transa, transb, m, n, k,
+      alpha, A, lda, strideA, B, ldb, strideB, beta, C, ldc, strideC, batchCount, alpha_is_gpu, beta_is_gpu);
+}
+ava_end_replacement;
 
 CUBLASAPI cublasStatus_t CUBLASWINAPI cublasDgemmStridedBatched(
     cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k,

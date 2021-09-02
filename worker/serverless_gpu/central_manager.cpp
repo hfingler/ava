@@ -19,6 +19,8 @@ std::mt19937 rgen{0};
 std::uniform_real_distribution<float> dis01(0, 1);
 //std::uniform_int_distribution<int> intdist(0,1);
 
+uint32_t t_scheduled = 0;
+uint32_t t_migrated = 0;
 
 void SVGPUManager::centralManagerLoop() {
     void *context = zmq_ctx_new();
@@ -103,10 +105,12 @@ void SVGPUManager::handleRequest(Request& req, Reply& rep) {
 }
 
 void SVGPUManager::handleSchedule(Request& req, Reply& rep) {
-    int32_t port = scheduler->getGPU();
+    int32_t port = scheduler->getGPU(req.data.size);
     if (port > 0) {
         rep.data.ready.port = port;
         rep.code = ReplyCode::OK;
+        t_scheduled++;
+        std::cerr << " Scheduled succesfully: " << t_scheduled << std::endl;
     }
     else {
         rep.code = ReplyCode::RETRY;
@@ -117,6 +121,12 @@ void SVGPUManager::handleReady(Request& req, Reply& rep) {
     auto port = req.data.ready.port;
     auto gpu = req.gpu;
     gpu_workers[gpu][port].busy = false;
+
+    // if its not a brand new worker, it means we are reusing, so reduce memory used in gpu
+    gpu_states[gpu].used_memory -= gpu_workers[gpu][port].used_memory;
+    std::cerr << "updating used memory of gpu " << gpu << " to " << gpu_states[gpu].used_memory << std::endl;
+
+    gpu_workers[gpu][port].used_memory = 0;
 
     //notify backend, if there is one, that we can handle another function
     if (!resmngr_address.empty())
@@ -154,6 +164,8 @@ void SVGPUManager::handleFinish(Request& req, Reply& rep) {
     (void)rep;
 }
 
+
+
 void SVGPUManager::handleKernelIn(Request& req, Reply& rep) {
     //kernels_queued++;
     //std::cerr << " >>in: there are now" <<  kernels_queued << "kernels queued" <<std::endl;
@@ -171,12 +183,26 @@ void SVGPUManager::handleKernelIn(Request& req, Reply& rep) {
             if (!strcmp(dbg_mig, "1")) {
                 printf("SG_DEBUG_MIGRATION:  setting EXECUTION migration on\n");
                 rep.data.migration.type = Migration::KERNEL;
+                rep.code = ReplyCode::MIGRATE;
                 rep.data.migration.target_device = req.gpu == 1 ? 0 : 1;
             }
             else if (!strcmp(dbg_mig, "2")) {
                 printf("SG_DEBUG_MIGRATION:  setting MEMORY migration on\n");
                 rep.data.migration.type = Migration::TOTAL;
+                rep.code = ReplyCode::MIGRATE;
                 rep.data.migration.target_device = req.gpu == 1 ? 0 : 1;
+            }
+        }
+        else if (dbgi == 3) {
+            if (req.gpu == 0 && t_migrated == 0 && t_scheduled >= 2) {
+                rep.code = ReplyCode::MIGRATE;
+                std::cerr << "\n\n\nSG_DEBUG_MIGRATION: ITS GOING DOWN\n\n";
+                rep.data.migration.type = Migration::TOTAL;
+                rep.data.migration.target_device = 1;
+                t_migrated = 1;
+
+                gpu_states[0].used_memory -= 5000;
+                gpu_states[1].used_memory += 5000;
             }
         }
         //if a multiple of 10, divide 1 by it and that's the prob
@@ -185,6 +211,7 @@ void SVGPUManager::handleKernelIn(Request& req, Reply& rep) {
             if (dis01(rgen) <= prob) { 
             //if (1) {
                 rep.data.migration.type = Migration::TOTAL;
+                rep.code = ReplyCode::MIGRATE;
                 uint32_t dg = req.gpu == 0 ? 1 : 0;
                 rep.data.migration.target_device = dg;
                 std::cerr << " SG_DEBUG_MIGRATION: TOTAL random migration triggered:  " << req.gpu  << " -> " << dg << " with prob " << prob << std::endl;
@@ -195,6 +222,7 @@ void SVGPUManager::handleKernelIn(Request& req, Reply& rep) {
             float prob = 1.0 / dbgi;
             if (dis01(rgen) <= prob) { 
                 rep.data.migration.type = Migration::KERNEL;
+                rep.code = ReplyCode::MIGRATE;
                 uint32_t dg = req.gpu == 0 ? 1 : 0;
                 rep.data.migration.target_device = dg;
                 std::cerr << " SG_DEBUG_MIGRATION: KERNEL random migration triggered:  " << req.gpu  << " -> " << dg << " with prob " << prob << std::endl;

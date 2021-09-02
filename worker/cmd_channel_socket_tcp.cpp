@@ -75,7 +75,7 @@ struct command_channel *command_channel_listen(struct command_channel* chan) {
   address.sin_addr.s_addr = INADDR_ANY;
   address.sin_port = htons(ch->listen_port);
   
-  fprintf(stderr, "[%d] Waiting for guestlib connection\n", ch->listen_port);
+  //fprintf(stderr, "[%d] Waiting for guestlib connection\n", ch->listen_port);
   ch->sock_fd = accept(ch->listen_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
   if (ch->sock_fd < 0) {
     perror("accept");

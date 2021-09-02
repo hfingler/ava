@@ -61,10 +61,20 @@ std::vector<struct command_channel *> command_channel_socket_tcp_guest_new() {
 
   // Serialize configurations
   ava_proto::WorkerAssignRequest request;
-  request.gpu_count() = guestconfig::config->gpu_memory_.size();
-  for (auto m : guestconfig::config->gpu_memory_) {
-    request.gpu_mem().push_back(m << 20);
-  }
+  
+  // always request just one, and use our memory request stuff
+  //request.gpu_count() = guestconfig::config->gpu_memory_.size();
+  //for (auto m : guestconfig::config->gpu_memory_) {
+  //  request.gpu_mem().push_back(m << 20);
+  //}
+
+  request.gpu_count() = 1;
+  uint32_t gpu_mem = 0;
+  printf("!!! requesting memory %s\n", std::getenv("AVA_REQUESTED_GPU_MEMORY"));
+  if (std::getenv("AVA_REQUESTED_GPU_MEMORY"))
+    gpu_mem = std::stoul(std::getenv("AVA_REQUESTED_GPU_MEMORY"));
+  request.gpu_mem().push_back(gpu_mem);
+
   std::vector<unsigned char> request_buf;
   zpp::serializer::memory_output_archive out(request_buf);
   out(request);

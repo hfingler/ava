@@ -1,5 +1,5 @@
-#ifndef __ROUNDROBIN_SCHEDULER_HPP__
-#define __ROUNDROBIN_SCHEDULER_HPP__
+#ifndef __FIRSTFIT_SCHEDULER_HPP__
+#define __FIRSTFIT_SCHEDULER_HPP__
 
 #include "common.hpp"
 
@@ -11,7 +11,7 @@ struct FirstFit : public BaseScheduler {
     BaseScheduler(workers, gpu_states)
   {}
 
-  int32_t getGPU() {
+  int32_t getGPU(uint64_t gpu_memory) {
     for (auto& gpu_wks : *workers) {
         std::cerr << "checking gpu " << gpu_wks.first << std::endl;
         for (auto& port_wk : gpu_wks.second) {
