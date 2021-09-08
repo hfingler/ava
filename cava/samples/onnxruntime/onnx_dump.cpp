@@ -813,21 +813,6 @@ __host__ cudaError_t CUDARTAPI cudaMemcpy(void *dst, const void *src, size_t cou
       ava_opaque;
     }
   }
-
-  ava_disable_native_call;
-  cudaError_t ret;
-  if (ava_is_worker) {
-    // everything that takes a device pointer must go through __translate_ptr
-    // TODO:  cudaMemcpyDefault
-    // printf("translating memcpy\n");
-    // declaring variables doesnt work.. //Declarations in prologue and epilogue code may not be initialized.
-    // void* dst2 = (kind == cudaMemcpyHostToDevice || kind ==  cudaMemcpyDeviceToDevice) ? __translate_ptr(dst) : dst;
-    // const void* src2 = (kind == cudaMemcpyDeviceToHost || kind ==  cudaMemcpyDeviceToDevice) ? __translate_ptr(src) :
-    // src;
-
-    ret = __helper_cudaMemcpy(dst, src, count, kind);
-    return ret;
-  }
 }
 
 // this is the RPC declaration on guestlib
@@ -1059,13 +1044,6 @@ __host__ cudaError_t CUDARTAPI cudaPointerGetAttributes(struct cudaPointerAttrib
 __host__ cudaError_t CUDARTAPI cudaMemset(void *devPtr, int value, size_t count) {
   ava_disable_native_call;
   ava_argument(devPtr) ava_opaque;
-
-  cudaError_t ret;
-  if (ava_is_worker) {
-    // everything that takes a device pointer must go through __translate_ptr
-    ret = __helper_cudaMemset(devPtr, value, count);
-    return ret;
-  }
 }
 
 __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaDeviceSynchronize(void);
@@ -2779,6 +2757,12 @@ cublasStatus_t __helper_cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t 
       ava_buffer(1);
       ava_depends_on(beta_is_gpu);
     }
+  }
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cublasSgemm(handle, transa, transb, m, n, k, alpha, A, lda, B, ldb, beta, 
+                                       C, ldc);
   }
 }
 
@@ -4725,6 +4709,12 @@ cudnnStatus_t cudnnReduceTensor_double(cudnnHandle_t handle, const cudnnReduceTe
   ava_argument(C) ava_opaque;
   ava_argument(workspace) ava_opaque;
   ava_argument(indices) ava_opaque;
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnReduceTensor(handle, reduceTensorDesc, indices, indicesSizeInBytes, workspace,
+                                            workspaceSizeInBytes, alpha, aDesc, A, beta, cDesc, C);
+  }
 }
 
 cudnnStatus_t cudnnReduceTensor_float(cudnnHandle_t handle, const cudnnReduceTensorDescriptor_t reduceTensorDesc,
@@ -4748,6 +4738,12 @@ cudnnStatus_t cudnnReduceTensor_float(cudnnHandle_t handle, const cudnnReduceTen
   ava_argument(C) ava_opaque;
   ava_argument(workspace) ava_opaque;
   ava_argument(indices) ava_opaque;
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnReduceTensor(handle, reduceTensorDesc, indices, indicesSizeInBytes, workspace,
+                                            workspaceSizeInBytes, alpha, aDesc, A, beta, cDesc, C);
+  }
 }
 
 ava_begin_replacement;

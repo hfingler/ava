@@ -78,20 +78,6 @@ uint32_t __internal_getCurrentDevice() {
     return GPUMemoryServer::Client::getInstance().current_device;
 }
 
-void* __translate_ptr(void* ptr) {
-    if (__internal_allContextsEnabled())
-        return GPUMemoryServer::Client::getInstance().translateDevicePointer(ptr);
-    else
-        return ptr;
-}
-
-const void* __translate_ptr(const void* ptr) {
-    if (__internal_allContextsEnabled()) 
-        return const_cast<const void*>(GPUMemoryServer::Client::getInstance().translateDevicePointer(ptr));
-    else
-        return ptr;
-}
-
 void __internal_kernelIn() {
     GPUMemoryServer::Client::getInstance().kernelIn();
 }
@@ -103,7 +89,7 @@ void __internal_kernelOut() {
 CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
                                 unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
                                 unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
-    // TODO
+    // TODO for TF
     CUresult cur;
     GPUMemoryServer::Client::getInstance().kernelIn();
     cur = cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
@@ -116,7 +102,11 @@ CUresult __internal_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
     void* ptr;
     cudaError_t err = GPUMemoryServer::Client::getInstance().localMalloc(&ptr, bytesize);
     *dptr = ptr;
+    return (CUresult) err;
+}
 
+CUresult __internal_cuMemFree(CUdeviceptr dptr) {
+    cudaError_t err = GPUMemoryServer::Client::getInstance().localFree((void*)dptr);
     return (CUresult) err;
 }
 
@@ -183,89 +173,33 @@ namespace GPUMemoryServer {
         //printf("GPU Client succesfully connected to server [%d]\n", gpuid);
     }
 
-    bool Client::pointerIsMapped(void* devptr, int32_t gpuid) {
-        if (gpuid == -1)
-            gpuid = current_device;
-        
-        for (auto& al : local_allocs) {
-            uint64_t start = al->devPtr;
-            uint64_t end = start + al->size;
-            uint64_t ptr = devptr;
-
-            if (al->device_id == gpuid && ptr >= start && ptr < end) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     cudaError_t Client::localMalloc(void** devPtr, size_t size) {
-        cudaError_t err = cudaMalloc(devPtr, size);
-        if (err != 0){
-            cudaGetLastError();
-            return err;
-        } 
+        auto al = std::make_unique<Client::LocalAlloc>(current_device);
 
-        local_allocs.push_back(std::make_unique<Client::LocalAlloc>(*devPtr, size, current_device));
-        //int d;
-        //cudaGetDevice(&d);
-        //printf("  malloc %p  size %lu  at device %d, ret=%d\n", *devPtr, size, d, err);
-        
-        if (migrated_type == Migration::TOTAL && pointerIsMapped(*devPtr, og_device)) {
-            //here's the issue.. if we have migrated memory, cudaMalloc may return a pointer that was
-            //previously returned for the previous GPU. That's a conflict that messes us up pretty bad
-            std::cerr << "### cudaMalloc pointer conflict after memory migration ..." << std::endl;
-            for (uint64_t mask = 1 ; mask < 8 ; mask++) {
-                mask = mask << 60;
-                uint64_t ptr_candidate = (uint64_t)(*devPtr);
-                ptr_candidate = ptr_candidate ^ mask;
-                if (!pointerIsMapped(ptr_candidate, og_device)) {
-                    std::cerr << "### found a non colliding pointer with mask " << std::hex << mask << std::endl;
-                    std::cerr << "   " << std::hex << *devPtr << " -> " << std::hex << ptr_candidate << std::endl;
-                    *devPtr = (void*)ptr_candidate;
-                    //reportMalloc(size); 
-                    return cudaSuccess;
-                }
-            }
-        }
+        int ret = al->physAlloc(size);
+        if (ret) return cudaErrorMemoryAllocation;
+        ret = al->reserveVaddr();
+        if (ret) return cudaErrorMemoryAllocation;
+        ret = al->map();
+        if (ret) return cudaErrorMemoryAllocation;
 
+        *devPtr = (void*)al->devptr;
+        local_allocs.push_back(std::move(al));
         //reportMalloc(size); 
-        return err;
+        return cudaSuccess;
     }
 
     cudaError_t Client::localFree(void* devPtr) {
-        //there is a use-after-free bug with execution (KERNEL) migration, where
-        //if the app frees a buffer immediately after a kernel launch, an error 700
-        //can occur due to the array being freed before the kernel finishes.
-        //this will only happen in badly written code (like the kmeans we're testing with)
-        //if it migrated, don't free now, it will be freed on exit
-        if (migrated_type == Migration::KERNEL) {
-            return cudaSuccess;
-        }
-
         // cudaFree with nullptr does no operation
         if (devPtr == nullptr) {
             return cudaSuccess;
         }
 
         for (auto it = local_allocs.begin(); it != local_allocs.end(); ++it) {
-            if ((*it)->devPtr == devPtr) {
+            if ((*it)->devptr == devPtr) {
                 local_allocs.erase(it);
                 //GPUMemoryServer::Client::getInstance().reportFree(it->second->size); 
                 return cudaSuccess;
-            }
-        }
-
-        //not found... we could have migrated memory, check
-        if (migrated_type == Migration::TOTAL) {
-            void* optr = translateDevicePointer(devPtr);
-            for (auto it = local_allocs.begin(); it != local_allocs.end(); ++it) {
-                if ((*it)->devPtr == optr) {
-                    tryRemoveFromPointerMap(optr);
-                    local_allocs.erase(it);
-                    //GPUMemoryServer::Client::getInstance().reportFree(it->second->size); 
-                    return cudaSuccess;
-                }
             }
         }
         
@@ -310,6 +244,7 @@ namespace GPUMemoryServer {
             exit(1);
         }
         //printf("Worker [%s] setting current device to %d\n", uuid.c_str(), id);
+        //this if triggers once, when worker is setting up
         if (og_device == -1) 
             og_device = id;
         current_device = id;
@@ -327,73 +262,8 @@ namespace GPUMemoryServer {
         migrated_type = Migration::NOPE;
     }
 
-    bool Client::isInPointerMap(void* ptr) {
-        auto it = pointer_map.upper_bound((uint64_t)ptr);
-        //if there is no upper bound or previous, return
-        if (it == pointer_map.end() || it == pointer_map.begin()) {
-            return false;
-        }
-
-        it = std::prev(it);
-        if( (uint64_t)ptr < it->first  &&  (uint64_t)ptr >= (it->first + it->second.size) ) {
-            return false;
-        }
-
-        return true;
-    }
-
-    void Client::tryRemoveFromPointerMap(void* ptr) {
-        auto it = pointer_map.find((uint64_t)ptr);
-        if (it != pointer_map.end()) {
-            pointer_map.erase(it);
-        }
-    }
-
-    void* Client::translateDevicePointer(void* ptr) {
-        if (pointer_map.empty()) return ptr;
-        for (auto &it : pointer_map) {
-            // if it is mapped by this entry
-            if( (uint64_t)ptr >= it.first  &&  (uint64_t)ptr < (it.first + it.second.size) ) {
-                uint64_t offset = (uint64_t)ptr - it.first;
-                void* optr = (void*) (it.second.dstPtr + offset);
-                std::cerr << "translated " << ptr << " to " << optr  << std::endl;
-                return optr;
-            }
-        }
-        return ptr;
-
-/*
-        auto it = pointer_map.upper_bound((uint64_t)ptr);
-        //if there is no upper bound or previous, return
-        if (it == pointer_map.begin()) return ptr;
-
-        //there is an upper bound or it returned after last element, check if it really is in the range
-        it = std::prev(it);
-        if( (uint64_t)ptr < it->first  ||  (uint64_t)ptr >= (it->first + it->second.size) ) {
-            return ptr;
-        }
-
-        //offset is always >= 0
-        uint64_t offset = (uint64_t)ptr - it->first;
-        //std::cerr << "  in translation, offset is " << offset << "\n";
-        void* optr = (void*) (it->second.dstPtr + offset);
-        //lets double check we need to translate
-        cudaError_t ret;
-        struct cudaPointerAttributes at;
-        ret = cudaPointerGetAttributes(&at, optr);
-        //if it really is a device pointer
-        if (ret == 0 && at.type == 2) {
-            std::cerr << "translated " << ptr << " to " << optr  << std::endl;
-            return optr;
-        }
-        else {
-            std::cerr << "### WE DODGED A BULLET" << std::endl;
-            return ptr;
-        }
-*/
-    }
-
     void Client::migrateToGPU(uint32_t new_gpuid, Migration migration_type) {
+        /*
         std::cerr << "[[[MIGRATION]]]\n" << std::endl;
 
         //wait for all cmd handlers to stop
@@ -444,6 +314,7 @@ namespace GPUMemoryServer {
 
         //release handlers
         release_cmd_handlers();
+        */
     }
 
     //clean up all memory that are in cd ONLY
@@ -468,8 +339,6 @@ namespace GPUMemoryServer {
         for (int i = 0 ; i < device_count ; i++) 
             cleanup(i);
         local_allocs.clear();
-
-        pointer_map.clear();
 
         //iterate over map of maps, destroying streams
         while (!streams_map.empty())
@@ -539,4 +408,82 @@ namespace GPUMemoryServer {
         sendRequest(req);
     }
     
+    Client::LocalAlloc::LocalAlloc(uint32_t device) {
+        devptr = 0;
+        device_id = device;
+    }
+
+    Client::LocalAlloc::~LocalAlloc() {
+        cuMemUnmap(devptr, size);
+        cuMemAddressFree(devptr, size);
+        cuMemRelease(phys_mem_handle);
+    }
+
+    int Client::LocalAlloc::physAlloc(uint32_t req_size) {
+        size_t aligned_sz;
+        CUmemAllocationProp prop = {};
+        prop.type = CU_MEM_ALLOCATION_TYPE_PINNED;
+        prop.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+        prop.location.id = device_id;
+        accessDesc.location = prop.location;
+        accessDesc.flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+        cuMemGetAllocationGranularity(&aligned_sz, &prop, CU_MEM_ALLOC_GRANULARITY_MINIMUM);
+        size = ((req_size + aligned_sz - 1) / aligned_sz) * aligned_sz;
+        printf("cuMemCreate of %lu\n", size);
+        cuMemCreate(&phys_mem_handle, size, &prop, 0);
+
+        //TODO: return errors
+        return 0;
+    }
+
+    int Client::LocalAlloc::reserveVaddr() {
+        uint64_t addr = vasBitmask();
+        cuMemAddressReserve(&devptr, size, 0ULL, addr, 0ULL);
+        printf("VA reserve at %lu, got back %lu\n", addr, devptr);
+        //TODO: return errors
+        return 0;
+    }
+
+    int Client::LocalAlloc::map() {
+        cuMemMap(devptr, size, 0ULL, phys_mem_handle, 0ULL);
+        cuMemSetAccess(devptr, size, &accessDesc, 1ULL);
+
+        //TODO: return errors
+        return 0;
+    }
+
+    int Client::LocalAlloc::moveToGPU(uint32_t new_device) {
+        //save current state
+        CUmemGenericAllocationHandle old_handle = phys_mem_handle;
+        CUmemAccessDesc old_desc = accessDesc;
+        uint32_t old_device = device_id;
+
+        //get new temporary vaddr
+        uint64_t temp_devptr;
+        cuMemAddressReserve(&temp_devptr, size, 0ULL, vasBitmask(), 0ULL);
+        //unlink current mapping       
+        cuMemUnmap(devptr, size);
+        //link temp to current phys allocation
+        cuMemMap(temp_devptr, size, 0ULL, phys_mem_handle, 0ULL);
+        cuMemSetAccess(temp_devptr, size, &accessDesc, 1ULL);
+
+        //change current device
+        device_id = new_device;
+        //aloc on new gpu, this changes data in this struct
+        physAlloc(size);
+        //map new allocation to original vaddr (devptr hasnt changed)
+        map();
+        //copy data from old to new
+        cudaMemcpyPeer((void*) devptr, new_device, (void*)temp_devptr, old_device, size);
+
+        //cleanup
+        cuMemUnmap(temp_devptr, size);
+        cuMemAddressFree(temp_devptr, size);
+        cuMemRelease(old_handle);
+
+        //TODO: return errors
+        return 0;
+    }
+
+//end of GPUMemoryServer nameserver
 }

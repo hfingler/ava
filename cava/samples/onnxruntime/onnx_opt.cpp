@@ -1046,7 +1046,6 @@ EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMalloc(void **dev
 ava_end_replacement;
 
 __host__ cudaError_t CUDARTAPI cudaMemcpy(void *dst, const void *src, size_t count, enum cudaMemcpyKind kind) {
-  ava_disable_native_call;
   ava_argument(dst) {
     if (kind == cudaMemcpyHostToHost) {
       ava_out;
@@ -1073,12 +1072,6 @@ __host__ cudaError_t CUDARTAPI cudaMemcpy(void *dst, const void *src, size_t cou
     } else if (kind == cudaMemcpyDeviceToDevice) {
       ava_opaque;
     }
-  }
-  cudaError_t ret;
-  if (ava_is_worker) {
-    ret = __helper_cudaMemcpy(dst, src, count, kind);
-#warning This will bypass the resource reporting routine.
-    return ret;
   }
 }
 
@@ -1301,15 +1294,7 @@ EXPORTED __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaMemcpyAsync(void 
 ava_end_replacement;
 
 __host__ cudaError_t CUDARTAPI cudaMemset(void *devPtr, int value, size_t count) {
-  ava_disable_native_call;
   ava_argument(devPtr) ava_opaque;
-
-  cudaError_t ret;
-  if (ava_is_worker) {
-    // everything that takes a device pointer must go through __translate_ptr
-    return __helper_cudaMemset(devPtr, value, count);
-#warning This will bypass the resource reporting routine.
-  }
 }
 
 cudaError_t __helper_cudaPointerGetAttributes(struct cudaPointerAttributes *attributes, const void *ptr) {
@@ -1819,7 +1804,6 @@ CUresult CUDAAPI cuStreamDestroy(CUstream hStream) {
   }
 }
 
-
 CUresult CUDAAPI __internal_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
   ava_argument(dptr) {
     ava_out;
@@ -1836,33 +1820,19 @@ CUresult CUDAAPI __internal_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
   }
 }
 
-
 ava_begin_replacement;
 CUresult CUDAAPI cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
   return __internal_cuMemAlloc(dptr, bytesize);
 }
 ava_end_replacement;
 
-/*
-CUresult CUDAAPI
-cuMemHostAlloc(void **pp, size_t bytesize, unsigned int Flags)
-{
-    ava_argument(pp) {
-        ava_out; ava_buffer(1);
-        ava_element {
-            ava_buffer(bytesize);
-            ava_buffer_allocator(__helper_cu_mem_host_alloc_portable,
-                    __helper_cu_mem_host_free);
-            ava_lifetime_manual;
-            ava_allocates;
-            ava_no_copy;
-        }
-    }
-
-    ava_execute();
-    ava_metadata(*pp)->is_pinned = 1;
+CUresult CUDAAPI cuMemFree(CUdeviceptr dptr) {
+  ava_argument(dptr) ava_handle; 
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return __internal_cuMemFree(dptr);
+  }
 }
-*/
 
 ava_begin_replacement;
 EXPORTED CUresult CUDAAPI cuMemHostAlloc(void **pp, size_t bytesize, unsigned int Flags) {
@@ -3485,19 +3455,9 @@ cublasStatus_t __helper_cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t 
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return __helper_cublasSgemm_v2(__get_cublas_handle(handle), transa, transb, m, n, k, alpha, A, lda, B, ldb, beta, 
-                                       C, ldc, alpha_is_gpu, beta_is_gpu);
+    return cublasSgemm(__get_cublas_handle(handle), transa, transb, m, n, k, alpha, A, lda, B, ldb, beta, 
+                                       C, ldc);
   }
-
-  /*
-#warning Force synchronization of async buffers
-  ava_execute();
-  if (ava_is_worker) {
-      cudaStream_t streamId;
-      cublasGetStream(handle, &streamId);
-      cudaStreamSynchronize(streamId);
-  }
-  */
 }
 
 /* GEMM */
@@ -4120,8 +4080,8 @@ CUBLASAPI cublasStatus_t CUBLASWINAPI __helper_cublasSgemmStridedBatched(
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return __helper_cublasSgemmStridedBatched(__get_cublas_handle(handle), transa, transb, m, n, k,
-      alpha, A, lda, strideA, B, ldb, strideB, beta, C, ldc, strideC, batchCount, alpha_is_gpu, beta_is_gpu);
+    return cublasSgemmStridedBatched(__get_cublas_handle(handle), transa, transb, m, n, k,
+      alpha, A, lda, strideA, B, ldb, strideB, beta, C, ldc, strideC, batchCount);
   }
 }
 
@@ -4607,7 +4567,7 @@ cudnnStatus_t cudnnBatchNormalizationForwardInference_float(
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnBatchNormalizationForwardInference_float(__get_cudnn_handle(handle), mode, alpha, beta, xDesc, x, 
+    return cudnnBatchNormalizationForwardInference(__get_cudnn_handle(handle), mode, alpha, beta, xDesc, x, 
       yDesc, y, bnScaleBiasMeanVarDesc, bnScale, bnBias, estimatedMean, estimatedVariance, epsilon);
   }
 }
@@ -4641,7 +4601,7 @@ cudnnStatus_t cudnnBatchNormalizationForwardInference_double(
 
    ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnBatchNormalizationForwardInference_double(__get_cudnn_handle(handle), mode, alpha, beta, xDesc, x, 
+    return cudnnBatchNormalizationForwardInference(__get_cudnn_handle(handle), mode, alpha, beta, xDesc, x, 
       yDesc, y, bnScaleBiasMeanVarDesc, bnScale, bnBias, estimatedMean, estimatedVariance, epsilon);
   }
 }
@@ -4705,6 +4665,12 @@ cudnnStatus_t __helper_cudnnConvolutionForward_double(cudnnHandle_t handle, cons
   ava_argument(workSpace) ava_opaque;
   ava_argument(yDesc) ava_handle;
   ava_argument(y) ava_opaque;
+
+  ava_disable_native_call;
+  if (ava_is_worker) {
+    return cudnnConvolutionForward(__get_cudnn_handle(handle), alpha, xDesc, x, wDesc, w,
+          convDesc, algo, workSpace, workSpaceSizeInBytes, beta, yDesc, y);
+  }
 }
 
 cudnnStatus_t __helper_cudnnConvolutionForward_float(cudnnHandle_t handle, const float *alpha,
@@ -4737,8 +4703,8 @@ cudnnStatus_t __helper_cudnnConvolutionForward_float(cudnnHandle_t handle, const
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return __helper_cudnnConvolutionForward_float(__get_cudnn_handle(handle), alpha, xDesc, __helper_translate_const_ptr(x), wDesc, __helper_translate_const_ptr(w),
-          convDesc, algo, __helper_translate_ptr(workSpace), workSpaceSizeInBytes, beta, yDesc, __helper_translate_ptr(y));
+    return cudnnConvolutionForward(__get_cudnn_handle(handle), alpha, xDesc, x, wDesc, w,
+          convDesc, algo, workSpace, workSpaceSizeInBytes, beta, yDesc, y);
   }
 }
 
@@ -5202,7 +5168,7 @@ cudnnStatus_t cudnnPoolingForward_float(cudnnHandle_t handle, const cudnnPooling
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnPoolingForward_float(__get_cudnn_handle(handle), poolingDesc, alpha, xDesc, x, beta, yDesc, y);
+    return cudnnPoolingForward(__get_cudnn_handle(handle), poolingDesc, alpha, xDesc, x, beta, yDesc, y);
   }
 }
 
@@ -5227,7 +5193,7 @@ cudnnStatus_t cudnnPoolingForward_double(cudnnHandle_t handle, const cudnnPoolin
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnPoolingForward_double(__get_cudnn_handle(handle), poolingDesc, alpha, xDesc, x, beta, yDesc, y);
+    return cudnnPoolingForward(__get_cudnn_handle(handle), poolingDesc, alpha, xDesc, x, beta, yDesc, y);
   }
 }
 
@@ -5862,7 +5828,7 @@ cudnnStatus_t cudnnAddTensor_double(cudnnHandle_t handle, const double *alpha, c
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnAddTensor_double(__get_cudnn_handle(handle), alpha, aDesc, A, beta, cDesc, C);
+    return cudnnAddTensor(__get_cudnn_handle(handle), alpha, aDesc, A, beta, cDesc, C);
   }
 }
 
@@ -5885,7 +5851,7 @@ cudnnStatus_t cudnnAddTensor_float(cudnnHandle_t handle, const float *alpha, con
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnAddTensor_float(__get_cudnn_handle(handle), alpha, aDesc, A, beta, cDesc, C);
+    return cudnnAddTensor(__get_cudnn_handle(handle), alpha, aDesc, A, beta, cDesc, C);
   }
 }
 
@@ -6055,7 +6021,7 @@ cudnnStatus_t cudnnReduceTensor_double(cudnnHandle_t handle, const cudnnReduceTe
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnReduceTensor_double(__get_cudnn_handle(handle), reduceTensorDesc, indices, indicesSizeInBytes, workspace,
+    return cudnnReduceTensor(__get_cudnn_handle(handle), reduceTensorDesc, indices, indicesSizeInBytes, workspace,
                                             workspaceSizeInBytes, alpha, aDesc, A, beta, cDesc, C);
   }
 }
@@ -6085,7 +6051,7 @@ cudnnStatus_t cudnnReduceTensor_float(cudnnHandle_t handle, const cudnnReduceTen
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnReduceTensor_float(__get_cudnn_handle(handle), reduceTensorDesc, indices, indicesSizeInBytes, workspace,
+    return cudnnReduceTensor(__get_cudnn_handle(handle), reduceTensorDesc, indices, indicesSizeInBytes, workspace,
                                             workspaceSizeInBytes, alpha, aDesc, A, beta, cDesc, C);
   }
 }
@@ -6144,7 +6110,7 @@ cudnnStatus_t cudnnScaleTensor_float(cudnnHandle_t handle, const cudnnTensorDesc
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnScaleTensor_float(__get_cudnn_handle(handle),yDesc, y, alpha);
+    return cudnnScaleTensor(__get_cudnn_handle(handle),yDesc, y, alpha);
   }
 }
 
@@ -6161,7 +6127,7 @@ cudnnStatus_t cudnnScaleTensor_double(cudnnHandle_t handle, const cudnnTensorDes
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnScaleTensor_double(__get_cudnn_handle(handle),yDesc, y, alpha);
+    return cudnnScaleTensor(__get_cudnn_handle(handle),yDesc, y, alpha);
   }
 }
 
@@ -6408,12 +6374,7 @@ cudnnStatus_t CUDNNWINAPI cudnnFindConvolutionForwardAlgorithmEx(
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    /*
-    return cudnnFindConvolutionForwardAlgorithmEx(__get_cudnn_handle(handle), xDesc, __helper_translate_const_ptr(x), wDesc, 
-      __helper_translate_const_ptr(w), convDesc, yDesc, __helper_translate_ptr(y), requestedAlgoCount, returnedAlgoCount, 
-      perfResults, __helper_translate_ptr(workSpace), workSpaceSizeInBytes);
-    */
-    return __helper_cudnnFindConvolutionForwardAlgorithmEx(__get_cudnn_handle(handle), xDesc, x, wDesc, 
+    return cudnnFindConvolutionForwardAlgorithmEx(__get_cudnn_handle(handle), xDesc, x, wDesc, 
         w, convDesc, yDesc, y, requestedAlgoCount, returnedAlgoCount, 
         perfResults, workSpace, workSpaceSizeInBytes);
   }
@@ -6453,7 +6414,7 @@ cudnnStatus_t cudnnConvolutionBiasActivationForward_double(
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnConvolutionBiasActivationForward_double(__get_cudnn_handle(handle), alpha1, xDesc, x, wDesc, 
+    return cudnnConvolutionBiasActivationForward(__get_cudnn_handle(handle), alpha1, xDesc, x, wDesc, 
     w, convDesc, algo, workSpace, workSpaceSizeInBytes, alpha2, zDesc, z, biasDesc, 
     bias, activationDesc, yDesc, y);
   }
@@ -6491,7 +6452,7 @@ cudnnStatus_t cudnnConvolutionBiasActivationForward_float(
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnConvolutionBiasActivationForward_float(__get_cudnn_handle(handle), alpha1, xDesc, x, wDesc, 
+    return cudnnConvolutionBiasActivationForward(__get_cudnn_handle(handle), alpha1, xDesc, x, wDesc, 
     w, convDesc, algo, workSpace, workSpaceSizeInBytes, alpha2, zDesc, 
     z, biasDesc, bias, activationDesc, yDesc, y);
   }
@@ -6761,7 +6722,7 @@ cudnnStatus_t cudnnSoftmaxForward_double(cudnnHandle_t handle, cudnnSoftmaxAlgor
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnSoftmaxForward_double(__get_cudnn_handle(handle), algo, mode, alpha, xDesc, x, beta, yDesc, y);
+    return cudnnSoftmaxForward(__get_cudnn_handle(handle), algo, mode, alpha, xDesc, x, beta, yDesc, y);
   }
 }
 
@@ -6785,7 +6746,7 @@ cudnnStatus_t cudnnSoftmaxForward_float(cudnnHandle_t handle, cudnnSoftmaxAlgori
 
   ava_disable_native_call;
   if (ava_is_worker) {
-    return cudnnSoftmaxForward_float(__get_cudnn_handle(handle), algo, mode, alpha, xDesc, x, beta, yDesc, y);
+    return cudnnSoftmaxForward(__get_cudnn_handle(handle), algo, mode, alpha, xDesc, x, beta, yDesc, y);
   }
 }
 

@@ -22,6 +22,7 @@ CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned
                                    unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra);
 cudaError_t __internal_cudaMalloc(void **devPtr, size_t size);
 CUresult __internal_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize);
+CUresult __internal_cuMemFree(CUdeviceptr dptr);
 cudaError_t __internal_cudaFree(void *devPtr);
 void __internal_kernelIn();
 void __internal_kernelOut();
@@ -35,8 +36,6 @@ bool __internal_setAllContextsEnabled(bool f);
 uint32_t __internal_getCurrentDevice(); 
 int32_t __internal_getDeviceCount();
 void __internal_setDeviceCount(uint32_t dc);
-void* __translate_ptr(void*);
-const void* __translate_ptr(const void*);
 cudaStream_t __translate_stream(cudaStream_t key);
 cudaEvent_t __translate_event(cudaEvent_t key);
 
@@ -62,31 +61,35 @@ namespace GPUMemoryServer {
         std::string uuid;
         //local mallocs
         struct LocalAlloc {
-            void* devPtr;
-            uint64_t size;
+            CUmemGenericAllocationHandle phys_mem_handle;
+            CUmemAccessDesc accessDesc;
+            uint64_t devptr;
+            uint32_t size;
             uint32_t device_id;
-            LocalAlloc(void* ptr, uint64_t sz, uint32_t gpu) 
-                : devPtr(ptr), size(sz), device_id(gpu) {}
-            ~LocalAlloc() {
-#ifndef NDEBUG
-                printf("cudaFree on GPU [%u]  %p\n", device_id, devPtr);
-#endif
-                cudaFree(devPtr);
+            
+            LocalAlloc(uint32_t device);
+            ~LocalAlloc();
+            int physAlloc(uint32_t size);
+            int reserveVaddr();
+            int map();
+            int moveToGPU(uint32_t device);
+
+            // assume there are 8 address spaces (3 bits), each with 32GB (double what's required for 
+            //P100s, which has 16GB)
+            inline uint64_t vasBitmask() {
+                //actually, I don't think we need to split the VA space
+                //and instead can just put everything together since its UVA
+                return 0x00007fc000000000;
+                /*
+                uint64_t mask = va_id;
+                mask = mask << 38-1-4;
+                uint64_t base_ptr = 0x00007fc000000000;
+                return base_ptr | mask;
+                */
             }
         };
-        //std::map<uint64_t, std::unique_ptr<LocalAlloc>> local_allocs;
-        std::vector<std::unique_ptr<LocalAlloc>> local_allocs;
 
-        //pointer translation
-        struct DevPointerTranslate {
-            uint64_t size;
-            uint64_t dstPtr;
-        };
-        std::map<uint64_t, DevPointerTranslate> pointer_map;
-        void* translateDevicePointer(void* ptr);
-        void tryRemoveFromPointerMap(void* ptr);
-        bool isInPointerMap(void* ptr);
-        bool pointerIsMapped(void* ptr, int32_t gpuid = -1);
+        std::vector<std::unique_ptr<LocalAlloc>> local_allocs;
 
         //stream translation
         std::map<cudaStream_t, std::map<uint32_t,cudaStream_t>> streams_map;
