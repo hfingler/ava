@@ -176,11 +176,7 @@ namespace GPUMemoryServer {
     cudaError_t Client::localMalloc(void** devPtr, size_t size) {
         auto al = std::make_unique<Client::LocalAlloc>(current_device);
 
-        int ret = al->physAlloc(size);
-        if (ret) return cudaErrorMemoryAllocation;
-        ret = al->reserveVaddr();
-        if (ret) return cudaErrorMemoryAllocation;
-        ret = al->map();
+        int ret = al->cudaMalloc(size);
         if (ret) return cudaErrorMemoryAllocation;
 
         *devPtr = (void*)al->devptr;
@@ -284,13 +280,48 @@ namespace GPUMemoryServer {
         else if (migration_type == Migration::TOTAL) {
             std::cerr << "Full migration, changing device to" << new_gpuid << std::endl;
             //all we gotta do is change all allocations to new device
+            std::vector<LocalAlloc*> new_allocs;
+
+            // size_t free, total;
+            // cudaMemGetInfo(&free, &total); 
+            // printf("Free memory in new GPU before: %lu\n", free/(1024*1024));
+            // setCurrentGPU(og_device);
+            // cudaMemGetInfo(&free, &total); 
+            // setCurrentGPU(new_gpuid);
+            // printf("Free memory in OLD GPU before: %lu\n", free/(1024*1024));
+
             for (auto const& al : local_allocs) {
                 fprintf( stderr, "moving allc at %p\n", al->devptr);
-                al->moveToGPU(new_gpuid);
+                auto new_al = new Client::LocalAlloc(new_gpuid);
+                al->moveTo(new_al);
+                new_allocs.push_back(new_al);
             }
             fprintf( stderr, "migration done, syncing\n");
 
-            //setCurrentGPU(new_gpuid);
+            // cudaMemGetInfo(&free, &total); 
+            // printf("Free memory in new GPU after: %lu\n", free/(1024*1024));
+
+            local_allocs.clear();
+            for (auto const& al : new_allocs) {
+                std::unique_ptr<LocalAlloc> ual(al);
+                local_allocs.push_back(std::move(ual));
+            }
+
+            // setCurrentGPU(og_device);
+            // cudaMemGetInfo(&free, &total); 
+            // setCurrentGPU(new_gpuid);
+            // printf("Free memory in OLD GPU AFTER: %lu\n", free/(1024*1024));
+
+            // for (auto const& al : local_allocs) {
+            //     fprintf( stderr, "testing access at %p after new mapping\n", al->devptr);
+            //     char a[8];
+            //     cudaMemcpy(a, (void*)al->devptr, 8, cudaMemcpyDeviceToHost );
+            //     fprintf( stderr, "first 8 bytes of array\n");
+            //     for (int j = 0 ; j < 8 ; j++)
+            //         fprintf(stderr, "%x ", a[j]);
+            //     fprintf( stderr, "\n\n");
+            // }
+
             cudaDeviceSynchronize();
         }
 
@@ -298,42 +329,21 @@ namespace GPUMemoryServer {
         release_cmd_handlers();
     }
 
-    //clean up all memory that are in cd ONLY
-    void Client::cleanup(uint32_t cd) {
-        cudaSetDevice(cd);
-        //erase only memory in GPU current_device
-        for (auto it = local_allocs.begin(); it != local_allocs.end(); ) {
-            if ((*it)->device_id == cd)
-                it = local_allocs.erase(it);
-            else
-                ++it;
-        }
-        //report to server
-        reportCleanup(cd);
-        //reset to device
-        cudaSetDevice(current_device);
-    }
-
     void Client::fullCleanup() {
         reportCleanup(0);  //TODO
 
-        for (int i = 0 ; i < device_count ; i++) 
-            cleanup(i);
+        //clear all allocated memory
         local_allocs.clear();
 
         //iterate over map of maps, destroying streams
         while (!streams_map.empty())
             __helper_destroy_stream((streams_map.begin())->first);
-
         streams_map.clear();
 
         //clear leftover events
         while (!events_map.empty()) 
             __helper_cudaEventDestroy((events_map.begin())->first);
         events_map.clear();
-
-        //reset
-        cudaSetDevice(current_device);
     }
 
     void Client::notifyReady() {
@@ -392,33 +402,43 @@ namespace GPUMemoryServer {
     Client::LocalAlloc::LocalAlloc(uint32_t device) {
         devptr = 0;
         device_id = device;
+        accessDesc = {};
     }
 
     Client::LocalAlloc::~LocalAlloc() {
         cuMemUnmap(devptr, size);
         cuMemAddressFree(devptr, size);
-        cuMemRelease(phys_mem_handle);
+    }
+
+    int Client::LocalAlloc::cudaMalloc(size_t size) {
+        int ret;
+        ret = physAlloc(size);
+        if (ret) return ret;
+        ret = reserveVaddr();
+        if (ret) return ret;
+        ret = map_at(devptr);
+        if (ret) return ret;
+        release_phys_handle();
+        //TODO: cleanup if something fails
+        return 0;
     }
 
     int Client::LocalAlloc::physAlloc(uint32_t req_size) {
-        size_t aligned_sz;
         CUmemAllocationProp prop = {};
         prop.type = CU_MEM_ALLOCATION_TYPE_PINNED;
         prop.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
         prop.location.id = device_id;
-        CUmemAccessDesc tempAccessDesc = {};
-        tempAccessDesc.location = prop.location;
-        tempAccessDesc.flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
-        accessDesc = tempAccessDesc;
-        CUresult err;
-        err = cuMemGetAllocationGranularity(&aligned_sz, &prop, CU_MEM_ALLOC_GRANULARITY_MINIMUM);
+        accessDesc.location = prop.location;
+        accessDesc.flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+
+        size_t aligned_sz;
+        CUresult err = cuMemGetAllocationGranularity(&aligned_sz, &prop, CU_MEM_ALLOC_GRANULARITY_MINIMUM);
         if (err) { fprintf( stderr, "error at cuMemGetAllocationGranularity\n"); return 1; }
-        
         size = ((req_size + aligned_sz - 1) / aligned_sz) * aligned_sz;
         fprintf( stderr, "cuMemCreate of %lu on gpu %d\n", size, device_id);
+
         err = cuMemCreate(&phys_mem_handle, size, &prop, 0);
         if (err) { fprintf( stderr, "error at cuMemCreate\n"); return 1; }
-
         return 0;
     }
 
@@ -426,52 +446,42 @@ namespace GPUMemoryServer {
         uint64_t addr = vasBitmask();
         CUresult err = cuMemAddressReserve(&devptr, size, 0ULL, addr, 0ULL);
         if (err) { fprintf( stderr, "error at cuMemAddressReserve\n"); return 1; }
-        fprintf( stderr, "VA reserve at %lu, got back %lu\n", addr, devptr);
-
+        fprintf( stderr, "VA reserve at %p, got back %p\n", addr, devptr);
         return 0;
     }
 
-    int Client::LocalAlloc::map() {
-        CUresult err = cuMemMap(devptr, size, 0ULL, phys_mem_handle, 0ULL);
+    int Client::LocalAlloc::map_at(uint64_t va_ptr) {
+        CUresult err = cuMemMap(va_ptr, size, 0ULL, phys_mem_handle, 0ULL);
         if (err) { fprintf( stderr, "error at cuMemMap\n"); return 1; }
-        err = cuMemSetAccess(devptr, size, &accessDesc, 1ULL);
+        err = cuMemSetAccess(va_ptr, size, &accessDesc, 1ULL);
         if (err) { fprintf( stderr, "error at cuMemSetAccess\n"); return 1; }
         return 0;
     }
 
-    int Client::LocalAlloc::moveToGPU(uint32_t new_device) {
-        fprintf( stderr, "LocalAlloc changing gpu from %d to %d\n", device_id, new_device);
-        fprintf( stderr, "current ptr is  %p\n", devptr);
-        //save current state
-        CUmemGenericAllocationHandle old_handle = phys_mem_handle;
-        uint32_t old_device = device_id;
-        CUresult err;
-        int err2;
-        //get new temporary vaddr
-        uint64_t temp_devptr;
-        err = cuMemAddressReserve(&temp_devptr, size, 0ULL, vasBitmask(), 0ULL);
-        if (err) { fprintf( stderr, "error at cuMemAddressReserve\n"); return 1; }
-        fprintf( stderr, "reserved temp VA at %p\n", temp_devptr);
-        //link temp to current phys allocation
-        err = cuMemMap(temp_devptr, size, 0ULL, phys_mem_handle, 0ULL);
-        if (err) { fprintf( stderr, "error at cuMemMap\n"); return 1; }
-        //unlink current mapping
-        err = cuMemUnmap(devptr, size);
-        if (err) { fprintf( stderr, "error at cuMemUnmap\n"); return 1; }
-        err = cuMemSetAccess(temp_devptr, size, &accessDesc, 1ULL);
-        if (err) { fprintf( stderr, "error at cuMemSetAccess\n"); return 1; }
+    int Client::LocalAlloc::unmap(uint64_t va_ptr) {
+        cuMemUnmap(va_ptr, size);
+    }
 
-        //change current device
-        device_id = new_device;
-        cudaSetDevice(new_device);
-        //aloc on new gpu, this changes data in this struct
-        err2 = physAlloc(size);
-        if (err2) { fprintf( stderr, "error at physAlloc\n"); return 1; }
-        //map new allocation to original vaddr (devptr hasnt changed)
-        err2 = map();
-        if (err2) { fprintf( stderr, "error at map\n"); return 1; }
+    int Client::LocalAlloc::release_phys_handle() {
+        //https://github.com/NVIDIA/cuda-samples/blob/master/Samples/vectorAddMMAP/multidevicealloc_memmap.cpp#L127
+        //we can release here bc it will stay alive until it is unmapped, then it will be really freed
+        cuMemRelease(phys_mem_handle);
+    }
 
-        fprintf( stderr, "testing access at %p after moving dev\n", devptr);
+    //dest has the correct device set
+    int Client::LocalAlloc::moveTo(LocalAlloc* dest) {
+        fprintf(stderr, "Copying LocalAlloc from %d to %d\n", this->device_id, dest->device_id);
+        
+        // allocate on new gpu
+        dest->physAlloc(this->size);
+        dest->devptr = this->devptr;
+
+        //get new mapping for our memory
+        this->reserveVaddr();
+        this->map_at(this->devptr);
+        this->unmap(dest->devptr);
+
+        fprintf( stderr, "testing access at %p after new mapping\n", devptr);
         char a[8];
         cudaMemcpy(a, (void*)devptr, 8, cudaMemcpyDeviceToHost );
         fprintf( stderr, "first 8 bytes of array\n");
@@ -479,28 +489,18 @@ namespace GPUMemoryServer {
             fprintf(stderr, "%x ", a[j]);
         fprintf( stderr, "\n");
 
-        //copy data from old to new
-        cudaError_t err3 = cudaMemcpyPeer((void*) devptr, new_device, (void*)temp_devptr, old_device, size);
+        dest->map_at(dest->devptr);
+        dest->release_phys_handle();
+
+        cudaError_t err3 = cudaMemcpyPeer((void*) dest->devptr, dest->device_id, (void*) this->devptr, this->device_id, size);
         if (err3) { fprintf( stderr, "error at cudaMemcpyPeer\n"); return 1; }
 
-        //cleanup
-        //err = cuMemUnmap(temp_devptr, size);
-        //if (err) { fprintf( stderr, "error at cuMemUnmap\n"); return 1; }
-        //err = cuMemAddressFree(temp_devptr, size);
-        //if (err) { fprintf( stderr, "error at cuMemAddressFree\n"); return 1; }
-        //err = cuMemRelease(old_handle);
-        //if (err) { fprintf( stderr, "error at cuMemRelease\n"); return 1; }
-
-        fprintf( stderr, "after ptr is  %p, testing access\n", devptr);
-
-        //char a[8];
-        cudaMemcpy(a, (void*)devptr, 8*sizeof(char), cudaMemcpyDeviceToHost );
+        fprintf( stderr, "testing access at %p after memcpy\n", dest->devptr);
+        cudaMemcpy(a, (void*)dest->devptr, 8, cudaMemcpyDeviceToHost );
         fprintf( stderr, "first 8 bytes of array\n");
         for (int j = 0 ; j < 8 ; j++)
-            fprintf( stderr, "%x ", a[j]);
+            fprintf(stderr, "%x ", a[j]);
         fprintf( stderr, "\n");
-
-        return 0;
     }
 
 //end of GPUMemoryServer nameserver

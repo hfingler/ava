@@ -61,25 +61,30 @@ namespace GPUMemoryServer {
         std::string uuid;
         //local mallocs
         struct LocalAlloc {
-            CUmemGenericAllocationHandle phys_mem_handle;
-            CUmemAccessDesc accessDesc;
             uint64_t devptr;
             uint32_t size;
             uint32_t device_id;
+            CUmemAccessDesc accessDesc;
+            CUmemGenericAllocationHandle phys_mem_handle;
             
             LocalAlloc(uint32_t device);
             ~LocalAlloc();
+            int cudaMalloc(size_t size);
             int physAlloc(uint32_t size);
             int reserveVaddr();
-            int map();
-            int moveToGPU(uint32_t device);
+            int map_at(uint64_t va_ptr);
+            int unmap(uint64_t va_ptr);
+            int release_phys_handle();
+            int moveTo(LocalAlloc* dest);
+
 
             // assume there are 8 address spaces (3 bits), each with 32GB (double what's required for 
             //P100s, which has 16GB)
             inline uint64_t vasBitmask() {
                 //actually, I don't think we need to split the VA space
                 //and instead can just put everything together since its UVA
-                return 0x00007fc000000000;
+                return 0;
+                //return 0x00007fc000000000;
                 /*
                 uint64_t mask = va_id;
                 mask = mask << 38-1-4;
@@ -107,7 +112,6 @@ namespace GPUMemoryServer {
         }
         cudaError_t localMalloc(void** devPtr, size_t size);
         cudaError_t localFree(void* devPtr);
-        void cleanup(uint32_t cd);
         void notifyReady();
         void fullCleanup();
         void kernelIn();
