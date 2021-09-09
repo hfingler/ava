@@ -168,9 +168,9 @@ namespace GPUMemoryServer {
             int ret = zmq_connect(central_socket, GPUMemoryServer::get_central_socket_path().c_str());
             if (ret == 0) break;
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            printf(" !!! GPU Client couldn't connect to central server [%d]\n");
+            fprintf( stderr, " !!! GPU Client couldn't connect to central server [%d]\n");
         }
-        //printf("GPU Client succesfully connected to server [%d]\n", gpuid);
+        //fprintf( stderr, "GPU Client succesfully connected to server [%d]\n", gpuid);
     }
 
     cudaError_t Client::localMalloc(void** devPtr, size_t size) {
@@ -216,12 +216,12 @@ namespace GPUMemoryServer {
         req.gpu = current_device;
         strncpy(req.worker_id, uuid.c_str(), MAX_UUID_LEN);
         if (strlen(uuid.c_str()) > MAX_UUID_LEN) {
-            printf(" ### uuid %S IS LONGER THAN %d, THIS IS AN ISSUE\n", uuid.c_str(), MAX_UUID_LEN);
+            fprintf( stderr, " ### uuid %S IS LONGER THAN %d, THIS IS AN ISSUE\n", uuid.c_str(), MAX_UUID_LEN);
         }
 
         sockmtx.lock();
         if (zmq_send(central_socket, &req, sizeof(Request), 0) == -1) {
-            printf(" ### zmq_send errno %d\n", errno);
+            fprintf( stderr, " ### zmq_send errno %d\n", errno);
         }
         Reply rep;
         zmq_recv(central_socket, &rep, sizeof(Reply), 0);
@@ -240,10 +240,10 @@ namespace GPUMemoryServer {
     void Client::setCurrentGPU(int id) {
         cudaError_t err = cudaSetDevice(id);
         if (err) {
-            printf("### CUDA err on cudaSetDevice(%d): %d\n", id, err);
+            fprintf( stderr, "### CUDA err on cudaSetDevice(%d): %d\n", id, err);
             exit(1);
         }
-        //printf("Worker [%s] setting current device to %d\n", uuid.c_str(), id);
+        //fprintf( stderr, "Worker [%s] setting current device to %d\n", uuid.c_str(), id);
         //this if triggers once, when worker is setting up
         if (og_device == -1) 
             og_device = id;
@@ -267,26 +267,30 @@ namespace GPUMemoryServer {
 
         //wait for all cmd handlers to stop
         wait_for_cmd_drain();
+        cudaDeviceSynchronize();
         std::cerr << "All cmd handlers are stopped.. migrating\n" << std::endl;
         //mark that we migrated
         migrated_type = migration_type;
 
-        cudaDeviceSynchronize();
         setCurrentGPU(new_gpuid);
-
+        
         if (migration_type == Migration::KERNEL) {
-            printf("Migration by kernel mode, changing device to [%d]\n", new_gpuid);
+            fprintf( stderr, "Migration by kernel mode, changing device to [%d]\n", new_gpuid);
             //cudaDeviceEnablePeerAccess(new_gpuid, 0);
             setCurrentGPU(new_gpuid);
-            printf("cudaDeviceEnablePeerAccess: new device [%d] can access memory on old [%d]\n", new_gpuid, og_device);
+            fprintf( stderr, "cudaDeviceEnablePeerAccess: new device [%d] can access memory on old [%d]\n", new_gpuid, og_device);
             cudaDeviceEnablePeerAccess(og_device, 0);
         }
         else if (migration_type == Migration::TOTAL) {
             std::cerr << "Full migration, changing device to" << new_gpuid << std::endl;
             //all we gotta do is change all allocations to new device
             for (auto const& al : local_allocs) {
+                fprintf( stderr, "moving allc at %p\n", al->devptr);
                 al->moveToGPU(new_gpuid);
             }
+            fprintf( stderr, "migration done, syncing\n");
+
+            //setCurrentGPU(new_gpuid);
             cudaDeviceSynchronize();
         }
 
@@ -348,7 +352,7 @@ namespace GPUMemoryServer {
     }
 
     void Client::kernelIn() {
-        //printf("%d kernels\n", ++kc);
+        //fprintf( stderr, "%d kernels\n", ++kc);
         if (migrated_type != Migration::NOPE) {
             //if we have migrated, lets just skip..
             return;
@@ -402,16 +406,18 @@ namespace GPUMemoryServer {
         prop.type = CU_MEM_ALLOCATION_TYPE_PINNED;
         prop.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
         prop.location.id = device_id;
-        accessDesc.location = prop.location;
-        accessDesc.flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+        CUmemAccessDesc tempAccessDesc = {};
+        tempAccessDesc.location = prop.location;
+        tempAccessDesc.flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+        accessDesc = tempAccessDesc;
         CUresult err;
         err = cuMemGetAllocationGranularity(&aligned_sz, &prop, CU_MEM_ALLOC_GRANULARITY_MINIMUM);
-        if (err) return 1;
+        if (err) { fprintf( stderr, "error at cuMemGetAllocationGranularity\n"); return 1; }
         
         size = ((req_size + aligned_sz - 1) / aligned_sz) * aligned_sz;
-        printf("cuMemCreate of %lu\n", size);
+        fprintf( stderr, "cuMemCreate of %lu on gpu %d\n", size, device_id);
         err = cuMemCreate(&phys_mem_handle, size, &prop, 0);
-        if (err) return 1;
+        if (err) { fprintf( stderr, "error at cuMemCreate\n"); return 1; }
 
         return 0;
     }
@@ -419,21 +425,23 @@ namespace GPUMemoryServer {
     int Client::LocalAlloc::reserveVaddr() {
         uint64_t addr = vasBitmask();
         CUresult err = cuMemAddressReserve(&devptr, size, 0ULL, addr, 0ULL);
-        if (err) return 1;
-        printf("VA reserve at %lu, got back %lu\n", addr, devptr);
+        if (err) { fprintf( stderr, "error at cuMemAddressReserve\n"); return 1; }
+        fprintf( stderr, "VA reserve at %lu, got back %lu\n", addr, devptr);
 
         return 0;
     }
 
     int Client::LocalAlloc::map() {
         CUresult err = cuMemMap(devptr, size, 0ULL, phys_mem_handle, 0ULL);
-        if (err) return 1;
+        if (err) { fprintf( stderr, "error at cuMemMap\n"); return 1; }
         err = cuMemSetAccess(devptr, size, &accessDesc, 1ULL);
-        if (err) return 1;
+        if (err) { fprintf( stderr, "error at cuMemSetAccess\n"); return 1; }
         return 0;
     }
 
     int Client::LocalAlloc::moveToGPU(uint32_t new_device) {
+        fprintf( stderr, "LocalAlloc changing gpu from %d to %d\n", device_id, new_device);
+        fprintf( stderr, "current ptr is  %p\n", devptr);
         //save current state
         CUmemGenericAllocationHandle old_handle = phys_mem_handle;
         uint32_t old_device = device_id;
@@ -442,35 +450,55 @@ namespace GPUMemoryServer {
         //get new temporary vaddr
         uint64_t temp_devptr;
         err = cuMemAddressReserve(&temp_devptr, size, 0ULL, vasBitmask(), 0ULL);
-        if (err) return 1;
-        //unlink current mapping       
-        err = cuMemUnmap(devptr, size);
-        if (err) return 1;
+        if (err) { fprintf( stderr, "error at cuMemAddressReserve\n"); return 1; }
+        fprintf( stderr, "reserved temp VA at %p\n", temp_devptr);
         //link temp to current phys allocation
         err = cuMemMap(temp_devptr, size, 0ULL, phys_mem_handle, 0ULL);
-        if (err) return 1;
+        if (err) { fprintf( stderr, "error at cuMemMap\n"); return 1; }
+        //unlink current mapping
+        err = cuMemUnmap(devptr, size);
+        if (err) { fprintf( stderr, "error at cuMemUnmap\n"); return 1; }
         err = cuMemSetAccess(temp_devptr, size, &accessDesc, 1ULL);
-        if (err) return 1;
+        if (err) { fprintf( stderr, "error at cuMemSetAccess\n"); return 1; }
 
         //change current device
         device_id = new_device;
+        cudaSetDevice(new_device);
         //aloc on new gpu, this changes data in this struct
         err2 = physAlloc(size);
-        if (err2) return 1;
+        if (err2) { fprintf( stderr, "error at physAlloc\n"); return 1; }
         //map new allocation to original vaddr (devptr hasnt changed)
         err2 = map();
-        if (err2) return 1;
+        if (err2) { fprintf( stderr, "error at map\n"); return 1; }
+
+        fprintf( stderr, "testing access at %p after moving dev\n", devptr);
+        char a[8];
+        cudaMemcpy(a, (void*)devptr, 8, cudaMemcpyDeviceToHost );
+        fprintf( stderr, "first 8 bytes of array\n");
+        for (int j = 0 ; j < 8 ; j++)
+            fprintf(stderr, "%x ", a[j]);
+        fprintf( stderr, "\n");
+
         //copy data from old to new
         cudaError_t err3 = cudaMemcpyPeer((void*) devptr, new_device, (void*)temp_devptr, old_device, size);
-        if (err3) return 1;
+        if (err3) { fprintf( stderr, "error at cudaMemcpyPeer\n"); return 1; }
 
         //cleanup
-        err = cuMemUnmap(temp_devptr, size);
-        if (err) return 1;
-        err = cuMemAddressFree(temp_devptr, size);
-        if (err) return 1;
-        err = cuMemRelease(old_handle);
-        if (err) return 1;
+        //err = cuMemUnmap(temp_devptr, size);
+        //if (err) { fprintf( stderr, "error at cuMemUnmap\n"); return 1; }
+        //err = cuMemAddressFree(temp_devptr, size);
+        //if (err) { fprintf( stderr, "error at cuMemAddressFree\n"); return 1; }
+        //err = cuMemRelease(old_handle);
+        //if (err) { fprintf( stderr, "error at cuMemRelease\n"); return 1; }
+
+        fprintf( stderr, "after ptr is  %p, testing access\n", devptr);
+
+        //char a[8];
+        cudaMemcpy(a, (void*)devptr, 8*sizeof(char), cudaMemcpyDeviceToHost );
+        fprintf( stderr, "first 8 bytes of array\n");
+        for (int j = 0 ; j < 8 ; j++)
+            fprintf( stderr, "%x ", a[j]);
+        fprintf( stderr, "\n");
 
         return 0;
     }
