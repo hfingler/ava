@@ -61,6 +61,11 @@ void __helper_print_kernel_info(struct fatbin_function *func, void **args);
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
                                    void **args, size_t sharedMem, cudaStream_t stream);
 
+CUresult __helper_culaunch_kernel(struct fatbin_function *func, const void *hostFun, 
+        unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
+        unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
+        void **args, size_t sharedMem, cudaStream_t stream);
+
 int __helper_cubin_num(void **cubin_handle);
 
 void __helper_print_fatcubin_info(void *fatCubin, void **ret);

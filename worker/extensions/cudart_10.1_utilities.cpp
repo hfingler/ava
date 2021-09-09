@@ -203,6 +203,14 @@ cudaError_t __helper_cudaStreamSynchronize_sync(cudaStream_t stream) {
   }
 }
 
+CUresult __helper_culaunch_kernel(struct fatbin_function *func, const void *hostFun, 
+        unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
+        unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
+        void **args, size_t sharedMem, cudaStream_t stream) {
+
+  return 0;
+}
+
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
                                    void **args, size_t sharedMem, cudaStream_t stream) {
 #ifndef NDEBUG
@@ -212,7 +220,7 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
       std::cerr << "\n ### __helper_launch_kernel ERROR BEFORE " << ret2 << "\n";
 #endif
 
-  // this might trigger and to migration
+  // this might trigger migration
   __internal_kernelIn();
 
   uint32_t cur_dvc;
@@ -221,35 +229,22 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   else
     cur_dvc = 0;
 
-#ifndef NDEBUG
-  std::cerr << "__helper_launch_kernel on device slot " << cur_dvc << std::endl;
-#endif
-
-  if (func == NULL) {
+  if (func == NULL) 
     return (cudaError_t)CUDA_ERROR_INVALID_PTX;
-  }
 
+#ifndef NDEBUG
   if (func->hostfunc[cur_dvc] != hostFun) {
-    // std::cerr << "search host func " << hostFun << " -> stored " << (void *)func->hostfunc[cur_dvc] << " (device func
-    // "
-    //          << (void *)func->cufunc[cur_dvc] << ")";
-  } else {
-#ifndef NDEBUG
+    //std::cerr << "search host func " << hostFun << " -> stored " << (void *)func->hostfunc[cur_dvc] 
+    //    << " (device func"<< (void *)func->cufunc[cur_dvc] << ")";
+  } 
+  else 
     std::cerr << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc[cur_dvc] << std::endl;
-#endif
-  }
-
-#ifndef NDEBUG
   __helper_print_kernel_info(func, args);
 #endif
 
-  // std::cerr << "function metadata (" << (void *)func << ") for local " << func->hostfunc[cur_dvc] << ", cufunc "
-  //          << (void *)func->cufunc[cur_dvc] << ", argc " << func->argc << std::endl;
-
   cudaError_t ret = (cudaError_t)CUDA_ERROR_PROFILER_ALREADY_STOPPED;
-  // if we need to figure out the correct context to get function
+
   if (__internal_allContextsEnabled()) {
-    
     // auto start = std::chrono::steady_clock::now();
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[cur_dvc], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
                                       blockDim.z, sharedMem, (CUstream)__translate_stream(stream), args, NULL);
@@ -258,7 +253,7 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
 
 #ifndef NDEBUG
     std::cerr << ">>> cuLaunchKernel returned " << ret << std::endl;
-    cudaDeviceSynchronize();
+    //cudaDeviceSynchronize();
     cudaError_t ret2 = cudaGetLastError();
     if(ret2) 
       std::cerr << "\n ### __helper_launch_kernel ERROR after sync " << ret2 << "\n";
@@ -270,17 +265,12 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   }
   // if not with migration, just get over it and do
   else {
-    // auto start = std::chrono::steady_clock::now();
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[0], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
                                       blockDim.z, sharedMem, (CUstream)stream, args, NULL);
-    // auto end = std::chrono::steady_clock::now();
-    // std::cerr << "???" << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << std::endl;
-
 #ifndef NDEBUG
     auto tid = __gettid();
     std::cerr << fmt::format("<thread={:x}> {} = {}\n", tid, __FUNCTION__, ret);
 #endif
-
     return ret;
   }
 }
