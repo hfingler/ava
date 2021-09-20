@@ -208,7 +208,9 @@ CUresult __helper_culaunch_kernel(struct fatbin_function *func, const void *host
         unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
         void **args, size_t sharedMem, cudaStream_t stream) {
 
-  return 0;
+  dim3 block(blockDimX, blockDimY, blockDimZ);
+  dim3 grid(gridDimX, gridDimY, gridDimZ);
+  return (CUresult) __helper_launch_kernel(func, hostFun, grid, block, args, sharedMem, stream);
 }
 
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
