@@ -62,7 +62,7 @@ namespace GPUMemoryServer {
         //local mallocs
         struct LocalAlloc {
             uint64_t devptr;
-            uint32_t size;
+            size_t size;
             uint32_t device_id;
             CUmemAccessDesc accessDesc;
             CUmemGenericAllocationHandle phys_mem_handle;
@@ -70,13 +70,12 @@ namespace GPUMemoryServer {
             LocalAlloc(uint32_t device);
             ~LocalAlloc();
             int cudaMalloc(size_t size);
-            int physAlloc(uint32_t size);
+            int physAlloc(size_t size);
             int reserveVaddr();
             int map_at(uint64_t va_ptr);
             int unmap(uint64_t va_ptr);
             int release_phys_handle();
             int moveTo(LocalAlloc* dest);
-
 
             // assume there are 8 address spaces (3 bits), each with 32GB (double what's required for 
             //P100s, which has 16GB)
