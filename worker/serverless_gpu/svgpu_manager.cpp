@@ -12,6 +12,7 @@
 
 #include "scheduling/first_fit.hpp"
 #include "scheduling/best_fit.hpp"
+#include "scheduling/worst_fit.hpp"
 
 /*************************************
  *
@@ -126,7 +127,7 @@ void SVGPUManager::launchReportServers() {
 
 SVGPUManager::SVGPUManager(uint32_t port, uint32_t worker_port_base, std::string worker_path, std::vector<std::string> &worker_argv,
             std::vector<std::string> &worker_env, uint16_t ngpus, uint16_t gpu_offset, std::string resmngr_address,
-            std::string scheduler_name, uint32_t precreated_workers)
+            std::string scheduler_name, uint32_t precreated_workers, std::string nvmlmonitor)
     : ManagerServiceServerBase(port, worker_port_base, worker_path, worker_argv, worker_env) {
 
     this->n_gpus = ngpus;
@@ -149,6 +150,11 @@ SVGPUManager::SVGPUManager(uint32_t port, uint32_t worker_port_base, std::string
         for (int i = 0 ; i < precreated_workers ; i++) {
             launchWorker(gpu);
         }
+    }
+
+    if (nvmlmonitor != "no") {
+        std::cerr << "[SVLESS-MNGR]: Launching NVML monitor" << std::endl;
+        nvml_monitor_thread = std::thread(&SVGPUManager::nvmlMonitorLoop, this);
     }
 };
 
@@ -241,12 +247,87 @@ void SVGPUManager::setRealGPUOffsetCount() {
 void SVGPUManager::createScheduler(std::string name) {
     if (name == "firstfit") {
         this->scheduler = new FirstFit(&gpu_workers, &gpu_states);
+        std::cout << "[SVLESS-MNGR]: Using First Fit scheduler\n";
     }
     else if (name == "bestfit") {
         this->scheduler = new BestFit(&gpu_workers, &gpu_states);
+        std::cout << "[SVLESS-MNGR]: Using Best Fit scheduler\n";
+    }
+    else if (name == "worstfit") {
+        this->scheduler = new WorstFit(&gpu_workers, &gpu_states);
+        std::cout << "[SVLESS-MNGR]: Using Worst Fit scheduler\n";
     }
     //default
     else {
         this->scheduler = new BestFit(&gpu_workers, &gpu_states);
+        std::cout << "[SVLESS-MNGR]: Using Best Fit scheduler\n";
     }
+}
+
+void SVGPUManager::nvmlMonitorLoop() {
+    nvmlReturn_t result;
+    uint32_t device_count;
+    result = nvmlInit();
+    if (result != NVML_SUCCESS) {
+        std::cerr << "Failed to initialize NVML: " << nvmlErrorString(result) << std::endl;
+        std::exit(1);
+    }
+
+    result = nvmlDeviceGetCount(&device_count);
+    if (result != NVML_SUCCESS) {
+        std::cerr << "Failed to query device count NVML: " << nvmlErrorString(result) << std::endl;
+        std::exit(1);
+    }
+
+    nvmlDevice_t devs[device_count];
+
+    for (int i = 0 ; i < device_count ; i++) {
+        nvmlDeviceGetHandleByIndex_v2(i, devs+i);
+    }
+
+    std::cout << "[SVLESS-MNGR]: NVML monitor found " << device_count << " devices, looping..\n";
+
+    nvmlUtilization_t ut;
+    float utils[device_count];
+
+    int32_t SMA_sample_size = 5;
+    float SMA_samples[device_count][SMA_sample_size];
+    float SMA[device_count];
+
+    uint32_t timestep_msec = 200;
+    //uint32_t print_each = 5;
+
+    float timestamp_sec = 0;
+    uint64_t count = 0;
+    while (1) {
+        for (int i = 0 ; i < device_count ; i++) {
+            nvmlDeviceGetUtilizationRates(devs[i], &ut);
+            utils[i] = ut.gpu;
+            SMA_samples[i][count%SMA_sample_size] = ut.gpu;
+        }
+
+        //if (count % print_each == 0) {
+        //    printf("%.2f %.2f %.2f\n", ts, utils[0], utils[1]);
+        //}
+
+        //probably not a performance bottleneck, but not optimun
+        if (count >= SMA_sample_size) {
+            for (int i = 0 ; i < device_count ; i++) {
+                float sum = 0;
+                for (int j = 0 ; j < SMA_sample_size ; j++) {
+                    sum += SMA_samples[i][j];
+                }
+
+                SMA[i] = sum/SMA_sample_size;
+                printf("SMA of GPU [%d] at %f:  %.2f\n", i, timestamp_sec, SMA[i]);
+            }
+        }
+
+        timestamp_sec += (timestep_msec/1000);
+        count++;
+        std::this_thread::sleep_for(std::chrono::milliseconds(timestep_msec));
+    }
+
+
+
 }

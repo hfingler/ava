@@ -51,6 +51,9 @@ struct SVGPUManager : public ManagerServiceServerBase {
     void* zmq_context;
     void* zmq_central_socket;
 
+    //nvml monitor
+    std::thread nvml_monitor_thread;
+
     std::map<uint32_t, GPUState> gpu_states;
     std::map<uint32_t, std::map<uint32_t, GPUWorkerState>> gpu_workers;
 
@@ -62,12 +65,13 @@ struct SVGPUManager : public ManagerServiceServerBase {
     SVGPUManager(uint32_t port, uint32_t worker_port_base, std::string worker_path, 
             std::vector<std::string> &worker_argv, std::vector<std::string> &worker_env, 
             uint16_t ngpus, uint16_t gpu_offset, std::string resmngr_address, 
-            std::string scheduler_name, uint32_t precreated_workers);
+            std::string scheduler_name, uint32_t precreated_workers, std::string nvmlmonitor);
 
     void setRealGPUOffsetCount();
     void registerSelf();
     void launchReportServers();
     void centralManagerLoop();
+    void nvmlMonitorLoop();
     uint32_t launchWorker(uint32_t gpu_id);
     void createScheduler(std::string name);
     //ava override

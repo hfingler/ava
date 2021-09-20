@@ -174,6 +174,8 @@ namespace GPUMemoryServer {
     }
 
     cudaError_t Client::localMalloc(void** devPtr, size_t size) {
+        if (size == 0) return 0;
+
         auto al = std::make_unique<Client::LocalAlloc>(current_device);
 
         int ret = al->cudaMalloc(size);
@@ -435,7 +437,7 @@ namespace GPUMemoryServer {
         CUresult err = cuMemGetAllocationGranularity(&aligned_sz, &prop, CU_MEM_ALLOC_GRANULARITY_MINIMUM);
         if (err) { fprintf( stderr, "error at cuMemGetAllocationGranularity\n"); return 1; }
         size = ((req_size + aligned_sz - 1) / aligned_sz) * aligned_sz;
-        fprintf( stderr, "cuMemCreate of %lu on gpu %d\n", size, device_id);
+        //fprintf( stderr, "cuMemCreate of %lu on gpu %d\n", size, device_id);
 
         err = cuMemCreate(&phys_mem_handle, size, &prop, 0);
         if (err) { fprintf( stderr, "error at cuMemCreate\n"); return 1; }
@@ -446,7 +448,7 @@ namespace GPUMemoryServer {
         uint64_t addr = vasBitmask();
         CUresult err = cuMemAddressReserve(&devptr, size, 0ULL, addr, 0ULL);
         if (err) { fprintf( stderr, "error at cuMemAddressReserve\n"); return 1; }
-        fprintf( stderr, "VA reserve at %p, got back %p\n", addr, devptr);
+        //fprintf( stderr, "VA reserve at %p, got back %p\n", addr, devptr);
         return 0;
     }
 

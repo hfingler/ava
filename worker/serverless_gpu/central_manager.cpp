@@ -53,7 +53,7 @@ void SVGPUManager::handleRequest(Request& req, Reply& rep) {
      *   schedule request
      *************************/
     if (req.type == RequestType::SCHEDULE) {
-        std::cerr << "[SVLESS-MNGR]: handling SCHEDULE message" << std::endl;
+        //std::cerr << "[SVLESS-MNGR]: handling SCHEDULE message" << std::endl;
         handleSchedule(req, rep);
     }
     /*************************
@@ -194,7 +194,7 @@ void SVGPUManager::handleKernelIn(Request& req, Reply& rep) {
             }
         }
         else if (dbgi == 3) {
-            if (req.gpu == 0 && t_migrated == 0 && t_scheduled >= 2) {
+            if (req.gpu == 0 && t_migrated == 0 && t_scheduled == 4) {
                 rep.code = ReplyCode::MIGRATE;
                 std::cerr << "\n\n\nSG_DEBUG_MIGRATION: ITS GOING DOWN\n\n";
                 rep.data.migration.type = Migration::TOTAL;

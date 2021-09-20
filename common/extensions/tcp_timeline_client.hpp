@@ -25,7 +25,7 @@ struct TCPTimelineClient {
             if(sock < 0)
                 perror("cannot open socket");
         }
-        printf("sending ttc to %s\n", getenv("TTC_ADDR"));
+        //printf("sending ttc to %s\n", getenv("TTC_ADDR"));
 
         char const *ttc_str = getenv("TTC_ADDR");
         if (!ttc_str) return;

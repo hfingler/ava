@@ -1,12 +1,12 @@
-#ifndef __BESTFIT_SCHEDULER_HPP__
-#define __BESTFIT_SCHEDULER_HPP__
+#ifndef __WORSTFIT_SCHEDULER_HPP__
+#define __WORSTFIT_SCHEDULER_HPP__
 
 #include "common.hpp"
 #include <map>
 
-struct BestFit : public BaseScheduler {
+struct WorstFit : public BaseScheduler {
 
-  BestFit(
+  WorstFit(
       std::map<uint32_t, std::map<uint32_t, GPUWorkerState>> *workers,
       std::map<uint32_t, GPUState> *gpu_states) :
     BaseScheduler(workers, gpu_states)
@@ -30,7 +30,7 @@ struct BestFit : public BaseScheduler {
         }
         
         if (free_worker_exists) {
-          if (best_gpu == -1 || best_mem > free_memory ) {
+          if (best_gpu == -1 || best_mem < free_memory ) {
             std::cerr << "updating best fit gpu to " << gpus.first << std::endl;
             best_gpu = gpus.first;
             best_mem = free_memory;

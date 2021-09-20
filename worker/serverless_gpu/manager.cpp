@@ -15,7 +15,7 @@ ABSL_FLAG(std::vector<std::string>, worker_env, {},
           "(OPTIONAL) Specify environment variables, e.g. HOME=/home/ubuntu, passed to API servers");
 ABSL_FLAG(uint16_t, ngpus, 0, "(OPTIONAL) Number of GPUs the manager should use");
 ABSL_FLAG(uint16_t, gpuoffset, 0, "(OPTIONAL)GPU id offset");
-ABSL_FLAG(std::string, scheduler, "bestfit", "(OPTIONAL) choose GPU scheduler, default is bestfit. Options are: bestfit");
+ABSL_FLAG(std::string, scheduler, "bestfit", "(OPTIONAL) choose GPU scheduler, default is bestfit. Options are: bestfit, worstfit");
 ABSL_FLAG(uint32_t, precreated_workers, 1, "(OPTIONAL) How many workers per GPU we pre create. Default is 1.");
 
 ABSL_FLAG(std::string, keepworkeralive, "no", "(OPTIONAL) (debug) forcefully make the worker not die when not in serverless mode");
@@ -23,6 +23,7 @@ ABSL_FLAG(std::string, allctx, "no", "(OPTIONAL) turn on setting up all device c
 ABSL_FLAG(std::string, reporting, "no", "(OPTIONAL) turn on client reports to gpu server (required for migration)");
 ABSL_FLAG(std::string, debug_migration, "no", "(OPTIONAL) turn on debug migration (1 for execution, 2 for memory, 3 for random)");
 ABSL_FLAG(std::string, ttc_addr, "0", "(OPTIONAL) address of ttc server for timeline creation)");
+ABSL_FLAG(std::string, nvmlmonitor, "no", "(OPTIONAL) launch NVML monitor or not)");
 
 int main(int argc, const char *argv[]) {
   absl::ParseCommandLine(argc, const_cast<char **>(argv));
@@ -100,7 +101,8 @@ int main(int argc, const char *argv[]) {
   SVGPUManager *manager =
       new SVGPUManager(port, absl::GetFlag(FLAGS_worker_port_base), absl::GetFlag(FLAGS_worker_path), worker_argv,
                        worker_env, absl::GetFlag(FLAGS_ngpus), absl::GetFlag(FLAGS_gpuoffset), 
-                       resmngr_addr, absl::GetFlag(FLAGS_scheduler), absl::GetFlag(FLAGS_precreated_workers) );
+                       resmngr_addr, absl::GetFlag(FLAGS_scheduler), absl::GetFlag(FLAGS_precreated_workers),
+                       absl::GetFlag(FLAGS_nvmlmonitor) );
 
   //loop forever
   manager->RunServer();
