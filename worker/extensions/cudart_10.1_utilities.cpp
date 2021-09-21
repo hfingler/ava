@@ -17,6 +17,13 @@
 #include "cudart_nw_internal.h"
 #include "extensions/memory_server/client.hpp"
 #include "common/extensions/cudnn_optimization.h"
+#include <absl/container/inlined_vector.h>
+
+absl::Mutex module_mu;
+absl::flat_hash_map<CUmodule, absl::InlinedVector<CUmodule, 4>> module_to_module_arr;
+
+absl::Mutex func_mu;
+absl::flat_hash_map<CUfunction, absl::InlinedVector<CUfunction, 4>> func_to_func_arr;
 
 static inline int __gettid() { return gsl::narrow_cast<int>(syscall(SYS_gettid)); }
 
@@ -203,6 +210,36 @@ cudaError_t __helper_cudaStreamSynchronize_sync(cudaStream_t stream) {
   }
 }
 
+CUresult __helper_culaunch_kernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY,
+    unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
+    unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
+  if (__internal_allContextsEnabled()) {
+    CUresult ret;
+    CUresult other_ret;
+
+    absl::MutexLock lk_func(&func_mu);
+
+    auto func_arr = func_to_func_arr[f];
+
+    for (int i = 0; i < __internal_getDeviceCount(); i++) {
+      cudaSetDevice(i);
+      if (i != __internal_getCurrentDevice()) {
+        other_ret = __helper_culaunch_kernel(func_arr[i], gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
+            sharedMemBytes, hStream, kernelParams, extra);
+      } else {
+        ret = __helper_culaunch_kernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
+            sharedMemBytes, hStream, kernelParams, extra);
+      }
+    }
+    cudaSetDevice(__internal_getCurrentDevice());
+    return ret;
+  } else {
+    __helper_culaunch_kernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
+        sharedMemBytes, hStream, kernelParams, extra);
+  }
+}
+
+/*
 CUresult __helper_culaunch_kernel(struct fatbin_function *func, const void *hostFun, 
         unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
         unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
@@ -212,6 +249,7 @@ CUresult __helper_culaunch_kernel(struct fatbin_function *func, const void *host
   dim3 grid(gridDimX, gridDimY, gridDimZ);
   return (CUresult) __helper_launch_kernel(func, hostFun, grid, block, args, sharedMem, stream);
 }
+*/
 
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
                                    void **args, size_t sharedMem, cudaStream_t stream) {
@@ -309,19 +347,61 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
     CUresult ret;
     CUresult other_ret;
     CUmodule other_module;
+
+    absl::MutexLock lk(&module_mu);
+    absl::InlinedVector<CUmodule, 4> module_vec;
+
     for (int i = 0; i < __internal_getDeviceCount(); i++) {
       cudaSetDevice(i);
       if (i != __internal_getCurrentDevice()) {
         other_ret = cuModuleLoad(&other_module, fname);
+        module_vec.push_back(other_module);
       } else {
         ret = cuModuleLoad(module, fname);
+        module_vec.push_back(*module);
       }
+    }
+    for (int i = 0; i < module_vec.size(); i++) {
+      module_to_module_arr[module_vec[i]] = module_vec;
     }
     // fprintf(stderr, "resetting device to %d\n", __internal_getCurrentDevice());
     cudaSetDevice(__internal_getCurrentDevice());
     return ret;
   } else {
     return cuModuleLoad(module, fname);
+  }
+}
+
+CUresult cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const char *name) {
+  if (__internal_allContextsEnabled()) {
+    CUresult ret;
+    CUresult other_ret;
+    CUfunction other_func;
+
+    absl::MutexLock lk_mod(&module_mu);
+    absl::MutexLock lk_func(&func_mu);
+
+    auto mod_arr = module_to_module_arr[hmod];
+    absl::InlinedVector<CUfunction, 4> func_vec;
+
+    for (int i = 0; i < __internal_getDeviceCount(); i++) {
+      cudaSetDevice(i);
+
+      if (i != __internal_getCurrentDevice()) {
+        other_ret = cuModuleGetFunction(&other_func, mod_arr[i], name);
+        func_vec.push_back(other_func);
+      } else {
+        ret = cuModuleGetFunction(hfunc, hmod, name);
+        func_vec.push_back(*hfunc);
+      }
+    }
+    for (int i = 0; i < func_vec.size(); i++) {
+      func_to_func_arr[func_vec[i]] = func_vec;
+    }
+    cudaSetDevice(__internal_getCurrentDevice());
+    return ret;
+  } else {
+    return cuModuleGetFunction(hfunc, hmod, name);
   }
 }
 

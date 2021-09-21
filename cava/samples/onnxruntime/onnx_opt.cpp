@@ -1488,6 +1488,8 @@ EXPORTED CUresult CUDAAPI cuInit(unsigned int Flags) {
 ava_end_replacement;
 
 CUresult CUDAAPI cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const char *name) {
+  ava_disable_native_call;
+
   ava_argument(hfunc) {
     ava_out;
     ava_buffer(1);
@@ -1497,6 +1499,8 @@ CUresult CUDAAPI cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const cha
     ava_buffer(strlen(name) + 1);
   }
 
+  if (ava_is_worker) {
+  }
   ava_execute();
   // __helper_parse_function_args(name, ava_metadata(*hfunc)->func->args);
   __helper_parse_module_function_args(hmod, name, &ava_metadata(*hfunc)->func);
@@ -1530,8 +1534,8 @@ CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned
                                    unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
   ava_disable_native_call;                                
   
-  ava_implicit_argument void *func_id = ava_metadata(f)->func_id;
-  ava_argument(func_id) { ava_opaque; }
+  // ava_implicit_argument void *func_id = ava_metadata(f)->func_id;
+  // ava_argument(func_id) { ava_opaque; }
 
   ava_argument(hStream) ava_handle;
 
@@ -1560,12 +1564,12 @@ CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned
   }
 
   
-  if (ava_is_worker) {
-    return __helper_culaunch_kernel(
-        ((struct fatbin_function *)g_ptr_array_index(ava_metadata((void *)0)->fatbin_funcs, (intptr_t)func_id)),
-        func_id, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ, 
-        kernelParams, sharedMemBytes, (cudaStream_t)hStream);
-  }
+  // if (ava_is_worker) {
+  //   return __helper_culaunch_kernel(
+  //       ((struct fatbin_function *)g_ptr_array_index(ava_metadata((void *)0)->fatbin_funcs, (intptr_t)func_id)),
+  //       func_id, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
+  //       kernelParams, sharedMemBytes, (cudaStream_t)hStream);
+  // }
 }
 
 ava_begin_replacement;
@@ -2357,7 +2361,7 @@ CUresult CUDAAPI cuFuncSetAttribute(CUfunction hfunc, CUfunction_attribute attri
 CUresult CUDAAPI cuFuncSetSharedMemConfig(CUfunction hfunc, CUsharedconfig config) { ava_unsupported; }
 
 CUresult CUDAAPI cuModuleLoad(CUmodule *module, const char *fname) {
-  // ava_disable_native_call;
+  ava_disable_native_call;
   ava_argument(module) {
     ava_out;
     ava_buffer(1);
@@ -2367,10 +2371,10 @@ CUresult CUDAAPI cuModuleLoad(CUmodule *module, const char *fname) {
     ava_buffer(strlen(fname) + 1);
   }
 
-  // CUresult ret;
-  // if (ava_is_worker) {
-  //   ret = __helper_cuModuleLoad(module, fname);
-  // }
+  CUresult ret;
+  if (ava_is_worker) {
+    ret = __helper_cuModuleLoad(module, fname);
+  }
   ava_execute();
   __helper_record_module_path(*module, fname);
 }
