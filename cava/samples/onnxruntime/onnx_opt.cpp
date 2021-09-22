@@ -1570,6 +1570,10 @@ CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned
   //       func_id, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
   //       kernelParams, sharedMemBytes, (cudaStream_t)hStream);
   // }
+  if (ava_is_worker) {
+    return __helper_culaunch_kernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
+      sharedMemBytes, hStream, kernelParams, extra);
+  }
 }
 
 ava_begin_replacement;
