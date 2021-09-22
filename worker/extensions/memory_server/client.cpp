@@ -86,16 +86,12 @@ void __internal_kernelOut() {
     GPUMemoryServer::Client::getInstance().kernelOut();
 }
 
+// this is only used for dump
 CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
                                 unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
                                 unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
-    // TODO for TF
-    CUresult cur;
-    GPUMemoryServer::Client::getInstance().kernelIn();
-    cur = cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
+    return cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
                 sharedMemBytes, hStream, kernelParams, extra);
-    GPUMemoryServer::Client::getInstance().kernelOut();
-    return cur;
 }
 
 CUresult __internal_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
