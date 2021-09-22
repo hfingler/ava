@@ -1500,7 +1500,7 @@ CUresult CUDAAPI cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const cha
   }
 
   if (ava_is_worker) {
-    __helper_cuModuleGetFunction(hfunc, hmod, name);
+    return __helper_cuModuleGetFunction(hfunc, hmod, name);
   }
   //ava_execute();
   // __helper_parse_function_args(name, ava_metadata(*hfunc)->func->args);

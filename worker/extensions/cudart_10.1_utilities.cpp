@@ -213,6 +213,7 @@ cudaError_t __helper_cudaStreamSynchronize_sync(cudaStream_t stream) {
 CUresult __helper_culaunch_kernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY,
     unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
     unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
+  std::cerr << "__helper_culaunch_kernel\n";
   if (__internal_allContextsEnabled()) {
     CUresult ret;
     CUresult other_ret;
@@ -234,7 +235,8 @@ CUresult __helper_culaunch_kernel(CUfunction f, unsigned int gridDimX, unsigned 
     cudaSetDevice(__internal_getCurrentDevice());
     return ret;
   } else {
-    __helper_culaunch_kernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
+    std::cerr << "launching..\n";
+    return cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
         sharedMemBytes, hStream, kernelParams, extra);
   }
 }
@@ -375,7 +377,7 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
 }
 
 CUresult __helper_cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const char *name) {
-  std::cerr << "cuModuleGetFunction\n";
+  std::cerr << "__helper_cuModuleGetFunction\n";
   if (__internal_allContextsEnabled()) {
     CUresult ret;
     CUresult other_ret;
