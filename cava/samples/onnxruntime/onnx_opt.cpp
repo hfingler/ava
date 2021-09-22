@@ -1500,8 +1500,9 @@ CUresult CUDAAPI cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const cha
   }
 
   if (ava_is_worker) {
+    __helper_cuModuleGetFunction(hfunc, hmod, name);
   }
-  ava_execute();
+  //ava_execute();
   // __helper_parse_function_args(name, ava_metadata(*hfunc)->func->args);
   __helper_parse_module_function_args(hmod, name, &ava_metadata(*hfunc)->func);
 }
@@ -2375,11 +2376,11 @@ CUresult CUDAAPI cuModuleLoad(CUmodule *module, const char *fname) {
     ava_buffer(strlen(fname) + 1);
   }
 
-  CUresult ret;
+  //CUresult ret;
   if (ava_is_worker) {
-    ret = __helper_cuModuleLoad(module, fname);
+    return __helper_cuModuleLoad(module, fname);
   }
-  ava_execute();
+  //ava_execute();
   __helper_record_module_path(*module, fname);
 }
 

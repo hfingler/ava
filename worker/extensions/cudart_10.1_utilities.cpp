@@ -343,6 +343,7 @@ void __helper_init_module(struct fatbin_wrapper *fatCubin, void **handle, CUmodu
 }
 
 CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
+  std::cerr << "__helper_cuModuleLoad\n";
   if (__internal_allContextsEnabled()) {
     CUresult ret;
     CUresult other_ret;
@@ -358,6 +359,7 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
         module_vec.push_back(other_module);
       } else {
         ret = cuModuleLoad(module, fname);
+        std::cerr << "cuModuleLoad returned " << ret << std::endl;
         module_vec.push_back(*module);
       }
     }
@@ -372,7 +374,8 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
   }
 }
 
-CUresult cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const char *name) {
+CUresult __helper_cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const char *name) {
+  std::cerr << "cuModuleGetFunction\n";
   if (__internal_allContextsEnabled()) {
     CUresult ret;
     CUresult other_ret;
