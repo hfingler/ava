@@ -174,8 +174,11 @@ void __helper_parse_module_function_args(CUmodule module, const char *name, stru
       SYSCALL_FAILURE_PRINT("popen");
     }
   }
+  std::cerr << "going in while.. " << std::endl;
   while (fgets(line, sizeof(line), fp_pipe) != nullptr) {
     if (strncmp(line, ".nv.info.", 9) == 0) {
+      std::cerr << ".nv.info.\n";
+
       sprintf(kern_name, line + 9, strlen(line) - 10);
       assert(strlen(line) - 10 < MAX_KERNEL_NAME_LEN);
       kern_name[strlen(line) - 10] = '\0';
@@ -186,6 +189,8 @@ void __helper_parse_module_function_args(CUmodule module, const char *name, stru
           *func = (struct fatbin_function *)g_malloc(sizeof(struct fatbin_function));
           memset(*func, 0, sizeof(struct fatbin_function));
         }
+
+        std::cerr << "kern_name: " << kern_name << std::endl;
 
         /* Search parameters */
         (*func)->argc = 0;
@@ -236,6 +241,11 @@ void __helper_parse_module_function_args(CUmodule module, const char *name, stru
         continue;
       }
     }
+  }
+
+  std::cerr << "argc: " << (*func)->argc << std::endl;
+  for (int i  = 0 ; i < (*func)->argc ; i++) {
+    fprintf(stderr, "arg %d, is handle %c  size %d \n", i, (*func)->args->is_handle,  (*func)->args->size);
   }
 }
 

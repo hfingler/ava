@@ -1534,9 +1534,6 @@ CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned
                                    unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
                                    unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
   ava_disable_native_call;                                
-  
-  // ava_implicit_argument void *func_id = ava_metadata(f)->func_id;
-  // ava_argument(func_id) { ava_opaque; }
 
   ava_argument(hStream) ava_handle;
 
@@ -1544,8 +1541,13 @@ CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned
     ava_in;
     ava_buffer(ava_metadata(f)->func->argc);
     ava_element {
+        //testing without if
+        //ava_type_cast(void *);
+        //ava_buffer(ava_metadata(f)->func->args[__kernelParams_index_0].size);
+
       // FIXME: use the generated index name in the spec to
       // reference the outer loop's loop index at this moment.
+    
       if (ava_metadata(f)->func->args[__kernelParams_index_0].is_handle) {
         ava_type_cast(void *);
         ava_buffer(ava_metadata(f)->func->args[__kernelParams_index_0].size);
@@ -1554,6 +1556,7 @@ CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned
         ava_type_cast(void *);
         ava_buffer(ava_metadata(f)->func->args[__kernelParams_index_0].size);
       }
+      
     }
   }
 
@@ -1563,14 +1566,7 @@ CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned
 #warning The buffer size below states that every kernelParams[i] is 1 byte long.
     ava_element ava_buffer(1);
   }
-
   
-  // if (ava_is_worker) {
-  //   return __helper_culaunch_kernel(
-  //       ((struct fatbin_function *)g_ptr_array_index(ava_metadata((void *)0)->fatbin_funcs, (intptr_t)func_id)),
-  //       func_id, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
-  //       kernelParams, sharedMemBytes, (cudaStream_t)hStream);
-  // }
   if (ava_is_worker) {
     return __helper_culaunch_kernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
       sharedMemBytes, hStream, kernelParams, extra);

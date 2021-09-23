@@ -372,11 +372,14 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
     cudaSetDevice(__internal_getCurrentDevice());
     return ret;
   } else {
-    return cuModuleLoad(module, fname);
+    CUresult e = cuModuleLoad(module, fname);
+    std::cerr << "cuModuleLoad returned " << e << std::endl;
+    return e;
   }
 }
 
 CUresult __helper_cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const char *name) {
+  std::cerr << "__helper_cuModuleGetFunction\n";
   if (__internal_allContextsEnabled()) {
     CUresult ret;
     CUresult other_ret;
@@ -405,7 +408,9 @@ CUresult __helper_cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const ch
     cudaSetDevice(__internal_getCurrentDevice());
     return ret;
   } else {
-    return cuModuleGetFunction(hfunc, hmod, name);
+    CUresult e = cuModuleGetFunction(hfunc, hmod, name);
+    std::cerr << "cuModuleGetFunction returned " << e << std::endl;
+    return e;
   }
 }
 
