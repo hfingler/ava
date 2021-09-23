@@ -142,6 +142,7 @@ cudaError_t __internal_cudaMalloc(void **devPtr, size_t size);
 CUresult __internal_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize);
 CUresult __internal_cuMemFree(CUdeviceptr dptr);
 cudaError_t __internal_cudaFree(void *devPtr);
+CUresult __helper_cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const char *name);
 
 uint32_t __internal_getCurrentDeviceIndex();
 CUresult __helper_cuDevicePrimaryCtxGetState(CUdevice dev, unsigned int *flags, int *active);

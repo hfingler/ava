@@ -224,17 +224,17 @@ CUresult __helper_culaunch_kernel(CUfunction f, unsigned int gridDimX, unsigned 
     for (int i = 0; i < __internal_getDeviceCount(); i++) {
       cudaSetDevice(i);
       if (i != __internal_getCurrentDevice()) {
-        other_ret = __helper_culaunch_kernel(func_arr[i], gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
+        other_ret = cuLaunchKernel(func_arr[i], gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
             sharedMemBytes, hStream, kernelParams, extra);
       } else {
-        ret = __helper_culaunch_kernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
+        ret = cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
             sharedMemBytes, hStream, kernelParams, extra);
       }
     }
     cudaSetDevice(__internal_getCurrentDevice());
     return ret;
   } else {
-    __helper_culaunch_kernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
+    cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
         sharedMemBytes, hStream, kernelParams, extra);
   }
 }
@@ -372,7 +372,7 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
   }
 }
 
-CUresult cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const char *name) {
+CUresult __helper_cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const char *name) {
   if (__internal_allContextsEnabled()) {
     CUresult ret;
     CUresult other_ret;
