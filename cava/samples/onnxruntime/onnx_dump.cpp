@@ -189,8 +189,9 @@ ava_utility void __helper_dump_fatbin(void *fatCubin, GHashTable **fatbin_funcs,
   }
 
   /*  Open the command pipe for reading */
+  //dont hardcode version for now
   auto pip_command =
-      fmt::format("/usr/local/cuda-10.1/bin/cuobjdump -elf /tmp/fatbin-{}.ava", ava_metadata(NULL)->num_fatbins);
+      fmt::format("/usr/local/cuda/bin/cuobjdump -elf /tmp/fatbin-{}.ava", ava_metadata(NULL)->num_fatbins);
   fp_pipe = popen(pip_command.c_str(), "r");
   assert(fp_pipe);
 
