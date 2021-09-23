@@ -135,6 +135,7 @@ void __helper_record_module_path(CUmodule module, const char *fname);
 void __helper_parse_module_function_args(CUmodule module, const char *name, struct fatbin_function **func);
 void __helper_init_module(struct fatbin_wrapper *fatCubin, void **handle, CUmodule *module);
 CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname);
+CUresult __helper_cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const char *name);
 CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
                                    unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
                                    unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra);

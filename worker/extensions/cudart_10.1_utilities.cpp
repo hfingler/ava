@@ -213,6 +213,7 @@ cudaError_t __helper_cudaStreamSynchronize_sync(cudaStream_t stream) {
 CUresult __helper_culaunch_kernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY,
     unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
     unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
+  std::cerr << "__helper_culaunch_kernel\n";
   if (__internal_allContextsEnabled()) {
     CUresult ret;
     CUresult other_ret;
@@ -234,7 +235,8 @@ CUresult __helper_culaunch_kernel(CUfunction f, unsigned int gridDimX, unsigned 
     cudaSetDevice(__internal_getCurrentDevice());
     return ret;
   } else {
-    cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
+    std::cerr << "launching..\n";
+    return cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
         sharedMemBytes, hStream, kernelParams, extra);
   }
 }
@@ -343,6 +345,7 @@ void __helper_init_module(struct fatbin_wrapper *fatCubin, void **handle, CUmodu
 }
 
 CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
+  std::cerr << "__helper_cuModuleLoad\n";
   if (__internal_allContextsEnabled()) {
     CUresult ret;
     CUresult other_ret;
@@ -358,6 +361,7 @@ CUresult __helper_cuModuleLoad(CUmodule *module, const char *fname) {
         module_vec.push_back(other_module);
       } else {
         ret = cuModuleLoad(module, fname);
+        std::cerr << "cuModuleLoad returned " << ret << std::endl;
         module_vec.push_back(*module);
       }
     }
