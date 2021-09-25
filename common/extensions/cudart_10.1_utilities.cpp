@@ -155,6 +155,7 @@ void __helper_parse_function_args(const char *name, struct kernel_arg *args) {
 
 void __helper_record_module_path(CUmodule module, const char* fname) {
   absl::MutexLock lk(&module_path_mu);
+  fprintf(stderr, "record module %p with name %s\n", module, fname);
   module_path_map[module] = std::string(fname);
 }
 

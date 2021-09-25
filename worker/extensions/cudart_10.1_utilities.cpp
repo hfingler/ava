@@ -210,7 +210,7 @@ cudaError_t __helper_cudaStreamSynchronize_sync(cudaStream_t stream) {
   }
 }
 
-CUresult __helper_culaunch_kernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY,
+CUresult __helper_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY,
     unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
     unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
   std::cerr << "__helper_culaunch_kernel\n";

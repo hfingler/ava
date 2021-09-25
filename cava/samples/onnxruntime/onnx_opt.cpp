@@ -1493,14 +1493,18 @@ CUresult CUDAAPI cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const cha
   ava_argument(hfunc) {
     ava_out;
     ava_buffer(1);
+    ava_element ava_opaque;
   }
   ava_argument(name) {
     ava_in;
     ava_buffer(strlen(name) + 1);
   }
 
+  CUresult ret;
   if (ava_is_worker) {
-    return __helper_cuModuleGetFunction(hfunc, hmod, name);
+    ret = __helper_cuModuleGetFunction(hfunc, hmod, name);
+    __helper_parse_module_function_args(hmod, name, &ava_metadata(*hfunc)->func);
+    return ret;
   }
   ava_execute();
   // __helper_parse_function_args(name, ava_metadata(*hfunc)->func->args);
@@ -1532,9 +1536,11 @@ CUresult CUDAAPI cuModuleLoadFatBinary(CUmodule *module, const void *fatCubin) {
 
 CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
                                    unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
-                                   unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
-  ava_disable_native_call;                                
-  
+                                   unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {                              
+  ava_disable_native_call;
+
+  ava_argument(f) ava_opaque;
+
   // ava_implicit_argument void *func_id = ava_metadata(f)->func_id;
   // ava_argument(func_id) { ava_opaque; }
 
@@ -1572,8 +1578,9 @@ CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned
   //       kernelParams, sharedMemBytes, (cudaStream_t)hStream);
   // }
   if (ava_is_worker) {
-    return __helper_culaunch_kernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
-      sharedMemBytes, hStream, kernelParams, extra);
+    return __helper_cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ,
+                                   blockDimX, blockDimY, blockDimZ,
+                                   sharedMemBytes, hStream, kernelParams, extra);
   }
 }
 
@@ -2376,9 +2383,11 @@ CUresult CUDAAPI cuModuleLoad(CUmodule *module, const char *fname) {
     ava_buffer(strlen(fname) + 1);
   }
 
-  //CUresult ret;
+  CUresult ret;
   if (ava_is_worker) {
-    return __helper_cuModuleLoad(module, fname);
+    ret = __helper_cuModuleLoad(module, fname);
+    __helper_record_module_path(*module, fname);
+    return ret;
   }
   ava_execute();
   __helper_record_module_path(*module, fname);
