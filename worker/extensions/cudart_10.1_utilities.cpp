@@ -236,8 +236,18 @@ CUresult __helper_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned i
     return ret;
   } else {
     std::cerr << "launching..\n";
-    return cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
+    CUresult e = cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
         sharedMemBytes, hStream, kernelParams, extra);
+    std::cerr << "launch returned " << e << std::endl;
+
+    cudaDeviceSynchronize();
+    cudaError_t ret2 = cudaGetLastError();
+    if(ret2) 
+      std::cerr << "\n ### __helper_cuLaunchKernel after sync " << ret2 << "\n";
+    else
+      std::cerr << "no errors after sync" << std::endl;
+
+    return e;
   }
 }
 
