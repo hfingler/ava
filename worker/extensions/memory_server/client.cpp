@@ -176,11 +176,12 @@ namespace GPUMemoryServer {
     cudaError_t Client::localMalloc(void** devPtr, size_t size) {
         if (size == 0) return 0;
 
+#ifndef CUDA102
         //test with default
-        //cudaError_t err = cudaMalloc(devPtr, size);
+        cudaError_t err = cudaMalloc(devPtr, size);
         //fprintf( stderr,"### localMalloc request of %zx  returned %d\n", size, err);
-        //return err;
-
+        return err;
+#else
         auto al = std::make_unique<Client::LocalAlloc>(current_device);
         int ret = al->cudaMalloc(size);
         fprintf( stderr,"### localMalloc request of %zx  returned %d\n", size, ret);
@@ -192,6 +193,7 @@ namespace GPUMemoryServer {
         local_allocs.push_back(std::move(al));
         //reportMalloc(size); 
         return cudaSuccess;
+#endif
     }
 
     cudaError_t Client::localFree(void* devPtr) {
@@ -200,6 +202,9 @@ namespace GPUMemoryServer {
             return cudaSuccess;
         }
 
+#ifndef CUDA102
+        return cudaFree(devPtr);
+#else
         for (auto it = local_allocs.begin(); it != local_allocs.end(); ++it) {
             if ((*it)->devptr == devPtr) {
                 local_allocs.erase(it);
@@ -210,6 +215,7 @@ namespace GPUMemoryServer {
         
         fprintf(stderr, "### ILLEGAL cudaFree call on devPtr %x\n", (uint64_t)devPtr);
         return cudaErrorInvalidValue;   
+#endif
     }
 
     void Client::sendRequest(Request &req) {
@@ -287,6 +293,9 @@ namespace GPUMemoryServer {
             cudaDeviceEnablePeerAccess(og_device, 0);
         }
         else if (migration_type == Migration::TOTAL) {
+#ifndef CUDA102
+            fprintf( stderr, "\n\n\nCUDA 10.2 IS DISABLED, CANT MIGRATE!!\n\n\n");
+#else
             std::cerr << "Full migration, changing device to" << new_gpuid << std::endl;
             //all we gotta do is change all allocations to new device
             std::vector<LocalAlloc*> new_allocs;
@@ -332,6 +341,7 @@ namespace GPUMemoryServer {
             // }
 
             cudaDeviceSynchronize();
+#endif
         }
 
         //release handlers
@@ -342,8 +352,9 @@ namespace GPUMemoryServer {
         reportCleanup(0);  //TODO
 
         //clear all allocated memory
+#ifdef CUDA102
         local_allocs.clear();
-
+#endif
         //iterate over map of maps, destroying streams
         while (!streams_map.empty())
             __helper_destroy_stream((streams_map.begin())->first);
@@ -408,6 +419,8 @@ namespace GPUMemoryServer {
         sendRequest(req);
     }
     
+#ifdef CUDA102
+
     Client::LocalAlloc::LocalAlloc(uint32_t device) {
         devptr = 0;
         device_id = device;
@@ -515,6 +528,8 @@ namespace GPUMemoryServer {
             fprintf(stderr, "%x ", a[j]);
         fprintf( stderr, "\n");
     }
+
+#endif
 
 //end of GPUMemoryServer nameserver
 }

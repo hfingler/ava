@@ -60,6 +60,7 @@ namespace GPUMemoryServer {
 
         std::string uuid;
         //local mallocs
+#ifdef CUDA102
         struct LocalAlloc {
             uint64_t devptr;
             size_t size;
@@ -84,16 +85,16 @@ namespace GPUMemoryServer {
                 //and instead can just put everything together since its UVA
                 return 0;
                 //return 0x00007fc000000000;
-                /*
-                uint64_t mask = va_id;
-                mask = mask << 38-1-4;
-                uint64_t base_ptr = 0x00007fc000000000;
-                return base_ptr | mask;
-                */
+                
+                //uint64_t mask = va_id;
+                //mask = mask << 38-1-4;
+                //uint64_t base_ptr = 0x00007fc000000000;
+                //return base_ptr | mask;
             }
         };
 
         std::vector<std::unique_ptr<LocalAlloc>> local_allocs;
+#endif
 
         //stream translation
         std::map<cudaStream_t, std::map<uint32_t,cudaStream_t>> streams_map;
