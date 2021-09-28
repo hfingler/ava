@@ -133,7 +133,7 @@ CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned
                                    unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
                                    unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra);
 cudaError_t __internal_cudaMalloc(void **devPtr, size_t size);
-CUresult __internal_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize);
+//CUresult __internal_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize);
 CUresult __internal_cuMemFree(CUdeviceptr dptr);
 cudaError_t __internal_cudaFree(void *devPtr);
 
