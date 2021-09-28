@@ -39,7 +39,7 @@ add_custom_command(
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR}
   ${CMAKE_CURRENT_BINARY_DIR}
-  "/usr/local/cuda-10.2/include"
+  "/usr/local/cuda/include"
   ${CMAKE_SOURCE_DIR}
 )
 
@@ -62,7 +62,7 @@ add_executable(svgpu-manager
   ${manager_service_ava_srcs}
 )
 
-find_package(CUDA 10.2 REQUIRED)
+#find_package(CUDA 10.2 REQUIRED)
 
 target_link_libraries(svgpu-manager
   ${manager_service_libraries}

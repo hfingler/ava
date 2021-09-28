@@ -3,10 +3,10 @@ ava_name("CUDA Runtime for ONNX");
 ava_version("10.1.0");
 ava_identifier(ONNX_OPT);
 ava_number(10);
-ava_cxxflags(-I/usr/local/cuda-10.2/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN);
+ava_cxxflags(-I/usr/local/cuda/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN);
 // To enable stat collecting, use the below line and uncomment the ava_stats definition
 // ava_cxxflags(-I/usr/local/cuda-10.1/include -I${CMAKE_SOURCE_DIR}/cava/headers -DAVA_PRELOAD_CUBIN -D__AVA_ENABLE_STAT);
-ava_libs(-L/usr/local/cuda-10.2/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver zmq nvidia-ml absl::flat_hash_map absl::hash absl::strings);
+ava_libs(-L/usr/local/cuda/lib64 -lcudart -lcuda -lcublas -lcudnn -lcufft -lcurand -lcusparse -lcusolver zmq nvidia-ml absl::flat_hash_map absl::hash absl::strings);
 ava_guestlib_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/guest_cmd_batching_queue.cpp extensions/extension_api.cpp extensions/gpu_address_tracking.cpp extensions/cudart_10.1_utilities.cpp);
 ava_worker_srcs(extensions/cudnn_optimization.cpp extensions/tf_optimization.cpp extensions/cmd_batching.cpp extensions/cudart_10.1_utilities.cpp extensions/memory_server/client.cpp);
 ava_common_utility_srcs(extensions/cudart_10.1_utilities.cpp);
@@ -1528,11 +1528,7 @@ CUresult CUDAAPI cuModuleLoadFatBinary(CUmodule *module, const void *fatCubin) {
 CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
                                    unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
                                    unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
-  ava_disable_native_call;                                
   
-  ava_implicit_argument void *func_id = ava_metadata(f)->func_id;
-  ava_argument(func_id) { ava_opaque; }
-
   ava_argument(hStream) ava_handle;
 
   ava_argument(kernelParams) {
@@ -1559,13 +1555,6 @@ CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned
     ava_element ava_buffer(1);
   }
 
-  
-  if (ava_is_worker) {
-    return __helper_culaunch_kernel(
-        ((struct fatbin_function *)g_ptr_array_index(ava_metadata((void *)0)->fatbin_funcs, (intptr_t)func_id)),
-        func_id, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ, 
-        kernelParams, sharedMemBytes, (cudaStream_t)hStream);
-  }
 }
 
 ava_begin_replacement;
@@ -1817,6 +1806,7 @@ CUresult CUDAAPI cuStreamDestroy(CUstream hStream) {
   }
 }
 
+/*
 CUresult CUDAAPI __internal_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
   ava_argument(dptr) {
     ava_out;
@@ -1846,6 +1836,28 @@ CUresult CUDAAPI cuMemFree(CUdeviceptr dptr) {
     return __internal_cuMemFree(dptr);
   }
 }
+*/
+
+CUresult CUDAAPI cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
+  ava_argument(dptr) {
+    ava_out;
+    ava_buffer(1);
+    ava_element {
+      ava_opaque;
+      ava_allocates;
+    }
+  }
+
+  void *ret = reinterpret_cast<void *>(ava_execute());
+  if (ava_is_guest) {
+    __helper_save_gpu_address_range((uint64_t)(*dptr), bytesize, static_cast<void *>(&ret));
+  }
+}
+
+CUresult CUDAAPI cuMemFree(CUdeviceptr dptr) {
+  ava_argument(dptr) ava_handle; 
+}
+
 
 ava_begin_replacement;
 EXPORTED CUresult CUDAAPI cuMemHostAlloc(void **pp, size_t bytesize, unsigned int Flags) {
