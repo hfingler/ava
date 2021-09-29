@@ -5,6 +5,7 @@
 
 #include <map>
 #include <vector>
+#include <mutex>
 
 #include "manager_service.hpp"
 #include "manager_service.proto.h"
@@ -54,6 +55,7 @@ struct SVGPUManager : public ManagerServiceServerBase {
     //nvml monitor
     std::thread nvml_monitor_thread;
 
+    std::mutex gpu_states_lock;
     std::map<uint32_t, GPUState> gpu_states;
     std::map<uint32_t, std::map<uint32_t, GPUWorkerState>> gpu_workers;
 

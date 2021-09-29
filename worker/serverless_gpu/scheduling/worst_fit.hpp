@@ -17,7 +17,7 @@ struct WorstFit : public BaseScheduler {
     uint64_t best_mem = -1;
 
     for (auto& gpus : *gpu_states) {
-      uint64_t free_memory = (gpus.second.total_memory - gpus.second.used_memory);
+      uint64_t free_memory = gpus.second.free_memory;
       std::cerr << "gpu " << gpus.first << " has free memory: " << free_memory <<std::endl;
       //if there is enough memory
       if (requested_memory <= free_memory) {
@@ -45,7 +45,7 @@ struct WorstFit : public BaseScheduler {
       return -1;
     }
     //at this point we will be able to schedule
-    (*gpu_states)[best_gpu].used_memory += requested_memory;
+    //(*gpu_states)[best_gpu].used_memory += requested_memory;
 
     for (auto& gpu_wks : (*workers)[best_gpu]) {
       if (gpu_wks.second.busy == false) {

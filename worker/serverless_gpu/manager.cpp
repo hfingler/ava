@@ -23,7 +23,7 @@ ABSL_FLAG(std::string, allctx, "no", "(OPTIONAL) turn on setting up all device c
 ABSL_FLAG(std::string, reporting, "no", "(OPTIONAL) turn on client reports to gpu server (required for migration)");
 ABSL_FLAG(std::string, debug_migration, "no", "(OPTIONAL) turn on debug migration (1 for execution, 2 for memory, 3 for random)");
 ABSL_FLAG(std::string, ttc_addr, "0", "(OPTIONAL) address of ttc server for timeline creation)");
-ABSL_FLAG(std::string, nvmlmonitor, "no", "(OPTIONAL) launch NVML monitor or not)");
+ABSL_FLAG(std::string, nvmlmonitor, "yes", "(OPTIONAL) disable NVML monitor");
 
 int main(int argc, const char *argv[]) {
   absl::ParseCommandLine(argc, const_cast<char **>(argv));

@@ -236,9 +236,16 @@ void SVGPUManager::setRealGPUOffsetCount() {
     } 
 
     //TODO: get real memory from nvml
-    for (int i = gpu_offset ; i < gpu_offset+n_gpus ; i++) {
-        gpu_states[i].total_memory = 15000;
-        gpu_states[i].used_memory = 0;
+    //for (int i = gpu_offset ; i < gpu_offset+n_gpus ; i++) {
+    for (int i = 0 ; i < n_gpus ; i++) {
+        nvmlDevice_t dev;
+        nvmlDeviceGetHandleByIndex_v2(i, &dev);
+        nvmlMemory_t utmem;
+        nvmlDeviceGetMemoryInfo(dev, &utmem);
+        gpu_states[i].total_memory = utmem.free; //free so we can ignore overhead of contexts
+        gpu_states[i].free_memory = utmem.free;
+        gpu_states[i].proc_utilization = 0;
+        gpu_states[i].busy_workers = 0;
     }
     
     std::cout << "[SVLESS-MNGR]: set GPU offset to " << gpu_offset << " and GPU count to " << n_gpus << std::endl;
@@ -280,35 +287,32 @@ void SVGPUManager::nvmlMonitorLoop() {
     }
 
     nvmlDevice_t devs[device_count];
-
     for (int i = 0 ; i < device_count ; i++) {
         nvmlDeviceGetHandleByIndex_v2(i, devs+i);
     }
-
     std::cout << "[SVLESS-MNGR]: NVML monitor found " << device_count << " devices, looping..\n";
 
     nvmlUtilization_t ut;
     float utils[device_count];
-
+    nvmlMemory_t utmem;
+    uint64_t gpu_free_mem[device_count];
     int32_t SMA_sample_size = 5;
     float SMA_samples[device_count][SMA_sample_size];
     float SMA[device_count];
-
-    uint32_t timestep_msec = 200;
-    //uint32_t print_each = 5;
-
     float timestamp_sec = 0;
     uint64_t count = 0;
+
+    uint32_t timestep_msec = 250;
+    uint32_t print_every = 10;
     while (1) {
         for (int i = 0 ; i < device_count ; i++) {
             nvmlDeviceGetUtilizationRates(devs[i], &ut);
             utils[i] = ut.gpu;
             SMA_samples[i][count%SMA_sample_size] = ut.gpu;
-        }
 
-        //if (count % print_each == 0) {
-        //    printf("%.2f %.2f %.2f\n", ts, utils[0], utils[1]);
-        //}
+            nvmlDeviceGetMemoryInfo(devs[i], &utmem);
+            gpu_free_mem[i] = utmem.free;
+        }
 
         //probably not a performance bottleneck, but not optimun
         if (count >= SMA_sample_size) {
@@ -317,17 +321,34 @@ void SVGPUManager::nvmlMonitorLoop() {
                 for (int j = 0 ; j < SMA_sample_size ; j++) {
                     sum += SMA_samples[i][j];
                 }
-
                 SMA[i] = sum/SMA_sample_size;
-                printf("SMA of GPU [%d] at %f:  %.2f\n", i, timestamp_sec, SMA[i]);
+                //printf("SMA of GPU [%d] at %f:  %.2f\n", i, timestamp_sec, SMA[i]);
             }
+        }
+
+        //update structs of each GPU
+        gpu_states_lock.lock();
+        for (int i = 0 ; i < device_count ; i++) {
+            gpu_states[i].free_memory = gpu_free_mem[i];
+            gpu_states[i].proc_utilization = SMA[i];
+        }
+        gpu_states_lock.unlock();
+
+        if (count % print_every == 0) {
+            printf("mem\t\t");
+            for (int i = 0 ; i < device_count ; i++)
+                printf("%luM\t", gpu_states[i].free_memory/(1024*1024));
+            printf("\nproc\t\t");
+            for (int i = 0 ; i < device_count ; i++)
+                printf("%.1f%\t", gpu_states[i].proc_utilization);
+            printf("\nwrks\t\t");
+            for (int i = 0 ; i < device_count ; i++)
+                printf("%lu\t", uint32_t(gpu_states[i].busy_workers));
+            printf("\n\n");
         }
 
         timestamp_sec += (timestep_msec/1000);
         count++;
         std::this_thread::sleep_for(std::chrono::milliseconds(timestep_msec));
     }
-
-
-
 }

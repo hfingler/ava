@@ -252,11 +252,13 @@ EXPORTED_WEAKLY void destroy_command_handler(bool destroy_channel) {
     pthread_join(nw_handler_thread, NULL);
     if (destroy_channel) {
       command_channel_free(nw_global_command_channel);
+      //kill_all_shadow_threads();
     }
     atomic_thread_fence(memory_order_release);
     init_command_handler_executed = 0;
   }
   pthread_mutex_unlock(&nw_handler_lock);
+
 }
 
 EXPORTED_WEAKLY void wait_for_command_handler() { pthread_join(nw_handler_thread, NULL); }

@@ -163,5 +163,5 @@ EXPORTED_WEAKLY void nw_destroy_guestlib(void) {
   // TODO: This is called by the guestlib so destructor for each API. This is
   // safe, but will make the handler shutdown when the FIRST API unloads when
   // having it shutdown with the last would be better.
-  destroy_command_handler();
+  destroy_command_handler(true);
 }

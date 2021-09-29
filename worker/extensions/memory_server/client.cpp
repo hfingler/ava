@@ -93,14 +93,7 @@ CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned
     return cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
                 sharedMemBytes, hStream, kernelParams, extra);
 }
-/*
-CUresult __internal_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
-    void* p;
-    cudaError_t err = GPUMemoryServer::Client::getInstance().localMalloc(&p, bytesize);
-    *dptr = p;
-    return (CUresult) err;
-}
-*/
+
 CUresult __internal_cuMemFree(CUdeviceptr dptr) {
     cudaError_t err = GPUMemoryServer::Client::getInstance().localFree((void*)dptr);
     return (CUresult) err;

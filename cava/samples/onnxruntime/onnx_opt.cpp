@@ -1806,31 +1806,6 @@ CUresult CUDAAPI cuStreamDestroy(CUstream hStream) {
   }
 }
 
-
-/*
-CUresult CUDAAPI __internal_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
-  // ava_argument(dptr) {
-  //   ava_out;
-  //   ava_buffer(1);
-  //   ava_element {
-  //     ava_opaque;
-  //     ava_allocates;
-  //   }
-  // }
-  ava_argument(dptr) {
-    ava_out;
-    ava_buffer(1);
-    ava_element ava_opaque;
-  }
-
-  void *ret = reinterpret_cast<void *>(ava_execute());
-  if (ava_is_guest) {
-    __helper_save_gpu_address_range((uint64_t)(*dptr), bytesize, static_cast<void *>(&ret));
-  }
-}
-*/
-
-
 ava_begin_replacement;
 EXPORTED CUresult CUDAAPI cuMemAlloc_v2(CUdeviceptr *dptr, size_t bytesize) {
   void* p;
@@ -1848,28 +1823,6 @@ CUresult CUDAAPI cuMemFree(CUdeviceptr dptr) {
     return __internal_cuMemFree(dptr);
   }
 }
-
-/*
-CUresult CUDAAPI cuMemAlloc(CUdeviceptr *dptr, size_t bytesize) {
-  ava_argument(dptr) {
-    ava_out;
-    ava_buffer(1);
-    ava_element {
-      ava_opaque;
-      ava_allocates;
-    }
-  }
-
-  void *ret = reinterpret_cast<void *>(ava_execute());
-  if (ava_is_guest) {
-    __helper_save_gpu_address_range((uint64_t)(*dptr), bytesize, static_cast<void *>(&ret));
-  }
-}
-
-CUresult CUDAAPI cuMemFree(CUdeviceptr dptr) {
-  ava_argument(dptr) ava_handle; 
-}
-*/
 
 ava_begin_replacement;
 EXPORTED CUresult CUDAAPI cuMemHostAlloc(void **pp, size_t bytesize, unsigned int Flags) {

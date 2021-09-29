@@ -120,13 +120,12 @@ void SVGPUManager::handleSchedule(Request& req, Reply& rep) {
 void SVGPUManager::handleReady(Request& req, Reply& rep) {
     auto port = req.data.ready.port;
     auto gpu = req.gpu;
+
+    //if we already knew, its being reused
+    if (gpu_workers[gpu].count(port) != 0){
+        gpu_states[gpu].busy_workers -= 1;
+    }
     gpu_workers[gpu][port].busy = false;
-
-    // if its not a brand new worker, it means we are reusing, so reduce memory used in gpu
-    gpu_states[gpu].used_memory -= gpu_workers[gpu][port].used_memory;
-    std::cerr << "updating used memory of gpu " << gpu << " to " << gpu_states[gpu].used_memory << std::endl;
-
-    gpu_workers[gpu][port].used_memory = 0;
 
     //notify backend, if there is one, that we can handle another function
     if (!resmngr_address.empty())
@@ -164,8 +163,6 @@ void SVGPUManager::handleFinish(Request& req, Reply& rep) {
     (void)rep;
 }
 
-
-
 void SVGPUManager::handleKernelIn(Request& req, Reply& rep) {
     //kernels_queued++;
     //std::cerr << " >>in: there are now" <<  kernels_queued << "kernels queued" <<std::endl;
@@ -201,8 +198,8 @@ void SVGPUManager::handleKernelIn(Request& req, Reply& rep) {
                 rep.data.migration.target_device = 1;
                 t_migrated = 1;
 
-                gpu_states[0].used_memory -= 5000;
-                gpu_states[1].used_memory += 5000;
+                //gpu_states[0].used_memory -= 5000;
+                //gpu_states[1].used_memory += 5000;
             }
         }
         //if a multiple of 10, divide 1 by it and that's the prob

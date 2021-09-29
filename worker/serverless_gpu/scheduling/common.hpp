@@ -12,7 +12,9 @@ struct GPUWorkerState {
 struct GPUState {
   std::vector<GPUWorkerState> workers;
   uint64_t total_memory;
-  uint64_t used_memory;
+  uint64_t free_memory; 
+  float proc_utilization;
+  std::atomic<uint32_t> busy_workers; //
 };
 
 struct BaseScheduler {
