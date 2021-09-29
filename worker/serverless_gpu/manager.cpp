@@ -24,6 +24,7 @@ ABSL_FLAG(std::string, reporting, "no", "(OPTIONAL) turn on client reports to gp
 ABSL_FLAG(std::string, debug_migration, "no", "(OPTIONAL) turn on debug migration (1 for execution, 2 for memory, 3 for random)");
 ABSL_FLAG(std::string, ttc_addr, "0", "(OPTIONAL) address of ttc server for timeline creation)");
 ABSL_FLAG(std::string, nvmlmonitor, "yes", "(OPTIONAL) disable NVML monitor");
+ABSL_FLAG(uint32_t, migration_strat, 0, "(OPTIONAL) migration strategy. 0 is disabled.");
 
 int main(int argc, const char *argv[]) {
   absl::ParseCommandLine(argc, const_cast<char **>(argv));
@@ -102,7 +103,7 @@ int main(int argc, const char *argv[]) {
       new SVGPUManager(port, absl::GetFlag(FLAGS_worker_port_base), absl::GetFlag(FLAGS_worker_path), worker_argv,
                        worker_env, absl::GetFlag(FLAGS_ngpus), absl::GetFlag(FLAGS_gpuoffset), 
                        resmngr_addr, absl::GetFlag(FLAGS_scheduler), absl::GetFlag(FLAGS_precreated_workers),
-                       absl::GetFlag(FLAGS_nvmlmonitor) );
+                       absl::GetFlag(FLAGS_nvmlmonitor), absl::GetFlag(FLAGS_migration_strat) );
 
   //loop forever
   manager->RunServer();

@@ -165,15 +165,15 @@ namespace GPUMemoryServer {
     cudaError_t Client::localMalloc(void** devPtr, size_t size) {
         if (size == 0) return 0;
 
-#ifndef CUDA102
+
         //test with default
-        cudaError_t err = cudaMalloc(devPtr, size);
-        fprintf( stderr,"### localMalloc request of %zx  returned %d\n", size, err);
-        return err;
-#else
+        //cudaError_t err = cudaMalloc(devPtr, size);
+        //fprintf( stderr,"### localMalloc request of %zx  returned %d\n", size, err);
+        //return err;
+
         auto al = std::make_unique<Client::LocalAlloc>(current_device);
         int ret = al->cudaMalloc(size);
-        fprintf( stderr,"### localMalloc request of %zx  returned %d\n", size, ret);
+        //fprintf( stderr,"### localMalloc request of %zx  returned %d\n", size, ret);
 
         if (size == 0) fprintf( stderr,"how is this thing 0?\n");
         if (ret) return cudaErrorMemoryAllocation;
@@ -182,7 +182,7 @@ namespace GPUMemoryServer {
         local_allocs.push_back(std::move(al));
         //reportMalloc(size); 
         return cudaSuccess;
-#endif
+
     }
 
     cudaError_t Client::localFree(void* devPtr) {
@@ -190,9 +190,9 @@ namespace GPUMemoryServer {
         if (devPtr == nullptr) {
             return cudaSuccess;
         }
-#ifndef CUDA102
-        return cudaFree(devPtr);
-#else
+
+        //return cudaFree(devPtr);
+
         for (auto it = local_allocs.begin(); it != local_allocs.end(); ++it) {
             if ((*it)->devptr == devPtr) {
                 local_allocs.erase(it);
@@ -203,7 +203,7 @@ namespace GPUMemoryServer {
         
         fprintf(stderr, "### ILLEGAL cudaFree call on devPtr %x\n", (uint64_t)devPtr);
         return cudaErrorInvalidValue;   
-#endif
+
     }
 
     void Client::sendRequest(Request &req) {
@@ -263,10 +263,6 @@ namespace GPUMemoryServer {
 
     void Client::migrateToGPU(uint32_t new_gpuid, Migration migration_type) {
         std::cerr << "[[[MIGRATION]]]\n" << std::endl;
-
-#ifndef CUDA102
-        fprintf( stderr, "\n\n\nCUDA 10.2 IS DISABLED, CANT MIGRATE!!\n\n\n");
-#else
 
         //wait for all cmd handlers to stop
         wait_for_cmd_drain();
@@ -334,16 +330,14 @@ namespace GPUMemoryServer {
 
         //release handlers
         release_cmd_handlers();
-#endif
     }
 
     void Client::fullCleanup() {
         reportCleanup(0);  //TODO
 
-#ifdef CUDA102
         //clear all allocated memory
         local_allocs.clear();
-#endif
+
         //iterate over map of maps, destroying streams
         while (!streams_map.empty())
             __helper_destroy_stream((streams_map.begin())->first);
@@ -408,7 +402,6 @@ namespace GPUMemoryServer {
         sendRequest(req);
     }
     
-#ifdef CUDA102
     Client::LocalAlloc::LocalAlloc(uint32_t device) {
         devptr = 0;
         device_id = device;
@@ -449,7 +442,7 @@ namespace GPUMemoryServer {
         CUresult err = cuMemGetAllocationGranularity(&aligned_sz, &prop, CU_MEM_ALLOC_GRANULARITY_MINIMUM);
         if (err) { fprintf( stderr, "error at cuMemGetAllocationGranularity\n"); return 2; }
         size = ((req_size + aligned_sz - 1) / aligned_sz) * aligned_sz;
-        fprintf( stderr, "cuMemCreate of %zx -> %zx on gpu %d\n", req_size, size, device_id);
+        //fprintf( stderr, "cuMemCreate of %zx -> %zx on gpu %d\n", req_size, size, device_id);
 
         err = cuMemCreate(&phys_mem_handle, size, &prop, 0);
         if (err) { fprintf( stderr, "error at cuMemCreate %d\n", err); return err; }
@@ -495,6 +488,7 @@ namespace GPUMemoryServer {
         this->map_at(this->devptr);
         this->unmap(dest->devptr);
 
+        /*
         fprintf( stderr, "testing access at %p after new mapping\n", devptr);
         char a[8];
         cudaMemcpy(a, (void*)devptr, 8, cudaMemcpyDeviceToHost );
@@ -502,6 +496,7 @@ namespace GPUMemoryServer {
         for (int j = 0 ; j < 8 ; j++)
             fprintf(stderr, "%x ", a[j]);
         fprintf( stderr, "\n");
+        */
 
         dest->map_at(dest->devptr);
         dest->release_phys_handle();
@@ -509,13 +504,15 @@ namespace GPUMemoryServer {
         cudaError_t err3 = cudaMemcpyPeer((void*) dest->devptr, dest->device_id, (void*) this->devptr, this->device_id, size);
         if (err3) { fprintf( stderr, "error at cudaMemcpyPeer\n"); return 1; }
 
+        /*
         fprintf( stderr, "testing access at %p after memcpy\n", dest->devptr);
         cudaMemcpy(a, (void*)dest->devptr, 8, cudaMemcpyDeviceToHost );
         fprintf( stderr, "first 8 bytes of array\n");
         for (int j = 0 ; j < 8 ; j++)
             fprintf(stderr, "%x ", a[j]);
         fprintf( stderr, "\n");
+        */
     }
-#endif
+
 //end of GPUMemoryServer nameserver
 }

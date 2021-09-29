@@ -227,6 +227,12 @@ void SVGPUManager::handleKernelIn(Request& req, Reply& rep) {
         }
     }
 
+    //we are migrating, update worker counts
+    if (rep.code != ReplyCode::OK) {
+        gpu_states[req.gpu].busy_workers -= 1;
+        gpu_states[rep.data.migration.target_device].busy_workers += 1;
+    }
+
     (void)req;
 }
 

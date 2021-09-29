@@ -52,6 +52,10 @@ struct WorstFit : public BaseScheduler {
         gpu_wks.second.busy = true;
         gpu_wks.second.used_memory = requested_memory;
         std::cerr << "scheduling worker at " << gpu_wks.first << std::endl;
+
+        //update gpu stats, ugly, but all schedulers have to have this
+        (*gpu_states)[best_gpu].busy_workers += 1;
+        
         return gpu_wks.first;
       }
     }

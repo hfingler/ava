@@ -214,8 +214,8 @@ int main(int argc, char *argv[]) {
   uint32_t listen_port = (uint32_t)atoi(argv[1]);
   GPUMemoryServer::Client::getInstance().setListenPort(listen_port);
   wctx->set_api_server_listen_port(listen_port);
-  std::cerr << "[worker#" << listen_port << "] To check the state of AvA remoting progress, use `tail -f "
-            << wctx->log_file << "`" << std::endl;
+  //std::cerr << "[worker#" << listen_port << "] To check the state of AvA remoting progress, use `tail -f "
+  //          << wctx->log_file << "`" << std::endl;
   //ttc.notify(4);
 
   if (!getenv("AVA_CHANNEL") || !strcmp(getenv("AVA_CHANNEL"), "TCP")) {
@@ -234,7 +234,7 @@ int main(int argc, char *argv[]) {
       GPUMemoryServer::Client::getInstance().notifyReady();
 
       // get a guestlib connection
-      std::cerr << "[worker#" << listen_port << "] waiting for connection" << std::endl;
+      //std::cerr << "[worker#" << listen_port << "] waiting for connection" << std::endl;
       //ttc.notify(7);
       chan = command_channel_listen(chan);
       ttc.notify(8);
@@ -248,10 +248,10 @@ int main(int argc, char *argv[]) {
       //printf("CV: worker was notified vmid was received..\n");
       // if this is serverless, we need to update our id
       if (svless_vmid == "NO_VMID" || svless_vmid == "") {
-        printf("svless_vmid is default, using %s\n", worker_uuid.c_str());
+        //printf("svless_vmid is default, using %s\n", worker_uuid.c_str());
         GPUMemoryServer::Client::getInstance().setUuid(worker_uuid);
       } else {
-        printf("got vmid from cmd channel: %s\n", svless_vmid.c_str());
+        //printf("got vmid from cmd channel: %s\n", svless_vmid.c_str());
         GPUMemoryServer::Client::getInstance().setUuid(svless_vmid);
       }
 
@@ -262,7 +262,7 @@ int main(int argc, char *argv[]) {
       // report our max memory requested
       GPUMemoryServer::Client::getInstance().reportMemoryRequested(requested_gpu_mem);
 
-      std::cerr << "[worker#" << listen_port << "] is free to work now" << std::endl;
+      //std::cerr << "[worker#" << listen_port << "] is free to work now" << std::endl;
       // and now all threads can work
       release_shadow_threads();
       //ttc.notify(10);

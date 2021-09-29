@@ -18,6 +18,10 @@ struct FirstFit : public BaseScheduler {
             std::cerr << "checking port " << port_wk.first << std::endl;
             if (port_wk.second.busy == false) {
                 port_wk.second.busy = true;
+
+                //update gpu stats, ugly, but all schedulers have to have this
+                (*gpu_states)[gpu_wks.first].busy_workers += 1;
+
                 return port_wk.first;
             }
         }

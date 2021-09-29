@@ -17,9 +17,6 @@
 extern "C" {
 #endif
 
-#define CUDA102 1
-
-
 CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
                                    unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
                                    unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra);
@@ -62,7 +59,7 @@ namespace GPUMemoryServer {
         uint32_t listen_port;
 
         std::string uuid;
-#ifdef CUDA102
+
         //local mallocs
         struct LocalAlloc {
             uint64_t devptr;
@@ -98,7 +95,7 @@ namespace GPUMemoryServer {
         };
 
         std::vector<std::unique_ptr<LocalAlloc>> local_allocs;
-#endif
+
         //stream translation
         std::map<cudaStream_t, std::map<uint32_t,cudaStream_t>> streams_map;
         //event translation

@@ -127,13 +127,14 @@ void SVGPUManager::launchReportServers() {
 
 SVGPUManager::SVGPUManager(uint32_t port, uint32_t worker_port_base, std::string worker_path, std::vector<std::string> &worker_argv,
             std::vector<std::string> &worker_env, uint16_t ngpus, uint16_t gpu_offset, std::string resmngr_address,
-            std::string scheduler_name, uint32_t precreated_workers, std::string nvmlmonitor)
+            std::string scheduler_name, uint32_t precreated_workers, std::string nvmlmonitor, uint32_t migration_strategy)
     : ManagerServiceServerBase(port, worker_port_base, worker_path, worker_argv, worker_env) {
 
     this->n_gpus = ngpus;
     this->gpu_offset = gpu_offset;
     this->uuid_counter = 0;
     this->resmngr_address = resmngr_address;
+    this->migration_strategy = migration_strategy;
     //update to real values using nvml
     setRealGPUOffsetCount();
 
@@ -211,7 +212,6 @@ uint32_t SVGPUManager::launchWorker(uint32_t gpu_id) {
 
 void SVGPUManager::setRealGPUOffsetCount() {
     nvmlReturn_t result;
-    uint32_t device_count;
     result = nvmlInit();
     if (result != NVML_SUCCESS) {
         std::cerr << "Failed to initialize NVML: " << nvmlErrorString(result) << std::endl;
@@ -273,16 +273,9 @@ void SVGPUManager::createScheduler(std::string name) {
 
 void SVGPUManager::nvmlMonitorLoop() {
     nvmlReturn_t result;
-    uint32_t device_count;
     result = nvmlInit();
     if (result != NVML_SUCCESS) {
         std::cerr << "Failed to initialize NVML: " << nvmlErrorString(result) << std::endl;
-        std::exit(1);
-    }
-
-    result = nvmlDeviceGetCount(&device_count);
-    if (result != NVML_SUCCESS) {
-        std::cerr << "Failed to query device count NVML: " << nvmlErrorString(result) << std::endl;
         std::exit(1);
     }
 
@@ -302,8 +295,6 @@ void SVGPUManager::nvmlMonitorLoop() {
     float timestamp_sec = 0;
     uint64_t count = 0;
 
-    uint32_t timestep_msec = 250;
-    uint32_t print_every = 10;
     while (1) {
         for (int i = 0 ; i < device_count ; i++) {
             nvmlDeviceGetUtilizationRates(devs[i], &ut);
@@ -347,8 +338,71 @@ void SVGPUManager::nvmlMonitorLoop() {
             printf("\n\n");
         }
 
+        if (on_cooldown())
+            migration_cooldown -= 1;    
+        else if (migration_strategy == 1)
+            check_for_imbalance_strat1();
+        else if (migration_strategy == 2)
+            check_for_imbalance_strat2();
+
         timestamp_sec += (timestep_msec/1000);
         count++;
         std::this_thread::sleep_for(std::chrono::milliseconds(timestep_msec));
     }
+}
+
+void SVGPUManager::check_for_imbalance_strat1() {
+    int32_t over_candidate = -1;
+    int32_t under_candidate = -1;
+    float proc_util_candidate = 0;
+
+    gpu_states_lock.lock();    
+    for (int i = 0 ; i < device_count ; i++) {
+        if (uint32_t(gpu_states[i].busy_workers) > 1) {
+            //if we already have a candidate, and i is more utilized, then update
+            if (over_candidate != -1 && gpu_states[i].proc_utilization > proc_util_candidate) {
+                over_candidate = i;
+                proc_util_candidate = gpu_states[i].proc_utilization;
+            } else {
+                over_candidate = i;
+                proc_util_candidate = gpu_states[i].proc_utilization;
+            }
+        }
+    }
+    gpu_states_lock.unlock();
+
+    if (over_candidate != -1) 
+        printf(" 1/2 - Found a candidate for migration: GPU [%d] w/ [%d] workers and util [%.2f]\n", 
+                over_candidate, uint32_t(gpu_states[over_candidate].busy_workers), proc_util_candidate);
+    //if we didnt find it, dont waste time
+    else return;
+    
+    for (int i = 0 ; i < device_count ; i++) {
+        if (uint32_t(gpu_states[i].busy_workers) == 0) {
+            under_candidate = i;
+            break;
+        }
+    }
+
+    if (under_candidate != -1) 
+        printf("2/2 - Found a candidate to migration to: GPU [%d] w/ [%d]\n", 
+                under_candidate, uint32_t(gpu_states[under_candidate].busy_workers));
+    //if we didnt find it, dont waste time
+    else return;
+    
+
+    //TODO mark under over
+
+}
+
+void SVGPUManager::check_for_imbalance_strat2() {
+    //TBD
+}
+
+void SVGPUManager::set_cooldown() {
+    migration_cooldown = cooldown_length;
+}
+
+bool SVGPUManager::on_cooldown() {
+    return migration_cooldown != 0;
 }

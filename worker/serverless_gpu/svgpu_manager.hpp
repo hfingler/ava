@@ -45,6 +45,8 @@ struct SVGPUManager : public ManagerServiceServerBase {
     // internal state
     uint32_t n_gpus, gpu_offset;
     uint32_t uuid_counter;
+    uint32_t precreated_workers;
+    uint32_t device_count;
 
     // GPU and worker information
     BaseScheduler *scheduler;
@@ -55,11 +57,25 @@ struct SVGPUManager : public ManagerServiceServerBase {
     //nvml monitor
     std::thread nvml_monitor_thread;
 
+    const uint32_t timestep_msec = 250;
+    const uint32_t print_every = 10;
+
     std::mutex gpu_states_lock;
     std::map<uint32_t, GPUState> gpu_states;
     std::map<uint32_t, std::map<uint32_t, GPUWorkerState>> gpu_workers;
 
-    uint32_t precreated_workers;
+    //migration stuff
+    uint32_t migration_strategy;
+    std::atomic<uint32_t> migration_cooldown;
+    //cooldown length is multipled by timestep_msec
+    const uint32_t cooldown_length = 10; //2.5s
+    std::atomic<uint8_t> imbalance;
+    std::atomic<uint32_t> overwhelmed_gpu, underwhelmed_gpu;
+
+    void set_cooldown();
+    bool on_cooldown();
+    void check_for_imbalance_strat1();
+    void check_for_imbalance_strat2();
 
     /**************************************
      *        METHODS
@@ -67,7 +83,8 @@ struct SVGPUManager : public ManagerServiceServerBase {
     SVGPUManager(uint32_t port, uint32_t worker_port_base, std::string worker_path, 
             std::vector<std::string> &worker_argv, std::vector<std::string> &worker_env, 
             uint16_t ngpus, uint16_t gpu_offset, std::string resmngr_address, 
-            std::string scheduler_name, uint32_t precreated_workers, std::string nvmlmonitor);
+            std::string scheduler_name, uint32_t precreated_workers, std::string nvmlmonitor,
+            uint32_t migration_strategy);
 
     void setRealGPUOffsetCount();
     void registerSelf();
