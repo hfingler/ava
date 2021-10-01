@@ -3,6 +3,7 @@
 
 #include "common.hpp"
 
+/*
 struct FirstFit : public BaseScheduler {
 
   FirstFit(
@@ -30,4 +31,5 @@ struct FirstFit : public BaseScheduler {
   }
 };
 
+*/
 #endif

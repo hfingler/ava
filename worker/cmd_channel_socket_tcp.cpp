@@ -91,7 +91,7 @@ struct command_channel *command_channel_listen(struct command_channel* chan) {
     struct sockaddr_in *s = (struct sockaddr_in *)&source_addr;
     char ipstr[64];
     inet_ntop(AF_INET, &s->sin_addr, ipstr, sizeof(ipstr));
-    fprintf(stderr, "[%d] Accept guestlib at %s:%d\n", ch->listen_fd, ipstr, ntohs(s->sin_port));
+    //fprintf(stderr, "[%d] Accept guestlib at %s:%d\n", ch->listen_fd, ipstr, ntohs(s->sin_port));
   }
 #endif
 
@@ -100,7 +100,7 @@ struct command_channel *command_channel_listen(struct command_channel* chan) {
   recv_socket(ch->sock_fd, &init_msg, sizeof(struct command_handler_initialize_api_command));
   ch->init_command_type = init_msg.new_api_id;
   ch->vm_id = init_msg.base.vm_id;
-  fprintf(stderr, "[%d] Accept guestlib with API_ID=%x\n", ch->listen_port, ch->init_command_type);
+  //fprintf(stderr, "[%d] Accept guestlib with API_ID=%x\n", ch->listen_port, ch->init_command_type);
 
   ch->pfd.fd = ch->sock_fd;
   ch->pfd.events = POLLIN | POLLRDHUP;

@@ -189,7 +189,7 @@ void handle_command_and_notify(struct command_channel *chan, struct command_base
   if (tl_current_device == -1) {
     cudaSetDevice(context->current_device);
     tl_current_device = context->current_device;
-    printf(">>> shadow thread setting default device  [%d] \n", context->current_device);
+    //printf(">>> shadow thread setting default device  [%d] \n", context->current_device);
   }
   if (tl_current_device != context->current_device) {
     std::cerr << ">>> shadow thread detected change of device, changing from" << tl_current_device << " to " << context->current_device << std::endl;

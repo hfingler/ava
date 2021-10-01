@@ -916,8 +916,8 @@ EXPORTED void CUDARTAPI __cudaRegisterTexture(void **fatCubinHandle,
                                               const void *hostVar,  // struct textureReference *hostVar
                                               const void **deviceAddress, const char *deviceName, int dim, int norm,
                                               int ext) {
-  fprintf(stderr, "__cudaRegisterTexture is a dummpy implementation\n");
-  fprintf(stderr, "__cudaRegisterTexture: deviceName=%s; dim=%d; norm=%d; ext=%d\n", deviceName, dim, norm, ext);
+  //fprintf(stderr, "__cudaRegisterTexture is a dummpy implementation\n");
+  //fprintf(stderr, "__cudaRegisterTexture: deviceName=%s; dim=%d; norm=%d; ext=%d\n", deviceName, dim, norm, ext);
 }
 ava_end_replacement;
 

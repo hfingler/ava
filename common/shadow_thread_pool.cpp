@@ -164,7 +164,7 @@ static void *shadow_thread_loop(void *arg) {
     exit_thread_flag = shadow_thread_handle_single_command(t->pool);
   } while (!exit_thread_flag);
 
-  printf(" !!!!  shadow thread exited\n");
+  //printf(" !!!!  shadow thread exited\n");
   if (t->cmd_stat_fd != STDOUT_FILENO) {
     close(t->cmd_stat_fd);
   }

@@ -203,16 +203,6 @@ cudaError_t __helper_cudaStreamSynchronize_sync(cudaStream_t stream) {
   }
 }
 
-CUresult __helper_culaunch_kernel(struct fatbin_function *func, const void *hostFun, 
-        unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
-        unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
-        void **args, size_t sharedMem, cudaStream_t stream) {
-
-  dim3 block(blockDimX, blockDimY, blockDimZ);
-  dim3 grid(gridDimX, gridDimY, gridDimZ);
-  return (CUresult) __helper_launch_kernel(func, hostFun, grid, block, args, sharedMem, stream);
-}
-
 cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hostFun, dim3 gridDim, dim3 blockDim,
                                    void **args, size_t sharedMem, cudaStream_t stream) {
 #ifndef NDEBUG
@@ -221,9 +211,6 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
     if(ret2) 
       std::cerr << "\n ### __helper_launch_kernel ERROR BEFORE " << ret2 << "\n";
 #endif
-
-  // this might trigger migration
-  __internal_kernelIn();
 
   uint32_t cur_dvc;
   if (__internal_allContextsEnabled())
@@ -247,6 +234,9 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   cudaError_t ret = (cudaError_t)CUDA_ERROR_PROFILER_ALREADY_STOPPED;
 
   if (__internal_allContextsEnabled()) {
+    // this might trigger migration
+    __internal_kernelIn();
+
     // auto start = std::chrono::steady_clock::now();
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[cur_dvc], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
                                       blockDim.z, sharedMem, (CUstream)__translate_stream(stream), args, NULL);
@@ -262,7 +252,7 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
 #endif
 
     // TODO: fix
-    __internal_kernelOut();
+    //__internal_kernelOut();
     return ret;
   }
   // if not with migration, just get over it and do

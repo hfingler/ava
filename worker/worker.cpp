@@ -188,7 +188,7 @@ int main(int argc, char *argv[]) {
   static auto worker_context = ava::WorkerContext::instance();
 
 #ifdef AVA_PRELOAD_CUBIN
-  worker_cudnn_opt_init(2);
+  worker_cudnn_opt_init(1);
 #endif
 
   //ttc.notify(3);
@@ -233,6 +233,9 @@ int main(int argc, char *argv[]) {
       //tell manager we are ready
       GPUMemoryServer::Client::getInstance().notifyReady();
 
+      // go back to original GPU
+      GPUMemoryServer::Client::getInstance().resetCurrentGPU();
+
       // get a guestlib connection
       //std::cerr << "[worker#" << listen_port << "] waiting for connection" << std::endl;
       //ttc.notify(7);
@@ -274,8 +277,6 @@ int main(int argc, char *argv[]) {
 
       // clean up allocations, local and remote
       GPUMemoryServer::Client::getInstance().fullCleanup();
-      // go back to original GPU
-      GPUMemoryServer::Client::getInstance().resetCurrentGPU();
       //ttc.notify(12);
     } while (std::getenv("REUSE_WORKER"));
 

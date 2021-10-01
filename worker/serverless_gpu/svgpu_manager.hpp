@@ -58,7 +58,7 @@ struct SVGPUManager : public ManagerServiceServerBase {
     std::thread nvml_monitor_thread;
 
     const uint32_t timestep_msec = 250;
-    const uint32_t print_every = 10;
+    const uint32_t print_every = 5;
 
     std::mutex gpu_states_lock;
     std::map<uint32_t, GPUState> gpu_states;
@@ -68,7 +68,7 @@ struct SVGPUManager : public ManagerServiceServerBase {
     uint32_t migration_strategy;
     std::atomic<uint32_t> migration_cooldown;
     //cooldown length is multipled by timestep_msec
-    const uint32_t cooldown_length = 10; //2.5s
+    const uint32_t cooldown_length = 100; //5s
     std::atomic<uint8_t> imbalance;
     std::atomic<uint32_t> overwhelmed_gpu, underwhelmed_gpu;
 
@@ -76,7 +76,8 @@ struct SVGPUManager : public ManagerServiceServerBase {
     bool on_cooldown();
     void check_for_imbalance_strat1();
     void check_for_imbalance_strat2();
-
+    void print_stats();
+    
     /**************************************
      *        METHODS
      **************************************/

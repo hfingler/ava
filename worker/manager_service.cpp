@@ -49,7 +49,7 @@ void ManagerServiceServerBase::AcceptConnection() {
   ;
   acceptor_->async_accept(*socket_, *endpoint_, [&, this](boost::system::error_code ec) {
     if (!ec) {
-      std::cout << "Receive connection from " << endpoint_->address() << ":" << endpoint_->port() << std::endl;
+      //std::cout << "Receive connection from " << endpoint_->address() << ":" << endpoint_->port() << std::endl;
       HandleAccept(std::move(socket_), std::move(endpoint_));
     }
     AcceptConnection();
@@ -67,8 +67,8 @@ void ManagerServiceServerBase::HandleAccept(std::unique_ptr<tcp::socket> socket,
   ava_proto::WorkerAssignRequest request;
   zpp::serializer::memory_input_archive in(request_buf);
   in(request);
-  std::cout << "[from " << endpoint->address() << ":" << endpoint->port() << "] Request " << request.gpu_count()
-            << " GPUs" << std::endl;
+  //std::cout << "[from " << endpoint->address() << ":" << endpoint->port() << "] Request " << request.gpu_count()
+  //          << " GPUs" << std::endl;
 
   auto reply = HandleRequest(request);
 

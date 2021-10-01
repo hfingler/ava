@@ -213,6 +213,7 @@ namespace GPUMemoryServer {
         }
 
         req.gpu = current_device;
+        req.data.ready.port = listen_port;
         strncpy(req.worker_id, uuid.c_str(), MAX_UUID_LEN);
         if (strlen(uuid.c_str()) > MAX_UUID_LEN) {
             fprintf( stderr, " ### uuid %S IS LONGER THAN %d, THIS IS AN ISSUE\n", uuid.c_str(), MAX_UUID_LEN);
@@ -352,8 +353,7 @@ namespace GPUMemoryServer {
     void Client::notifyReady() {
         Request req;
         req.type = RequestType::READY;
-        req.data.ready.port = listen_port;
-        std::cerr << "  worker on port " << listen_port << " sending ready message" << std::endl;
+        //std::cerr << "  worker on port " << listen_port << " sending ready message" << std::endl;
         sendRequest(req);
     }
 
@@ -445,7 +445,8 @@ namespace GPUMemoryServer {
         //fprintf( stderr, "cuMemCreate of %zx -> %zx on gpu %d\n", req_size, size, device_id);
 
         err = cuMemCreate(&phys_mem_handle, size, &prop, 0);
-        if (err) { fprintf( stderr, "error at cuMemCreate %d\n", err); return err; }
+        //if (err) { fprintf( stderr, "error at cuMemCreate %d\n", err); return err; }
+        if (err) return err;
         return 0;
     }
 

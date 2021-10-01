@@ -153,7 +153,7 @@ EXPORTED_WEAKLY void nw_destroy_guestlib(void) {
   /*
   struct command_base* api_shutdown_command =
   command_channel_new_command(nw_global_command_channel, sizeof(struct
-  command_base), 0); api_shutdown_command->api_id = COMMAND_HANDLER_API;
+        command_base), 0); api_shutdown_command->api_id = COMMAND_HANDLER_API;
   api_shutdown_command->command_id = COMMAND_HANDLER_SHUTDOWN_API;
   api_shutdown_command->vm_id = nw_global_vm_id;
   command_channel_send_command(chan, api_shutdown_command);
@@ -163,5 +163,8 @@ EXPORTED_WEAKLY void nw_destroy_guestlib(void) {
   // TODO: This is called by the guestlib so destructor for each API. This is
   // safe, but will make the handler shutdown when the FIRST API unloads when
   // having it shutdown with the last would be better.
+  printf("destroy_command_handler IN");
   destroy_command_handler(true);
+  printf("destroy_command_handler OUT");
+  exit(0);
 }

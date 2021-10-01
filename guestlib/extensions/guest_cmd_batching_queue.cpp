@@ -117,7 +117,7 @@ void GuestCmdBatchingQueue::CmdBatchingThreadMain() {
     exit(0);
   }
 
-  fprintf(stderr, "Start batch processing thread\n");
+  //fprintf(stderr, "Start batch processing thread\n");
   g_timer_start(timer);
 
   while (running_) {
