@@ -188,7 +188,7 @@ int main(int argc, char *argv[]) {
   static auto worker_context = ava::WorkerContext::instance();
 
 #ifdef AVA_PRELOAD_CUBIN
-  worker_cudnn_opt_init(1);
+  worker_cudnn_opt_init(2);
 #endif
 
   //ttc.notify(3);

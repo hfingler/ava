@@ -69,6 +69,8 @@ EXPORTED_WEAKLY void nw_init_guestlib(intptr_t api_id) {
   gettimeofday(&ts, NULL);
 #endif
 
+  std::cerr << ">>>>>>>>>> nw_init_guestlib\n ";
+
   /* Create connection to worker and start command handler thread */
   if (guestconfig::config->channel_ == "TCP") {
     std::vector<struct command_channel *> channels = command_channel_socket_tcp_guest_new();

@@ -85,14 +85,14 @@ ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::Worker
         zmq_recv(zmq_central_socket, &rep, sizeof(GPUMemoryServer::Reply), 0);
         
         if (rep.code == GPUMemoryServer::ReplyCode::OK) {
-            //std::cerr << "[SVLESS-MNGR]: scheduled at port " << rep.data.ready.port << std::endl;
-
-            std::string ip = "0.0.0.0:";
+            //std::string ip = "0.0.0.0:";
+            std::string ip = "128.83.122.71:";
             if (std::getenv("RESMNGR_ADDR")) {
                 ip = std::string(std::getenv("RESMNGR_ADDR"));
                 ip += ":";
             }
 
+            std::cerr << "[SVLESS-MNGR]: scheduled at " << ip << std::endl;
             reply.worker_address().push_back(ip + std::to_string(rep.data.ready.port));
             return reply;
         }
@@ -231,8 +231,15 @@ void SVGPUManager::setRealGPUOffsetCount() {
     // bounds check requested gpus, use all gpus if n_gpus == 0
     if (n_gpus == 0) {
         n_gpus = device_count - gpu_offset;
+
     } 
 
+    
+    //if we want to dedicate a GPU for migration, we can set device count to 4 but only launch workers on the other 3
+    
+    //test
+    device_count = n_gpus;
+    
     //for (int i = gpu_offset ; i < gpu_offset+n_gpus ; i++) {
     for (int i = 0 ; i < n_gpus ; i++) {
         nvmlDevice_t dev;
@@ -278,24 +285,26 @@ void SVGPUManager::nvmlMonitorLoop() {
         std::exit(1);
     }
 
-    nvmlDevice_t devs[device_count];
-    for (int i = 0 ; i < device_count ; i++) {
+    nvmlDeviceGetCount(&real_device_count);
+
+    nvmlDevice_t devs[real_device_count];
+    for (int i = 0 ; i < real_device_count ; i++) {
         nvmlDeviceGetHandleByIndex_v2(i, devs+i);
     }
-    std::cout << "[SVLESS-MNGR]: NVML monitor found " << device_count << " devices, looping..\n";
+    std::cout << "[SVLESS-MNGR]: NVML monitor found " << real_device_count << " devices, looping..\n";
 
     nvmlUtilization_t ut;
-    float utils[device_count];
+    float utils[real_device_count];
     nvmlMemory_t utmem;
-    uint64_t gpu_free_mem[device_count];
+    uint64_t gpu_free_mem[real_device_count];
     int32_t SMA_sample_size = 5;
-    float SMA_samples[device_count][SMA_sample_size];
-    float SMA[device_count];
+    float SMA_samples[real_device_count][SMA_sample_size];
+    float SMA[real_device_count];
     float timestamp_sec = 0;
     uint64_t count = 0;
 
     while (1) {
-        for (int i = 0 ; i < device_count ; i++) {
+        for (int i = 0 ; i < real_device_count ; i++) {
             nvmlDeviceGetUtilizationRates(devs[i], &ut);
             utils[i] = ut.gpu;
             SMA_samples[i][count%SMA_sample_size] = ut.gpu;
@@ -342,16 +351,16 @@ void SVGPUManager::nvmlMonitorLoop() {
 
 void SVGPUManager::print_stats() {
     printf("estm\t\t");
-    for (int i = 0 ; i < device_count ; i++)
+    for (int i = 0 ; i < real_device_count ; i++)
         printf("%luM\t", gpu_states[i].estimated_free_memory);
     printf("\nmem\t\t");
-    for (int i = 0 ; i < device_count ; i++)
+    for (int i = 0 ; i < real_device_count ; i++)
         printf("%luM\t", gpu_states[i].free_memory);
     printf("\nproc\t\t");
-    for (int i = 0 ; i < device_count ; i++)
+    for (int i = 0 ; i < real_device_count ; i++)
         printf("%.1f%\t", gpu_states[i].proc_utilization);
     printf("\nwrks\t\t");
-    for (int i = 0 ; i < device_count ; i++)
+    for (int i = 0 ; i < real_device_count ; i++)
         printf("%lu\t", uint32_t(gpu_states[i].busy_workers));
     printf("\n\n");
 }
@@ -375,16 +384,14 @@ void SVGPUManager::check_for_imbalance_strat1() {
         }
     }
     gpu_states_lock.unlock();
+    imbalance = false;
 
     if (over_candidate != -1) 
         printf(" 1/2 - Found a candidate for migration: GPU [%d] w/ [%d] workers and util [%.2f]\n", 
                 over_candidate, uint32_t(gpu_states[over_candidate].busy_workers), proc_util_candidate);
     //if we didnt find it, dont waste time
-    else {
-        imbalance = false;
-        return;
-    }
-    
+    else return;
+
     for (int i = 0 ; i < device_count ; i++) {
         if (uint32_t(gpu_states[i].busy_workers) == 0) {
             under_candidate = i;
@@ -396,10 +403,7 @@ void SVGPUManager::check_for_imbalance_strat1() {
         printf("2/2 - Found a candidate to migration to: GPU [%d] w/ [%d]\n", 
                 under_candidate, uint32_t(gpu_states[under_candidate].busy_workers));
     //if we didnt find it, dont waste time
-    else {
-        imbalance = false;
-        return;
-    } 
+    else return;
     
     imbalance = true;
     overwhelmed_gpu = over_candidate;

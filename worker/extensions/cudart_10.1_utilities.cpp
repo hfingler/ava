@@ -212,22 +212,10 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
       std::cerr << "\n ### __helper_launch_kernel ERROR BEFORE " << ret2 << "\n";
 #endif
 
-  uint32_t cur_dvc;
-  if (__internal_allContextsEnabled())
-    cur_dvc = __internal_getCurrentDevice();
-  else
-    cur_dvc = 0;
-
   if (func == NULL) 
     return (cudaError_t)CUDA_ERROR_INVALID_PTX;
 
 #ifndef NDEBUG
-  if (func->hostfunc[cur_dvc] != hostFun) {
-    //std::cerr << "search host func " << hostFun << " -> stored " << (void *)func->hostfunc[cur_dvc] 
-    //    << " (device func"<< (void *)func->cufunc[cur_dvc] << ")";
-  } 
-  else 
-    std::cerr << "matched host func " << hostFun << " -> device func " << (void *)func->cufunc[cur_dvc] << std::endl;
   __helper_print_kernel_info(func, args);
 #endif
 
@@ -236,6 +224,11 @@ cudaError_t __helper_launch_kernel(struct fatbin_function *func, const void *hos
   if (__internal_allContextsEnabled()) {
     // this might trigger migration
     __internal_kernelIn();
+    uint32_t cur_dvc = __internal_getCurrentDevice();
+
+#ifndef NDEBUG
+    std::cerr << ">>> cuLaunchKernel at device " << cur_dvc << std::endl;
+#endif
 
     // auto start = std::chrono::steady_clock::now();
     ret = (cudaError_t)cuLaunchKernel(func->cufunc[cur_dvc], gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,

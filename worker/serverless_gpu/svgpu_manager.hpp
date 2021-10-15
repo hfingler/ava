@@ -47,6 +47,7 @@ struct SVGPUManager : public ManagerServiceServerBase {
     uint32_t uuid_counter;
     uint32_t precreated_workers;
     uint32_t device_count;
+    uint32_t real_device_count;
 
     // GPU and worker information
     BaseScheduler *scheduler;
@@ -68,7 +69,7 @@ struct SVGPUManager : public ManagerServiceServerBase {
     uint32_t migration_strategy;
     std::atomic<uint32_t> migration_cooldown;
     //cooldown length is multipled by timestep_msec
-    const uint32_t cooldown_length = 100; //5s
+    const uint32_t cooldown_length = 20; //20 = 5s
     std::atomic<uint8_t> imbalance;
     std::atomic<uint32_t> overwhelmed_gpu, underwhelmed_gpu;
 

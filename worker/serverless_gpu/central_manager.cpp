@@ -121,12 +121,20 @@ void SVGPUManager::handleReady(Request& req, Reply& rep) {
     auto port = req.data.ready.port;
     auto gpu = req.gpu;
 
-    //if we already knew, its being reused
-    if (gpu_workers[gpu].count(port) != 0){
-        gpu_states[gpu].busy_workers -= 1;
-        gpu_states[gpu].estimated_free_memory += gpu_workers[gpu][port].memory_requested;
-        fprintf(stderr, " worker ready: GPU %d now with %d memory\n", gpu, gpu_states[gpu].estimated_free_memory);
+    //bad code, just need to find if the worker is reusing, then we update
+    for (auto& kv : gpu_workers) {
+        if (kv.second.count(port) != 0){
+            //update current GPU worker is in
+            gpu_states[gpu].busy_workers -= 1;
+            gpu_states[gpu].estimated_free_memory += kv.second[port].memory_requested;
+            //it migrated, so set gpu to be the original one
+            gpu = kv.first;
+            fprintf(stderr, " worker ready: GPU %d now with %d memory\n", gpu, gpu_states[gpu].estimated_free_memory);
+            break;
+        }
     }
+
+    //update this worker which might have been from a different GPU
     gpu_workers[gpu][port].busy = false;
 
     //notify backend, if there is one, that we can handle another function
@@ -166,7 +174,6 @@ void SVGPUManager::handleFinish(Request& req, Reply& rep) {
 }
 
 void SVGPUManager::handleKernelIn(Request& req, Reply& rep) {
-
     //check if we are just debugging
     char* dbg_mig = std::getenv("SG_DEBUG_MIGRATION");
     if (dbg_mig) {
@@ -197,9 +204,6 @@ void SVGPUManager::handleKernelIn(Request& req, Reply& rep) {
                 rep.data.migration.type = Migration::TOTAL;
                 rep.data.migration.target_device = 1;
                 t_migrated = 1;
-
-                //gpu_states[0].used_memory -= 5000;
-                //gpu_states[1].used_memory += 5000;
             }
         }
         //if a multiple of 10, divide 1 by it and that's the prob
@@ -209,10 +213,13 @@ void SVGPUManager::handleKernelIn(Request& req, Reply& rep) {
             //if (1) {
                 rep.data.migration.type = Migration::TOTAL;
                 rep.code = ReplyCode::MIGRATE;
-                uint32_t dg = req.gpu == 0 ? 1 : 0;
+                uint32_t dg = req.gpu == 0 ? 2 : 0;
                 rep.data.migration.target_device = dg;
                 std::cerr << " SG_DEBUG_MIGRATION: TOTAL random migration triggered:  " << req.gpu  << " -> " << dg << " with prob " << prob << std::endl;
             }
+
+            gpu_states[req.gpu].busy_workers -= 1;
+            gpu_states[rep.data.migration.target_device].busy_workers += 1;
         }
         /*
         //if a multiple of 10 after -1, divide 1 by it and that's the prob, use kernel migration
@@ -228,26 +235,31 @@ void SVGPUManager::handleKernelIn(Request& req, Reply& rep) {
         }*/
     }
 
-    if (migration_strategy != 0 && imbalance && !on_cooldown()) {
-        if (req.gpu == overwhelmed_gpu) {
-            rep.data.migration.type = Migration::TOTAL;
-            rep.code = ReplyCode::MIGRATE;
-            rep.data.migration.target_device = underwhelmed_gpu;
-            fprintf(stderr, " !!! Migrating from %d to %d\n", uint32_t(overwhelmed_gpu), uint32_t(underwhelmed_gpu));
-            set_cooldown();
-        }
-    }
+    //fast quits
+    if (dbg_mig && rep.code != ReplyCode::MIGRATE ) return;
+    if (!imbalance || on_cooldown()) return;
 
-    //we are migrating, update worker counts
-    if (rep.code != ReplyCode::OK) {
+    {
         std::lock_guard<std::mutex> lg(scheduler->lock);
+        if (migration_strategy != 0 && imbalance && !on_cooldown()) {
+            if (req.gpu == overwhelmed_gpu
+                    &&  gpu_states[underwhelmed_gpu].busy_workers == 0 ) {  //this last condition isnt really good, but whatever
+                rep.data.migration.type = Migration::TOTAL;
+                rep.code = ReplyCode::MIGRATE;
+                rep.data.migration.target_device = underwhelmed_gpu;
+                fprintf(stderr, " !!! Migrating from %d to %d\n", uint32_t(overwhelmed_gpu), uint32_t(underwhelmed_gpu));
+                set_cooldown();
+            }
+        }
 
-        gpu_states[req.gpu].busy_workers -= 1;
-        gpu_states[rep.data.migration.target_device].busy_workers += 1;
-
-        auto port = req.data.ready.port;
-        gpu_states[req.gpu].estimated_free_memory +=  gpu_workers[req.gpu][port].memory_requested;
-        gpu_states[rep.data.migration.target_device].estimated_free_memory -=  gpu_workers[req.gpu][port].memory_requested;
+        //we are migrating, update worker counts
+        if (rep.code != ReplyCode::OK) {
+            gpu_states[req.gpu].busy_workers -= 1;
+            gpu_states[rep.data.migration.target_device].busy_workers += 1;
+            auto port = req.data.ready.port;
+            gpu_states[req.gpu].estimated_free_memory +=  gpu_workers[req.gpu][port].memory_requested;
+            gpu_states[rep.data.migration.target_device].estimated_free_memory -=  gpu_workers[req.gpu][port].memory_requested;
+        }
     }
 
     (void)req;

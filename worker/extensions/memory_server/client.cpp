@@ -16,6 +16,7 @@
 #include "common/common_context.h"
 #include "extensions/memory_server/client.hpp"
 #include "extensions/memory_server/common.hpp"
+#include <thread>
 
 /**************************************
  * 
@@ -86,10 +87,13 @@ void __internal_kernelOut() {
     GPUMemoryServer::Client::getInstance().kernelOut();
 }
 
-// this is only used for dump
+// this is only used for tensorflow
+//TODO: to migrate we need to refactor Zhitings modification in a culaunch branch in here
 CUresult __internal_cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
                                 unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
                                 unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra) {
+    
+    //__internal_kernelIn();
     return cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
                 sharedMemBytes, hStream, kernelParams, extra);
 }
@@ -164,7 +168,6 @@ namespace GPUMemoryServer {
 
     cudaError_t Client::localMalloc(void** devPtr, size_t size) {
         if (size == 0) return 0;
-
 
         //test with default
         //cudaError_t err = cudaMalloc(devPtr, size);
@@ -255,6 +258,9 @@ namespace GPUMemoryServer {
     }
 
     void Client::resetCurrentGPU() {
+        if (current_device != og_device) 
+            fprintf( stderr, " ### Worker reseting GPU from (%d) to (%d)\n", current_device, og_device);
+        
         current_device = og_device;
         setCurrentGPU(current_device);
         auto ccontext = ava::CommonContext::instance();
@@ -264,16 +270,25 @@ namespace GPUMemoryServer {
 
     void Client::migrateToGPU(uint32_t new_gpuid, Migration migration_type) {
         std::cerr << "[[[MIGRATION]]]\n" << std::endl;
-
+        
         //wait for all cmd handlers to stop
         wait_for_cmd_drain();
         cudaDeviceSynchronize();
+        
+        //this_thread::sleep_for(chrono::milliseconds(2000) );
+        cudaDeviceSynchronize();
+
+        cudaError_t ret2 = cudaGetLastError();
+        if(ret2) 
+            std::cerr << "\n ### migrateToGPU error after sync " << ret2 << "\n";
+
         std::cerr << "All cmd handlers are stopped.. migrating\n" << std::endl;
         //mark that we migrated
         migrated_type = migration_type;
 
         setCurrentGPU(new_gpuid);
-        
+        cudaDeviceSynchronize();
+
         if (migration_type == Migration::KERNEL) {
             fprintf( stderr, "Migration by kernel mode, changing device to [%d]\n", new_gpuid);
             //cudaDeviceEnablePeerAccess(new_gpuid, 0);
@@ -282,6 +297,7 @@ namespace GPUMemoryServer {
             cudaDeviceEnablePeerAccess(og_device, 0);
         }
         else if (migration_type == Migration::TOTAL) {
+            auto start = chrono::steady_clock::now();
             std::cerr << "Full migration, changing device to" << new_gpuid << std::endl;
             //all we gotta do is change all allocations to new device
             std::vector<LocalAlloc*> new_allocs;
@@ -294,13 +310,15 @@ namespace GPUMemoryServer {
             // setCurrentGPU(new_gpuid);
             // printf("Free memory in OLD GPU before: %lu\n", free/(1024*1024));
 
-            for (auto const& al : local_allocs) {
-                fprintf( stderr, "moving allc at %p\n", al->devptr);
-                auto new_al = new Client::LocalAlloc(new_gpuid);
-                al->moveTo(new_al);
-                new_allocs.push_back(new_al);
+            auto it = local_allocs.begin();
+            while (it != local_allocs.end()) {
+                //fprintf( stderr, "moving allc at %p\n", (*it)->devptr);
+                auto new_alloc = new Client::LocalAlloc(new_gpuid);
+                (*it)->moveTo(new_alloc);
+                new_allocs.push_back(new_alloc);
+                //fprintf( stderr, "erasing%p\n");
+                it = local_allocs.erase(it);
             }
-            fprintf( stderr, "migration done, syncing\n");
 
             // cudaMemGetInfo(&free, &total); 
             // printf("Free memory in new GPU after: %lu\n", free/(1024*1024));
@@ -326,7 +344,11 @@ namespace GPUMemoryServer {
             //     fprintf( stderr, "\n\n");
             // }
 
+            fprintf( stderr, "migration done, syncing\n");
             cudaDeviceSynchronize();
+            auto end = chrono::steady_clock::now();
+
+            fprintf(stderr, " !!! Migration took %d  us\n", chrono::duration_cast<chrono::microseconds>(end - start).count());
         }
 
         //release handlers
@@ -478,41 +500,63 @@ namespace GPUMemoryServer {
 
     //dest has the correct device set
     int Client::LocalAlloc::moveTo(LocalAlloc* dest) {
-        fprintf(stderr, "Copying LocalAlloc from %d to %d\n", this->device_id, dest->device_id);
+        //fprintf(stderr, "Copying LocalAlloc from %d to %d  pointer [%x]\n", this->device_id, dest->device_id, this->devptr);
+        int err;
+
+        cudaSetDevice(this->device_id);
         
-        // allocate on new gpu
-        dest->physAlloc(this->size);
-        dest->devptr = this->devptr;
-
-        //get new mapping for our memory
-        this->reserveVaddr();
-        this->map_at(this->devptr);
-        this->unmap(dest->devptr);
-
-        /*
-        fprintf( stderr, "testing access at %p after new mapping\n", devptr);
+        fprintf( stderr, "testing access before it all\n");
         char a[8];
         cudaMemcpy(a, (void*)devptr, 8, cudaMemcpyDeviceToHost );
         fprintf( stderr, "first 8 bytes of array\n");
         for (int j = 0 ; j < 8 ; j++)
             fprintf(stderr, "%x ", a[j]);
         fprintf( stderr, "\n");
-        */
+        
 
-        dest->map_at(dest->devptr);
-        dest->release_phys_handle();
+        // allocate on new gpu
+        err = dest->physAlloc(this->size);
+        if (err) { fprintf( stderr, "error at map_at %d\n", err); return err; }
+
+        dest->devptr = this->devptr;
+
+        //get new mapping for our memory
+        this->reserveVaddr();
+        err = this->map_at(this->devptr);
+        if (err) { fprintf( stderr, "error at map_at %d\n", err); return err; }
+
+        err = this->unmap(dest->devptr);
+        if (err) { fprintf( stderr, "error at unmap %d\n", err); return err; }
+
+        
+        fprintf( stderr, "testing access at %p after new mapping\n", devptr);
+        cudaMemcpy(a, (void*)devptr, 8, cudaMemcpyDeviceToHost );
+        //fprintf( stderr, "first 8 bytes of array\n");
+        //for (int j = 0 ; j < 8 ; j++)
+        //    fprintf(stderr, "%x ", a[j]);
+        //fprintf( stderr, "\n");
+        
+        
+        err = dest->map_at(dest->devptr);
+        if (err) { fprintf( stderr, "error at map_at %d\n", err); return err; }
+
+        fprintf(stderr, "new ptr is at %x\n", dest->devptr);
+
+        err = dest->release_phys_handle();
+        if (err) { fprintf( stderr, "error at release_phys_handle %d\n", err); return err; }
 
         cudaError_t err3 = cudaMemcpyPeer((void*) dest->devptr, dest->device_id, (void*) this->devptr, this->device_id, size);
-        if (err3) { fprintf( stderr, "error at cudaMemcpyPeer\n"); return 1; }
+        if (err3) { fprintf( stderr, "error at cudaMemcpyPeer  %d\n", err3); return 1; }
 
-        /*
+        cudaSetDevice(dest->device_id);
+        
         fprintf( stderr, "testing access at %p after memcpy\n", dest->devptr);
         cudaMemcpy(a, (void*)dest->devptr, 8, cudaMemcpyDeviceToHost );
-        fprintf( stderr, "first 8 bytes of array\n");
-        for (int j = 0 ; j < 8 ; j++)
-            fprintf(stderr, "%x ", a[j]);
-        fprintf( stderr, "\n");
-        */
+        //fprintf( stderr, "first 8 bytes of array\n");
+        //for (int j = 0 ; j < 8 ; j++)
+        //    fprintf(stderr, "%x ", a[j]);
+        //fprintf( stderr, "\n");
+        
     }
 
 //end of GPUMemoryServer nameserver
