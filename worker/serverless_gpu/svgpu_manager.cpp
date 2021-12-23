@@ -85,8 +85,10 @@ ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::Worker
         zmq_recv(zmq_central_socket, &rep, sizeof(GPUMemoryServer::Reply), 0);
         
         if (rep.code == GPUMemoryServer::ReplyCode::OK) {
+
             //std::string ip = "0.0.0.0:";
-            std::string ip = "128.83.122.71:";
+            //std::cerr << "[SVLESS-MNGR]: scheduled at port " << rep.data.ready.port << std::endl;
+            std::string ip = "172.31.74.54:";
             if (std::getenv("RESMNGR_ADDR")) {
                 ip = std::string(std::getenv("RESMNGR_ADDR"));
                 ip += ":";
