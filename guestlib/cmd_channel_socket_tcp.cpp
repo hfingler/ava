@@ -75,6 +75,8 @@ std::vector<struct command_channel *> command_channel_socket_tcp_guest_new() {
     gpu_mem = std::stoul(std::getenv("AVA_REQUESTED_GPU_MEMORY"));
   request.gpu_mem().push_back(gpu_mem);
 
+  auto cstart = std::chrono::steady_clock::now();
+
   std::vector<unsigned char> request_buf;
   zpp::serializer::memory_output_archive out(request_buf);
   out(request);
@@ -104,6 +106,10 @@ std::vector<struct command_channel *> command_channel_socket_tcp_guest_new() {
     AVA_LOG(FATAL) << "Fail to receive reply from manager";
     abort();
   }
+
+  auto cend = std::chrono::steady_clock::now();
+  std::cout << "ava-queue-time, " << std::chrono::duration_cast<std::chrono::milliseconds>(cend - cstart).count() << " ms" << std::endl;
+
   ava_proto::WorkerAssignReply reply;
   in(reply);
   for (auto &wa : reply.worker_address()) {
