@@ -45,6 +45,8 @@ std::vector<struct command_channel *> command_channel_socket_tcp_guest_new() {
 
   std::cerr << "Connecting to manager at " << manager_addr[0] << " : " << manager_addr[1] << std::endl;
 
+  auto queue_start = std::chrono::steady_clock::now();
+
   // Connect API server manager
   DCHECK(manager_addr.size() == 2) << "Invalid API server manager address";
   struct sockaddr_in addr;
@@ -166,6 +168,10 @@ std::vector<struct command_channel *> command_channel_socket_tcp_guest_new() {
         goto error;
       }
     }
+
+    auto queue_end = std::chrono::steady_clock::now();
+
+    std::cout << ">!>queue_time," << std::chrono::duration_cast<std::chrono::milliseconds>(queue_end - queue_start).count();
 
     chan->pfd.fd = chan->sock_fd;
     chan->pfd.events = POLLIN | POLLRDHUP;
