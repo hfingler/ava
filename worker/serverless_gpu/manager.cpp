@@ -27,6 +27,11 @@ ABSL_FLAG(std::string, nvmlmonitor, "yes", "(OPTIONAL) disable NVML monitor");
 ABSL_FLAG(uint32_t, migration_strat, 0, "(OPTIONAL) migration strategy. 0 is disabled.");
 
 int main(int argc, const char *argv[]) {
+  if (!std::getenv("SELF_IP")) {
+    printf("env var SELF_IP does not exist, export it to be the ip of this GPU server and rerun\n");
+    exit(1);
+  }
+
   absl::ParseCommandLine(argc, const_cast<char **>(argv));
   absl::InitializeSymbolizer(argv[0]);
   ava_manager::setupSignalHandlers();
