@@ -110,7 +110,7 @@ std::vector<struct command_channel *> command_channel_socket_tcp_guest_new() {
   }
 
   auto cend = std::chrono::steady_clock::now();
-  std::cout << "ava-queue-time, " << std::chrono::duration_cast<std::chrono::milliseconds>(cend - cstart).count() << " ms" << std::endl;
+  std::cout << "ava-queue-time, " << std::chrono::duration_cast<std::chrono::milliseconds>(cend - cstart).count() << std::endl;
 
   ava_proto::WorkerAssignReply reply;
   in(reply);
