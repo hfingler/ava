@@ -145,6 +145,8 @@ static void create_cuda_contexts() {
   }
 }
 
+bool synth_cuda_inited(false);
+
 int main(int argc, char *argv[]) {
   if (!(argc == 3 && !strcmp(argv[1], "migrate")) && (argc != 2)) {
     printf(
@@ -164,6 +166,7 @@ int main(int argc, char *argv[]) {
   GPUMemoryServer::Client::getInstance().setCurrentGPU(std::stoi(gpu_device));
   //read device count from nvml and set it internally
   nvml_setDeviceCount();
+
   //ttc.notify(1);
 
   // AVA_WORKER_UUID is a unique, starting at 0, id we can use
@@ -188,7 +191,7 @@ int main(int argc, char *argv[]) {
   static auto worker_context = ava::WorkerContext::instance();
 
 #ifdef AVA_PRELOAD_CUBIN
-  worker_cudnn_opt_init(2);
+  worker_cudnn_opt_init(0);
 #endif
 
   //ttc.notify(3);
@@ -240,7 +243,7 @@ int main(int argc, char *argv[]) {
       //std::cerr << "[worker#" << listen_port << "] waiting for connection" << std::endl;
       //ttc.notify(7);
       chan = command_channel_listen(chan);
-      ttc.notify(8);
+      //ttc.notify(8);
       // this launches the thread that listens for commands
       init_command_handler(channel_create);
       //ttc.notify(9);
@@ -267,6 +270,13 @@ int main(int argc, char *argv[]) {
 
       //std::cerr << "[worker#" << listen_port << "] is free to work now" << std::endl;
       // and now all threads can work
+      
+      if (!synth_cuda_inited) {
+        cudaSetDevice(1);
+        cudaFree(0);
+        synth_cuda_inited = true;
+      }
+      
       release_shadow_threads();
       //ttc.notify(10);
 
