@@ -1157,7 +1157,9 @@ __host__ __cudart_builtin__ cudaError_t CUDARTAPI cudaDeviceGetAttribute(int *va
   }
 }
 
-__host__ cudaError_t CUDARTAPI cudaDeviceReset(void) { //ava_async; }
+__host__ cudaError_t CUDARTAPI cudaDeviceReset(void) { 
+  //ava_async; 
+}
 
 ava_begin_replacement;
 EXPORTED __host__ cudaError_t CUDARTAPI cudaSetDevice(int device) {
