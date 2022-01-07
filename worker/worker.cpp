@@ -145,8 +145,6 @@ static void create_cuda_contexts() {
   }
 }
 
-bool synth_cuda_inited(false);
-
 int main(int argc, char *argv[]) {
   if (!(argc == 3 && !strcmp(argv[1], "migrate")) && (argc != 2)) {
     printf(
@@ -191,7 +189,7 @@ int main(int argc, char *argv[]) {
   static auto worker_context = ava::WorkerContext::instance();
 
 #ifdef AVA_PRELOAD_CUBIN
-  worker_cudnn_opt_init(0);
+  worker_cudnn_opt_init(1);
 #endif
 
   //ttc.notify(3);
@@ -270,13 +268,7 @@ int main(int argc, char *argv[]) {
 
       //std::cerr << "[worker#" << listen_port << "] is free to work now" << std::endl;
       // and now all threads can work
-      
-      if (!synth_cuda_inited) {
-        cudaSetDevice(1);
-        cudaFree(0);
-        synth_cuda_inited = true;
-      }
-      
+            
       release_shadow_threads();
       //ttc.notify(10);
 
