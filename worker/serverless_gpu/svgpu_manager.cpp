@@ -4,7 +4,9 @@
 #include <boost/algorithm/string/join.hpp>
 #include "declaration.h"
 #include <string>
+#include <atomic>
 #include <memory>
+#include <mutex>
 #include <zmq.h>
 #include "extensions/memory_server/common.hpp"
 #include "resmngr.grpc.pb.h"
@@ -62,6 +64,10 @@ void SVGPUManager::registerSelf() {
  *
  *************************************/
 
+std::atomic<uint32_t> current_turn(0);
+uint32_t current_id(0);
+std::mutex sched_lock;
+
 ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::WorkerAssignRequest &request) {
     ava_proto::WorkerAssignReply reply;
 
@@ -70,10 +76,21 @@ ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::Worker
         return reply;
     }
 
+    sched_lock.lock();
+    uint32_t q_id = current_id;
+    current_id += 1;
+    sched_lock.unlock();
+
     uint32_t gpu_mem = request.gpu_mem()[0];
 
     //std::cerr << "[SVLESS-MNGR]: API server request arrived, asking for schedule with memory " << gpu_mem << std::endl;
     while (true) {
+        //if not our turn, wait
+        if (current_turn != current_id) {
+            printf("not my turn:  me %u  turn %u\n", current_id, current_turn);
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+
         GPUMemoryServer::Request req;
         req.type = GPUMemoryServer::RequestType::SCHEDULE;
         req.data.size = gpu_mem;
@@ -85,6 +102,8 @@ ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::Worker
         zmq_recv(zmq_central_socket, &rep, sizeof(GPUMemoryServer::Reply), 0);
         
         if (rep.code == GPUMemoryServer::ReplyCode::OK) {
+            //allow next to go
+            current_turn += 1;
 
             std::string ip = std::getenv("SELF_IP");
             ip += ":";
@@ -99,7 +118,7 @@ ava_proto::WorkerAssignReply SVGPUManager::HandleRequest(const ava_proto::Worker
             return reply;
         }
         else if (rep.code == GPUMemoryServer::ReplyCode::RETRY) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
     }
 }

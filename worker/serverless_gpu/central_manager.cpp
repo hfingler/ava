@@ -231,7 +231,7 @@ void SVGPUManager::handleKernelIn(Request& req, Reply& rep) {
                 uint32_t dg = req.gpu == 0 ? 1 : 0;
                 rep.data.migration.target_device = dg;
                 std::cerr << " SG_DEBUG_MIGRATION: KERNEL random migration triggered:  " << req.gpu  << " -> " << dg << " with prob " << prob << std::endl;
-            }  
+            }
         }*/
     }
 
